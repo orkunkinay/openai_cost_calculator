@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openai_cost_calculator"
+version = "0.1.0"
+description = "A library to estimate OpenAI API costs based on token usage."
+authors = [
+    { name = "Orkun Kınay, Murat Barkın Kınay", email = "orkunkinay@sabanciuniv.edu" }
+]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.8"
+
+[tool.setuptools]
+packages = ["openai_cost_calculator"]
+
+[project.urls]
+Homepage = "https://github.com/orkunkinay/openai_cost_calculator"
+Repository = "https://github.com/orkunkinay/openai_cost_calculator"
+Issues = "https://github.com/orkunkinay/openai_cost_calculator/issues"
