@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="openai_cost_calculator",
-    version="0.1.0",
+    version="0.1.1",
     description="A library to estimate OpenAI API costs based on token usage.",
     author="Orkun Kınay, Murat Barkın Kınay",
     author_email="orkunkinay@sabanciuniv.edu",
