@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>open-ai-cost-calculator &mdash; Instant token-cost estimates for OpenAI & Azure OpenAI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+      :root { --blue:#1468d6; --bg:#f7f9fc; --txt:#1f2933; --code:#eef2f7; }
+      *{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+      body{margin:0;background:var(--bg);color:var(--txt);line-height:1.55;font-size:17px;}
+      header{background:var(--blue);color:#ffffff;padding:2.5rem 1rem;text-align:center;}
+      header h1{margin:0;font-size:2.6rem;font-weight:700;}
+      header p{margin:.7rem auto 0;max-width:620px;font-size:1.2rem;opacity:.9;}
+      main{max-width:880px;margin:2.5rem auto;padding:0 1rem;}
+      h2{margin-top:2.4rem;font-size:1.85rem;color:var(--blue);}
+      pre,code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;background:var(--code);}
+      pre{padding:1.1rem 1rem;border-radius:6px;overflow-x:auto;}
+      code{padding:.1em .25em;border-radius:4px;}
+      section + section{margin-top:3.2rem;}
+      a{color:var(--blue);text-decoration:none;border-bottom:1px solid rgba(20,104,214,.25);}
+      a:hover{border-bottom-color:var(--blue);}
+      footer{margin:4rem 0 2rem;text-align:center;font-size:.9rem;opacity:.75;}
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>openai_cost_calculator</h1>
+  <p>🪙 One-line helper that turns <strong>any</strong> OpenAI / Azure OpenAI response (&nbsp;Chat Completions&nbsp;<em>or</em>&nbsp;Responses API&nbsp;) into a human-readable USD cost &mdash; accurate to 8&nbsp;decimals.</p>
+</header>
+
+<main>
+
+  <section id="why">
+    <h2>Why this library?</h2>
+    <ul>
+      <li><strong>Per-query accurate:</strong> calculates the <em>exact cost</em> for each user query individually, based on token counts returned by OpenAI or Azure — no model guessing, no aggregate billing approximations.</li>
+      <li><strong>Dual-API support:</strong> works with <code>chat.completions.create()</code> <em>and</em> the new <code>responses.create()</code>.</li>
+      <li><strong>Zero boilerplate:</strong> one import &amp; one call: <code>estimate_cost(resp)</code>.</li>
+      <li><strong>Pricing auto-refresh:</strong> daily CSV pull with a helper <code>refresh_pricing()</code>.</li>
+      <li><strong>Edge-case aware:</strong> cached tokens, undated models, streaming generators, Azure deployments &hellip; handled!</li>
+      <li><strong>Predictable output:</strong> every number is returned as a string formatted to 8 decimal places &mdash; ready for JSON serialisation or spreadsheets.</li>
+    </ul>
+  </section>  
+
+
+<section id="install">
+  <h2>Installation</h2>
+  <pre><code>pip install openai-cost-calculator</code></pre>
+  <p><small>(Package name on PyPI uses dashes; import name is <code>from openai_cost_calculator import&nbsp;…</code>.)</small></p>
+</section>
+
+
+<section id="quickstart">
+  <h2>Quick start (Chat Completion API)</h2>
+<pre><code class="language-python">from openai import OpenAI
+from openai_cost_calculator import estimate_cost
+
+client = OpenAI(api_key="sk-…")
+resp = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role":"user","content":"Hi there!"}],
+)
+
+print(estimate_cost(resp))
+# {'prompt_cost_uncached': '0.00000150',
+#  'prompt_cost_cached'  : '0.00000000',
+#  'completion_cost'     : '0.00000600',
+#  'total_cost'          : '0.00000750'}
+</code></pre>
+
+  <h2>Quick start (Responses API)</h2>
+<pre><code class="language-python">resp = client.responses.create(
+    model="gpt-4.1-mini",
+    input=[{"role":"user","content":"Hi there!"}],
+)
+print(estimate_cost(resp))
+</code></pre>
+</section>
+
+
+<section id="api">
+  <h2>Public API</h2>
+  <p>Everything lives under <code>openai_cost_calculator</code>:</p>
+  <ul>
+    <li><code>estimate_cost(response) → dict[str,str]</code><br>
+        Accepts ChatCompletion, streamed chunks, <em>or</em> Response objects; returns a dict with:</li>
+    <pre><code>{
+  "prompt_cost_uncached": "…",
+  "prompt_cost_cached"  : "…",
+  "completion_cost"     : "…",
+  "total_cost"          : "…"
+}</code></pre>
+
+    <li><code>refresh_pricing()</code> &mdash; force-reload the remote CSV (handy right after the pricing sheet is updated).</li>
+    <li><code>CostEstimateError</code> &mdash; one unified exception for bad input, missing pricing, etc.</li>
+  </ul>
+</section>
+
+
+<section id="troubleshooting">
+  <h2>Troubleshooting &amp; FAQs</h2>
+
+  <h3>🎉 A brand-new model just launched &ndash; my code raises “pricing not found”</h3>
+  <ol>
+    <li>Head to the <a href="https://github.com/orkunkinay/openai_cost_calculator/blob/main/data/gpt_pricing_data.csv" target="_blank">pricing CSV on GitHub</a>.</li>
+    <li>
+      <strong>If the new model/date is missing</strong> &nbsp;&rarr;&nbsp;
+      open an issue or email the maintainer (<a href="mailto:orkunkinay@sabanciuniv.edu">orkunkinay@sabanciuniv.edu</a>).
+    </li>
+    <li>
+      <strong>If the new row is already there</strong> &nbsp;&rarr;&nbsp;
+      call <code>refresh_pricing()</code> once &mdash; the 24-hour cache is then refreshed for every worker.
+    </li>
+  </ol>
+
+  <h3>🔄 Streaming chunks</h3>
+  <p>Just pass the generator returned by <code>client.chat.completions.create(..., stream=True, stream_options={"include_usage": True})</code> straight into <code>estimate_cost</code>. The helper silently walks the stream and uses the last chunk that contains <code>.usage</code>.</p>
+
+  <h3>⚠️ “cached_tokens = 0” even though I know some were cached</h3>
+  <p>Make sure you request <code>include_usage_details=True</code> (classic) or <code>stream_options={"include_usage": True}</code> (streaming). Without it the API omits the cached-token breakdown.</p>
+
+  <h3>🏷️ Azure OpenAI deployment IDs vs. model names</h3>
+  <p>Azure responses still carry the original model string (<code>chunk.model</code>) &mdash; the calculator ignores the deployment name, so you’re covered.</p>
+
+  <h3>⏱️ Performance concerns</h3>
+  <p>The only network call is the pricing CSV (<em>max once every 24 h</em>). All cost maths are pure Python and nanosecond-level.</p>
+</section>
+
+
+<section id="contributing">
+  <h2>Contributing &amp; License</h2>
+  <p>
+    PRs for additional edge-cases, new pricing formats or SDK changes are welcome!
+    <br>MIT&nbsp;License &copy;&nbsp;2025&nbsp;Orkun&nbsp;Kınay&nbsp;&&nbsp;Murat&nbsp;Barkın&nbsp;Kınay
+  </p>
+</section>
+
+</main>
+
+<footer>
+  <p>Built with ♥&nbsp; &mdash; refresh your pricing, monitor your spend, hack with confidence.</p>
+</footer>
+
+</body>
+</html>
