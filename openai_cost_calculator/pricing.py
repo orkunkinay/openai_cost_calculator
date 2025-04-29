@@ -14,8 +14,7 @@ import requests
 
 
 _PRICING_CSV_URL = (
-    "https://raw.githubusercontent.com/orkunkinay/openai_api_data/"
-    "refs/heads/main/gpt_pricing_data.csv"
+    "https://raw.githubusercontent.com/orkunkinay/openai_cost_calculator/refs/heads/main/data/gpt_pricing_data.csv"
 )
 _CACHE: Dict[Tuple[str, str], dict] | None = None
 _CACHE_TS = 0

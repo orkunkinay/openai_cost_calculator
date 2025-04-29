@@ -7,11 +7,17 @@ A lightweight, user-friendly library to estimate USD costs for OpenAI and Azure 
 
 ## Features
 
+- **Query-level cost estimation**: calculates **cost per user query** individually, based on the actual tokens used — no guesswork, no aggregate billing needed.
 - **Dual-API support**: works with `chat.completions.create()` and the new `responses.create()`.
 - **Zero boilerplate**: one import & one call: `estimate_cost(response)`.
 - **Pricing auto-refresh**: daily CSV pull with a helper `refresh_pricing()`.
 - **Edge-case aware**: cached tokens, undated models, streaming generators, Azure deployments handled.
 - **Predictable output**: every number is returned as a string formatted to 8 decimal places—ready for JSON serialization or spreadsheets.
+
+> **Note:**  
+> `openai_cost_calculator` computes the **exact USD cost for each individual user query**,  
+> based on **token counts** directly returned by OpenAI or Azure OpenAI.  
+> It does **not estimate based on model type or guessing** — it uses precise usage data attached to each response.
 
 ## Installation
 
@@ -88,7 +94,7 @@ Cached for 24 hours by default; use `refresh_pricing()` to force an update immed
 ## Troubleshooting
 
 - **New model raises “pricing not found”**
-  1. Verify the model/date in the [pricing CSV on GitHub](https://github.com/orkunkinay/openai_api_data/blob/main/gpt_pricing_data.csv).
+  1. Verify the model/date in the [pricing CSV on GitHub](https://github.com/orkunkinay/openai_cost_calculator/blob/main/data/gpt_pricing_data.csv).
   2. If missing, open an issue or email the maintainer.
   3. If present, call `refresh_pricing()`.
 
@@ -98,7 +104,6 @@ Cached for 24 hours by default; use `refresh_pricing()` to force an update immed
 ## Contributing
 
 PRs for additional edge-cases, new pricing formats, or SDK changes are welcome!
-Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 

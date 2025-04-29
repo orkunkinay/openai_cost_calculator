@@ -24,6 +24,7 @@ coverage.xml
 build/
 dist/
 *.spec
+*.egg-info/
 
 # IDEs
 .vscode/

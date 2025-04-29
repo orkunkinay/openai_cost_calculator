@@ -20,5 +20,6 @@ from openai_cost_calculator import refresh_pricing
 refresh_pricing()
 ```
 """
-
+from .estimate import estimate_cost, CostEstimateError
+from .pricing import refresh_pricing
 __all__ = ["estimate_cost", "refresh_pricing", "CostEstimateError"]
