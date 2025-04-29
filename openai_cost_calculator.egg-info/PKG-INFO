@@ -1,3 +1,22 @@
+Metadata-Version: 2.4
+Name: openai_cost_calculator
+Version: 1.0.0
+Summary: A library to estimate OpenAI API costs based on token usage.
+Home-page: https://github.com/orkunkinay/openai_cost_calculator
+Author: Orkun Kınay, Murat Barkın Kınay
+Author-email: "Orkun Kınay, Murat Barkın Kınay" <orkunkinay@sabanciuniv.edu>
+License: MIT
+Project-URL: Homepage, https://github.com/orkunkinay/openai_cost_calculator
+Project-URL: Repository, https://github.com/orkunkinay/openai_cost_calculator
+Project-URL: Issues, https://github.com/orkunkinay/openai_cost_calculator/issues
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Dynamic: author
+Dynamic: home-page
+Dynamic: license-file
+Dynamic: requires-python
+
 # openai_cost_calculator
 
 [![PyPI version](https://img.shields.io/pypi/v/openai-cost-calculator)](https://pypi.org/project/openai-cost-calculator/)
