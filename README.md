@@ -86,7 +86,7 @@ from openai_cost_calculator import estimate_cost, refresh_pricing, CostEstimateE
 Pricing is loaded from a remote CSV at:
 
 ```
-https://raw.githubusercontent.com/orkunkinay/openai_api_data/main/gpt_pricing_data.csv
+https://raw.githubusercontent.com/orkunkinay/openai_cost_calculator/refs/heads/main/data/gpt_pricing_data.csv
 ```
 
 Cached for 24 hours by default; use `refresh_pricing()` to force an update immediately.
