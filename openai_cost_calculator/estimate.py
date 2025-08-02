@@ -9,9 +9,10 @@ from __future__ import annotations
 
 from typing import Iterable, Any, Dict, Tuple
 
-from .core import calculate_cost
+from .core import calculate_cost_typed
 from .parser import extract_model_details, extract_usage
 from .pricing import load_pricing
+from .types import CostBreakdown
 
 
 class CostEstimateError(RuntimeError):
@@ -51,6 +52,62 @@ def _find_rates(model_name: str, model_date: str) -> Dict[str, float]:
 
 
 # --------------------------------------------------------------------------- #
+#   PUBLIC: estimate_cost_typed                                               #
+# --------------------------------------------------------------------------- #
+def estimate_cost_typed(response: Any) -> CostBreakdown:
+    """
+    Estimate costs and return a strongly-typed CostBreakdown dataclass.
+    
+    Parameters
+    ----------
+    response
+        * a single `ChatCompletion`
+        * **or** an iterator / generator of streamed `ChatCompletionChunk`s
+        * **or** the `Response` object
+
+    Returns
+    -------
+    CostBreakdown
+        Strongly-typed dataclass with Decimal fields containing:
+        - prompt_cost_uncached: Decimal
+        - prompt_cost_cached: Decimal  
+        - completion_cost: Decimal
+        - total_cost: Decimal
+
+    Raises
+    ------
+    CostEstimateError
+        for every recoverable problem (bad input, missing attrs, …)
+        
+    Examples
+    --------
+    >>> cost = estimate_cost_typed(response)
+    >>> cost.total_cost  # Decimal('0.00123456')
+    >>> cost.as_dict(stringify=False)  # Returns dict with Decimal values
+    >>> cost.as_dict(stringify=True)   # Returns dict with string values (legacy format)
+    """
+    try:
+        # -------------------------------------------------------------- usage
+        if hasattr(response, "__iter__") and not hasattr(response, "model"):
+            # stream → look at the LAST chunk that carried `usage`
+            chunk = _pick_last_chunk(response)
+        else:
+            chunk = response
+
+        usage = extract_usage(chunk)
+
+        # ------------------------------------------------------------- model
+        details = extract_model_details(chunk.model)
+        rates = _find_rates(details["model_name"], details["model_date"])
+
+        # -------------------------------------------------------------- cost
+        return calculate_cost_typed(usage, rates)
+
+    except Exception as exc:
+        raise CostEstimateError(str(exc)) from exc
+
+
+# --------------------------------------------------------------------------- #
 #   PUBLIC: estimate_cost                                                     #
 # --------------------------------------------------------------------------- #
 def estimate_cost(response: Any) -> Dict[str, str]:
@@ -71,23 +128,12 @@ def estimate_cost(response: Any) -> Dict[str, str]:
     ------
     CostEstimateError
         for every recoverable problem (bad input, missing attrs, …)
+        
+    Note
+    ----
+    This function is maintained for backward compatibility. For new code,
+    consider using estimate_cost_typed() which returns a strongly-typed
+    CostBreakdown dataclass with Decimal precision.
     """
-    try:
-        # -------------------------------------------------------------- usage
-        if hasattr(response, "__iter__") and not hasattr(response, "model"):
-            # stream → look at the LAST chunk that carried `usage`
-            chunk = _pick_last_chunk(response)
-        else:
-            chunk = response
-
-        usage = extract_usage(chunk)
-
-        # ------------------------------------------------------------- model
-        details = extract_model_details(chunk.model)
-        rates = _find_rates(details["model_name"], details["model_date"])
-
-        # -------------------------------------------------------------- cost
-        return calculate_cost(usage, rates)
-
-    except Exception as exc:
-        raise CostEstimateError(str(exc)) from exc
+    cost_breakdown = estimate_cost_typed(response)
+    return cost_breakdown.as_dict(stringify=True)

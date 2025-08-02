@@ -13,6 +13,7 @@
       header p{margin:.7rem auto 0;max-width:620px;font-size:1.2rem;opacity:.9;}
       main{max-width:880px;margin:2.5rem auto;padding:0 1rem;}
       h2{margin-top:2.4rem;font-size:1.85rem;color:var(--blue);}
+      h3{margin-top:1.8rem;font-size:1.3rem;color:var(--blue);}
       pre,code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;background:var(--code);}
       pre{padding:1.1rem 1rem;border-radius:6px;overflow-x:auto;}
       code{padding:.1em .25em;border-radius:4px;}
@@ -20,13 +21,14 @@
       a{color:var(--blue);text-decoration:none;border-bottom:1px solid rgba(20,104,214,.25);}
       a:hover{border-bottom-color:var(--blue);}
       footer{margin:4rem 0 2rem;text-align:center;font-size:.9rem;opacity:.75;}
+      .highlight{background-color:#fff3cd;padding:.5rem;border-radius:4px;margin:1rem 0;}
   </style>
 </head>
 <body>
 
 <header>
   <h1>openai_cost_calculator</h1>
-  <p>🪙 One-line helper that turns <strong>any</strong> OpenAI / Azure OpenAI response (&nbsp;Chat Completions&nbsp;<em>or</em>&nbsp;Responses API&nbsp;) into a human-readable USD cost &mdash; accurate to 8&nbsp;decimals.</p>
+  <p>🪙 One-line helper that turns <strong>any</strong> OpenAI / Azure OpenAI response (&nbsp;Chat Completions&nbsp;<em>or</em>&nbsp;Responses API&nbsp;) into a human-readable USD cost &mdash; accurate to 8&nbsp;decimals, with both string and strongly-typed APIs.</p>
 </header>
 
 <main>
@@ -37,9 +39,11 @@
       <li><strong>Per-query accurate:</strong> calculates the <em>exact cost</em> for each user query individually, based on token counts returned by OpenAI or Azure — no model guessing, no aggregate billing approximations.</li>
       <li><strong>Dual-API support:</strong> works with <code>chat.completions.create()</code> <em>and</em> the new <code>responses.create()</code>.</li>
       <li><strong>Zero boilerplate:</strong> one import &amp; one call: <code>estimate_cost(resp)</code>.</li>
+      <li><strong>Strongly-typed API:</strong> new typed functions return CostBreakdown dataclass with Decimal precision for accurate financial calculations.</li>
+      <li><strong>Backward compatibility:</strong> legacy string-based API remains unchanged.</li>
       <li><strong>Pricing auto-refresh:</strong> daily CSV pull with a helper <code>refresh_pricing()</code>.</li>
       <li><strong>Edge-case aware:</strong> cached tokens, undated models, streaming generators, Azure deployments &hellip; handled!</li>
-      <li><strong>Predictable output:</strong> every number is returned as a string formatted to 8 decimal places &mdash; ready for JSON serialisation or spreadsheets.</li>
+      <li><strong>Predictable output:</strong> legacy API returns strings formatted to 8 decimal places; typed API uses Decimal for precise arithmetic.</li>
     </ul>
   </section>  
 
@@ -52,7 +56,13 @@
 
 
 <section id="quickstart">
-  <h2>Quick start (Chat Completion API)</h2>
+  <h2>Quick start</h2>
+  
+  <div class="highlight">
+    <strong>New:</strong> For applications requiring precise financial calculations, use the strongly-typed API with <code>estimate_cost_typed()</code>.
+  </div>
+
+  <h3>Legacy String API (Backward Compatible)</h3>
 <pre><code class="language-python">from openai import OpenAI
 from openai_cost_calculator import estimate_cost
 
@@ -69,19 +79,68 @@ print(estimate_cost(resp))
 #  'total_cost'          : '0.00000750'}
 </code></pre>
 
-  <h2>Quick start (Responses API)</h2>
-<pre><code class="language-python">resp = client.responses.create(
+  <h3>Strongly-Typed API (Recommended for New Code)</h3>
+<pre><code class="language-python">from openai import OpenAI
+from openai_cost_calculator import estimate_cost_typed
+
+client = OpenAI(api_key="sk-…")
+resp = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role":"user","content":"Hi there!"}],
+)
+
+cost = estimate_cost_typed(resp)
+print(f"Total cost: ${cost.total_cost}")  # Decimal('0.00000750')
+
+# Access individual components with Decimal precision
+print(f"Prompt (uncached): ${cost.prompt_cost_uncached}")
+print(f"Prompt (cached): ${cost.prompt_cost_cached}")
+print(f"Completion: ${cost.completion_cost}")
+
+# Convert to dict as needed
+decimal_dict = cost.as_dict(stringify=False)  # Decimal values
+string_dict = cost.as_dict(stringify=True)    # String values (legacy format)
+</code></pre>
+
+  <h3>Responses API</h3>
+<pre><code class="language-python"># Works with both APIs
+resp = client.responses.create(
     model="gpt-4.1-mini",
     input=[{"role":"user","content":"Hi there!"}],
 )
-print(estimate_cost(resp))
+
+# Legacy: returns dict[str, str]
+cost_dict = estimate_cost(resp)
+
+# Typed: returns CostBreakdown dataclass
+cost_obj = estimate_cost_typed(resp)
 </code></pre>
 </section>
 
 
 <section id="api">
   <h2>Public API</h2>
-  <p>Everything lives under <code>openai_cost_calculator</code>:</p>
+  
+  <h3>Strongly-Typed API (Recommended)</h3>
+  <ul>
+    <li><code>estimate_cost_typed(response) → CostBreakdown</code><br>
+        Accepts ChatCompletion, streamed chunks, <em>or</em> Response objects; returns a dataclass with Decimal fields:</li>
+    <pre><code>CostBreakdown(
+  prompt_cost_uncached: Decimal,
+  prompt_cost_cached: Decimal,
+  completion_cost: Decimal,
+  total_cost: Decimal
+)</code></pre>
+
+    <li><code>calculate_cost_typed(usage, rates) → CostBreakdown</code><br>
+        Lower-level function for direct cost calculation using usage dict and rate dict.</li>
+
+    <li><code>CostBreakdown.as_dict(stringify=True)</code><br>
+        Convert dataclass to dict. If <code>stringify=True</code> (default), returns 8-decimal strings. 
+        If <code>stringify=False</code>, returns raw Decimal objects.</li>
+  </ul>
+
+  <h3>Legacy String API (Backward Compatible)</h3>
   <ul>
     <li><code>estimate_cost(response) → dict[str,str]</code><br>
         Accepts ChatCompletion, streamed chunks, <em>or</em> Response objects; returns a dict with:</li>
@@ -91,17 +150,52 @@ print(estimate_cost(resp))
   "completion_cost"     : "…",
   "total_cost"          : "…"
 }</code></pre>
+  </ul>
 
+  <h3>Common Functions</h3>
+  <ul>
     <li><code>refresh_pricing()</code> &mdash; force-reload the remote CSV (handy right after the pricing sheet is updated).</li>
     <li><code>CostEstimateError</code> &mdash; one unified exception for bad input, missing pricing, etc.</li>
   </ul>
+
+  <h3>When to Use Which API</h3>
+  <p><strong>Use the typed API</strong> (<code>estimate_cost_typed</code>) when:</p>
+  <ul>
+    <li>Building new applications</li>
+    <li>Performing financial calculations requiring precision</li>
+    <li>Working with accounting or billing systems</li>
+    <li>Need to aggregate costs across multiple requests</li>
+  </ul>
+  
+  <p><strong>Use the legacy API</strong> (<code>estimate_cost</code>) when:</p>
+  <ul>
+    <li>Maintaining existing codebases</li>
+    <li>Need string output for JSON serialization</li>
+    <li>Working with systems expecting the original format</li>
+  </ul>
+</section>
+
+
+<section id="examples">
+  <h2>Financial Calculation Example</h2>
+<pre><code class="language-python">from openai_cost_calculator import estimate_cost_typed
+from decimal import Decimal
+
+# Calculate precise costs across multiple requests
+total_cost = Decimal('0')
+for response in responses:
+    cost = estimate_cost_typed(response)
+    total_cost += cost.total_cost
+    
+print(f"Total spend: ${total_cost}")  # Accurate Decimal arithmetic
+</code></pre>
 </section>
 
 
 <section id="troubleshooting">
   <h2>Troubleshooting &amp; FAQs</h2>
 
-  <h3>🎉 A brand-new model just launched &ndash; my code raises “pricing not found”</h3>
+  <h3>🎉 A brand-new model just launched &ndash; my code raises "pricing not found"</h3>
   <ol>
     <li>Head to the <a href="https://github.com/orkunkinay/openai_cost_calculator/blob/main/data/gpt_pricing_data.csv" target="_blank">pricing CSV on GitHub</a>.</li>
     <li>
@@ -115,13 +209,13 @@ print(estimate_cost(resp))
   </ol>
 
   <h3>🔄 Streaming chunks</h3>
-  <p>Just pass the generator returned by <code>client.chat.completions.create(..., stream=True, stream_options={"include_usage": True})</code> straight into <code>estimate_cost</code>. The helper silently walks the stream and uses the last chunk that contains <code>.usage</code>.</p>
+  <p>Just pass the generator returned by <code>client.chat.completions.create(..., stream=True, stream_options={"include_usage": True})</code> straight into <code>estimate_cost</code> or <code>estimate_cost_typed</code>. The helper silently walks the stream and uses the last chunk that contains <code>.usage</code>.</p>
 
-  <h3>⚠️ “cached_tokens = 0” even though I know some were cached</h3>
+  <h3>⚠️ "cached_tokens = 0" even though I know some were cached</h3>
   <p>Make sure you request <code>include_usage_details=True</code> (classic) or <code>stream_options={"include_usage": True}</code> (streaming). Without it the API omits the cached-token breakdown.</p>
 
   <h3>🏷️ Azure OpenAI deployment IDs vs. model names</h3>
-  <p>Azure responses still carry the original model string (<code>chunk.model</code>) &mdash; the calculator ignores the deployment name, so you’re covered.</p>
+  <p>Azure responses still carry the original model string (<code>chunk.model</code>) &mdash; the calculator ignores the deployment name, so you're covered.</p>
 
   <h3>⏱️ Performance concerns</h3>
   <p>The only network call is the pricing CSV (<em>max once every 24 h</em>). All cost maths are pure Python and nanosecond-level.</p>
