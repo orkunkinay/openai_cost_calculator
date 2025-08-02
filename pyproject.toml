@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openai_cost_calculator"
-version = "1.0.1"
+version = "1.0.2"
 description = "A library to estimate OpenAI API costs based on token usage."
 authors = [
     { name = "Orkun Kınay, Murat Barkın Kınay", email = "orkunkinay@sabanciuniv.edu" }
