@@ -7,12 +7,13 @@ Public façade – import **one function** and you're done:
 
 from __future__ import annotations
 
-from typing import Iterable, Any, Dict, Tuple
+from typing import Iterable, Any, Dict, Tuple, Optional
 
 from .core import calculate_cost_typed
 from .parser import extract_model_details, extract_usage
 from .pricing import load_pricing
 from .types import CostBreakdown
+from .telemetry import merge_tags, emit_to_sinks
 
 
 class CostEstimateError(RuntimeError):
@@ -54,37 +55,38 @@ def _find_rates(model_name: str, model_date: str) -> Dict[str, float]:
 # --------------------------------------------------------------------------- #
 #   PUBLIC: estimate_cost_typed                                               #
 # --------------------------------------------------------------------------- #
-def estimate_cost_typed(response: Any) -> CostBreakdown:
+def estimate_cost_typed(
+    response: Any,
+    *,
+    tags: Optional[Dict[str, str]] = None,
+) -> CostBreakdown:
     """
     Estimate costs and return a strongly-typed CostBreakdown dataclass.
-    
+
     Parameters
     ----------
     response
         * a single `ChatCompletion`
         * **or** an iterator / generator of streamed `ChatCompletionChunk`s
         * **or** the `Response` object
+    tags
+        Optional dict of metadata tags (project, feature, user_id, cost_center…).
+        Merged with global default tags; per-call keys override global ones.
 
     Returns
     -------
     CostBreakdown
         Strongly-typed dataclass with Decimal fields containing:
         - prompt_cost_uncached: Decimal
-        - prompt_cost_cached: Decimal  
+        - prompt_cost_cached: Decimal
         - completion_cost: Decimal
         - total_cost: Decimal
+        - metadata: Dict[str, str] (may be empty)
 
     Raises
     ------
     CostEstimateError
         for every recoverable problem (bad input, missing attrs, …)
-        
-    Examples
-    --------
-    >>> cost = estimate_cost_typed(response)
-    >>> cost.total_cost  # Decimal('0.00123456')
-    >>> cost.as_dict(stringify=False)  # Returns dict with Decimal values
-    >>> cost.as_dict(stringify=True)   # Returns dict with string values (legacy format)
     """
     try:
         # -------------------------------------------------------------- usage
@@ -101,7 +103,25 @@ def estimate_cost_typed(response: Any) -> CostBreakdown:
         rates = _find_rates(details["model_name"], details["model_date"])
 
         # -------------------------------------------------------------- cost
-        return calculate_cost_typed(usage, rates)
+        base = calculate_cost_typed(usage, rates)
+
+        # Merge global + per-call tags (and validate)
+        merged = merge_tags(tags)
+
+        if merged:
+            result = CostBreakdown(
+                prompt_cost_uncached=base.prompt_cost_uncached,
+                prompt_cost_cached=base.prompt_cost_cached,
+                completion_cost=base.completion_cost,
+                total_cost=base.total_cost,
+                metadata=merged,
+            )
+        else:
+            result = base
+
+        # Notify sinks (best-effort; exceptions swallowed)
+        emit_to_sinks(result)
+        return result
 
     except Exception as exc:
         raise CostEstimateError(str(exc)) from exc
@@ -110,7 +130,12 @@ def estimate_cost_typed(response: Any) -> CostBreakdown:
 # --------------------------------------------------------------------------- #
 #   PUBLIC: estimate_cost                                                     #
 # --------------------------------------------------------------------------- #
-def estimate_cost(response: Any) -> Dict[str, str]:
+def estimate_cost(
+    response: Any,
+    *,
+    tags: Optional[Dict[str, str]] = None,
+    include_metadata: bool = False,
+) -> Dict[str, str]:
     """
     Parameters
     ----------
@@ -118,22 +143,27 @@ def estimate_cost(response: Any) -> Dict[str, str]:
         * a single `ChatCompletion`
         * **or** an iterator / generator of streamed `ChatCompletionChunk`s
         * **or** the `Response` object
+    tags
+        Optional dict of metadata tags (merged with global defaults).
+    include_metadata
+        If metadata exists (global tags or per-call tags), it will be included automatically.
 
     Returns
     -------
     dict
-        Same keys as :pyfunc:`openai_cost_calc.core.calculate_cost`.
+        Same numeric keys as :pyfunc:`openai_cost_calculator.core.calculate_cost`,
+        with optional "metadata" if requested.
 
     Raises
     ------
     CostEstimateError
         for every recoverable problem (bad input, missing attrs, …)
-        
+
     Note
     ----
     This function is maintained for backward compatibility. For new code,
     consider using estimate_cost_typed() which returns a strongly-typed
     CostBreakdown dataclass with Decimal precision.
     """
-    cost_breakdown = estimate_cost_typed(response)
-    return cost_breakdown.as_dict(stringify=True)
+    cost_breakdown = estimate_cost_typed(response, tags=tags)
+    return cost_breakdown.as_dict(stringify=True, include_metadata=bool(cost_breakdown.metadata))

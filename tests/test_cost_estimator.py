@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+from typing import List
 import pytest
 
 import openai_cost_calculator as occ
@@ -8,6 +9,13 @@ from openai_cost_calculator.core import calculate_cost, calculate_cost_typed
 from openai_cost_calculator.estimate import estimate_cost, estimate_cost_typed, CostEstimateError
 from openai_cost_calculator.parser import extract_model_details, extract_usage
 from openai_cost_calculator.types import CostBreakdown
+from openai_cost_calculator.telemetry import (
+set_global_tags,
+get_global_tags,
+register_cost_sink,
+unregister_cost_sink,
+clear_cost_sinks,
+)
 
 class _Struct:
     """Tiny helper to build ad-hoc objects with attributes."""
@@ -235,3 +243,112 @@ def test_public_api_imports():
     assert hasattr(occ, 'estimate_cost')
     assert hasattr(occ, 'refresh_pricing')
     assert hasattr(occ, 'CostEstimateError')
+
+def _resp_small():
+    # a tiny, deterministic response for tests
+    return _classic_response(1_000, 200, 100)  # uses _PRICING fixture
+
+
+@pytest.fixture()
+def reset_telemetry():
+    # Ensure global state doesn't leak across tests
+    occ.clear_cost_sinks()
+    occ.set_global_tags({})
+    yield
+    occ.clear_cost_sinks()
+    occ.set_global_tags({})
+
+
+def test_metadata_included_in_dict_when_tags_present(reset_telemetry):
+    resp = _resp_small()
+
+    # 1) per-call tags only
+    d = estimate_cost(resp, tags={"project": "MarketingBot"})
+    assert "metadata" in d
+    assert d["metadata"] == {"project": "MarketingBot"}
+    # numeric fields should remain strings
+    for k, v in d.items():
+        if k != "metadata":
+            assert isinstance(v, str)
+
+    # 2) global tags only
+    occ.set_global_tags({"env": "prod"})
+    d2 = estimate_cost(resp)  # no per-call tags
+    assert "metadata" in d2 and d2["metadata"] == {"env": "prod"}
+
+    # 3) merged (per-call overrides global)
+    d3 = estimate_cost(resp, tags={"env": "staging", "feature": "assist"})
+    assert d3["metadata"] == {"env": "staging", "feature": "assist"}
+
+
+def test_metadata_on_typed_api_and_merge_order(reset_telemetry):
+    resp = _resp_small()
+
+    occ.set_global_tags({"team": "growth", "feature": "old"})
+    cost = estimate_cost_typed(resp, tags={"feature": "new", "user_id": "42"})
+
+    # Typed API always exposes metadata as dict on the object
+    assert isinstance(cost, CostBreakdown)
+    assert cost.metadata == {"team": "growth", "feature": "new", "user_id": "42"}
+
+
+def test_tag_length_validation_on_globals(reset_telemetry):
+    long_val = "x" * 129
+    with pytest.raises(ValueError):
+        occ.set_global_tags({"ok": long_val})
+    with pytest.raises(ValueError):
+        occ.set_global_tags({long_val: "ok"})
+
+    # After failed sets, globals should still be empty
+    assert occ.get_global_tags() == {}
+
+
+def test_tag_length_validation_on_per_call_tags(reset_telemetry):
+    resp = _resp_small()
+    long_val = "x" * 129
+
+    # Per-call validation errors bubble as CostEstimateError (wrapped)
+    with pytest.raises(CostEstimateError):
+        estimate_cost_typed(resp, tags={"bad": long_val})
+    with pytest.raises(CostEstimateError):
+        estimate_cost_typed(resp, tags={long_val: "bad"})
+
+
+def test_no_metadata_key_when_no_tags(reset_telemetry):
+    # With no global tags and no per-call tags, dict API should not include "metadata"
+    resp = _resp_small()
+    d = estimate_cost(resp)
+    assert "metadata" not in d
+    # And all values should remain strings (legacy behavior)
+    assert all(isinstance(v, str) for v in d.values())
+
+
+def test_sink_hooks_receive_breakdowns(reset_telemetry):
+    resp = _resp_small()
+    received: List[CostBreakdown] = []
+
+    def sink(cb: CostBreakdown):
+        received.append(cb)
+
+    occ.register_cost_sink(sink)
+    cost = estimate_cost_typed(resp, tags={"t": "1"})
+
+    assert len(received) == 1
+    assert isinstance(received[0], CostBreakdown)
+    # Same object content as returned
+    assert received[0].total_cost == cost.total_cost
+    assert received[0].metadata.get("t") == "1"
+
+    # Clear sinks and ensure no more emissions
+    occ.clear_cost_sinks()
+    estimate_cost_typed(resp, tags={"t": "2"})
+    assert len(received) == 1  # unchanged
+
+
+def test_get_global_tags_returns_copy(reset_telemetry):
+    occ.set_global_tags({"a": "1"})
+    g = occ.get_global_tags()
+    assert g == {"a": "1"}
+    g["a"] = "mutated"
+    # internal state should not change
+    assert occ.get_global_tags() == {"a": "1"}

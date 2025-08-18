@@ -34,12 +34,24 @@ from .estimate import estimate_cost, estimate_cost_typed, CostEstimateError
 from .core import calculate_cost_typed
 from .pricing import refresh_pricing
 from .types import CostBreakdown
+from .telemetry import (
+set_global_tags,
+get_global_tags,
+register_cost_sink,
+unregister_cost_sink,
+clear_cost_sinks,
+)
 
-__all__ = [
-    "estimate_cost", 
-    "estimate_cost_typed", 
-    "calculate_cost_typed",
-    "refresh_pricing", 
-    "CostEstimateError",
-    "CostBreakdown"
+all = [
+"estimate_cost",
+"estimate_cost_typed",
+"calculate_cost_typed",
+"refresh_pricing",
+"CostEstimateError",
+"CostBreakdown",
+"set_global_tags",
+"get_global_tags",
+"register_cost_sink",
+"unregister_cost_sink",
+"clear_cost_sinks",
 ]

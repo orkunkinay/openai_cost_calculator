@@ -45,3 +45,6 @@ Thumbs.db
 
 # Pip dependency files
 pip-wheel-metadata/
+
+write.py
+a.txt
