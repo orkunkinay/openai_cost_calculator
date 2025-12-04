@@ -10,8 +10,8 @@ from __future__ import annotations
 from typing import Iterable, Any, Dict, Tuple
 
 from .core import calculate_cost_typed
-from .parser import extract_model_details, extract_usage
-from .pricing import load_pricing
+from .parser import extract_model_details, extract_usage, extract_tool_usage
+from .pricing import load_pricing, load_tool_pricing
 from .types import CostBreakdown
 
 
@@ -100,8 +100,12 @@ def estimate_cost_typed(response: Any) -> CostBreakdown:
         details = extract_model_details(chunk.model)
         rates = _find_rates(details["model_name"], details["model_date"])
 
+        # ----------------------------------------------------------- tool usage
+        tool_usage = extract_tool_usage(chunk)
+        tool_pricing = load_tool_pricing()
+
         # -------------------------------------------------------------- cost
-        return calculate_cost_typed(usage, rates)
+        return calculate_cost_typed(usage, rates, tool_usage, tool_pricing)
 
     except Exception as exc:
         raise CostEstimateError(str(exc)) from exc

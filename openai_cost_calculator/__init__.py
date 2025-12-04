@@ -34,7 +34,8 @@ from .estimate import estimate_cost, estimate_cost_typed, CostEstimateError
 from .core import calculate_cost_typed
 from .pricing import (
     add_pricing_entry, add_pricing_entries, clear_local_pricing,
-    set_offline_mode, refresh_pricing
+    set_offline_mode, refresh_pricing,
+    add_tool_pricing, add_tool_pricings, clear_tool_pricing, load_tool_pricing
 )
 from .types import CostBreakdown
 
@@ -47,6 +48,10 @@ __all__ = [
     "add_pricing_entries",
     "clear_local_pricing",
     "set_offline_mode",
+    "add_tool_pricing",
+    "add_tool_pricings",
+    "clear_tool_pricing",
+    "load_tool_pricing",
     "CostEstimateError",
     "CostBreakdown"
 ]
