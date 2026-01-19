@@ -27,6 +27,12 @@ _LOCAL_OVERRIDES: Dict[Tuple[str, str], dict] = {}
 _LOCK = threading.RLock()
 _OFFLINE_ONLY = False  # if True, never fetch remote CSV
 
+# Tool pricing: maps tool name to price per call (USD)
+_TOOL_PRICING: Dict[str, float] = {
+    "WebSearchTool": 0.01,      # $10.00 / 1K calls
+    "FileSearchTool": 0.0025,    # $2.50 / 1K calls
+}
+
 def _validate_date_str(date: str) -> None:
     # very lightweight guard
     if not isinstance(date, str) or len(date) != 10:
@@ -152,3 +158,82 @@ def refresh_pricing() -> None:
         return
     _CACHE = _fetch_csv()
     _CACHE_TS = time.time()
+
+
+# --------------------------------------------------------------------------- #
+#   Tool pricing management                                                  #
+# --------------------------------------------------------------------------- #
+def add_tool_pricing(tool_name: str, price_per_call: float, replace: bool = True) -> None:
+    """
+    Register or override pricing for a tool.
+    
+    Parameters
+    ----------
+    tool_name
+        Name of the tool (e.g., "WebSearchTool", "FileSearchTool")
+    price_per_call
+        Price per tool call in USD (e.g., 0.01 for $10.00 / 1K calls)
+    replace
+        If False, raises KeyError if tool already exists
+    
+    Example
+    -------
+    >>> add_tool_pricing("WebSearchTool", 0.01)  # $10.00 / 1K calls
+    >>> add_tool_pricing("FileSearchTool", 0.05)  # $50.00 / 1K calls
+    """
+    if not tool_name or not isinstance(tool_name, str):
+        raise ValueError("tool_name must be a non-empty string")
+    if price_per_call < 0:
+        raise ValueError("price_per_call must be non-negative")
+    
+    with _LOCK:
+        if not replace and tool_name in _TOOL_PRICING:
+            raise KeyError(f"Pricing already exists for tool '{tool_name}'; set replace=True to override.")
+        _TOOL_PRICING[tool_name] = float(price_per_call)
+
+
+def add_tool_pricings(entries: Iterable[Tuple[str, float]], replace: bool = True) -> None:
+    """
+    Bulk add tool pricing entries.
+    
+    Parameters
+    ----------
+    entries
+        Iterable of (tool_name, price_per_call) tuples
+    replace
+        If False, raises KeyError if any tool already exists
+    
+    Example
+    -------
+    >>> add_tool_pricings([
+    ...     ("WebSearchTool", 0.01),
+    ...     ("FileSearchTool", 0.05),
+    ... ])
+    """
+    with _LOCK:
+        for tool_name, price_per_call in entries:
+            if not tool_name or not isinstance(tool_name, str):
+                raise ValueError("tool_name must be a non-empty string")
+            if price_per_call < 0:
+                raise ValueError("price_per_call must be non-negative")
+            if not replace and tool_name in _TOOL_PRICING:
+                raise KeyError(f"Pricing already exists for tool '{tool_name}'; set replace=True to override.")
+            _TOOL_PRICING[tool_name] = float(price_per_call)
+
+
+def clear_tool_pricing() -> None:
+    """Remove all user-added tool pricing (resets to defaults)."""
+    with _LOCK:
+        _TOOL_PRICING.clear()
+        # Restore default tool pricing
+        _TOOL_PRICING["WebSearchTool"] = 0.01      # $10.00 / 1K calls
+        _TOOL_PRICING["FileSearchTool"] = 0.0025    # $2.50 / 1K calls
+
+
+def load_tool_pricing() -> Dict[str, float]:
+    """
+    Returns the current tool pricing map.
+    Keys are tool names, values are price per call in USD.
+    """
+    with _LOCK:
+        return _TOOL_PRICING.copy()

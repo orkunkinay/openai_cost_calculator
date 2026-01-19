@@ -12,7 +12,7 @@ def _usd(value: float) -> str:
     return str(Decimal(value).quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP))
 
 
-def _calculate_cost_typed(usage: dict, rates: dict) -> CostBreakdown:
+def _calculate_cost_typed(usage: dict, rates: dict, tool_usage: dict = None, tool_pricing: dict = None) -> CostBreakdown:
     """
     Internal function that performs cost calculation using Decimal arithmetic
     and returns a strongly-typed CostBreakdown dataclass.
@@ -33,6 +33,22 @@ def _calculate_cost_typed(usage: dict, rates: dict) -> CostBreakdown:
             "cached_input_price" : float   or None
             "output_price"       : float   (USD / 1M tokens)
         }
+    
+    tool_usage
+        {
+            "WebSearchTool": 2,
+            "FileSearchTool": 1,
+            ...
+        }
+        Optional. Dict mapping tool names to call counts. Defaults to empty dict.
+    
+    tool_pricing
+        {
+            "WebSearchTool": 0.01,
+            "FileSearchTool": 0.05,
+            ...
+        }
+        Optional. Dict mapping tool names to price per call (USD). Defaults to empty dict.
 
     Returns
     -------
@@ -63,17 +79,26 @@ def _calculate_cost_typed(usage: dict, rates: dict) -> CostBreakdown:
     prompt_cached_cost = (Decimal(str(cached_prompt)) / million) * cached_input_price
     completion_cost = (Decimal(str(usage["completion_tokens"])) / million) * output_price
     
-    total = prompt_uncached_cost + prompt_cached_cost + completion_cost
+    # Calculate tool costs
+    tool_cost = Decimal("0")
+    if tool_usage and tool_pricing:
+        for tool_name, call_count in tool_usage.items():
+            if tool_name in tool_pricing and call_count > 0:
+                price_per_call = Decimal(str(tool_pricing[tool_name]))
+                tool_cost += Decimal(str(call_count)) * price_per_call
+    
+    total = prompt_uncached_cost + prompt_cached_cost + completion_cost + tool_cost
 
     return CostBreakdown(
         prompt_cost_uncached=prompt_uncached_cost,
         prompt_cost_cached=prompt_cached_cost,
         completion_cost=completion_cost,
+        tool_cost=tool_cost,
         total_cost=total
     )
 
 
-def calculate_cost_typed(usage: dict, rates: dict) -> CostBreakdown:
+def calculate_cost_typed(usage: dict, rates: dict, tool_usage: dict = None, tool_pricing: dict = None) -> CostBreakdown:
     """
     Calculate costs and return a strongly-typed CostBreakdown dataclass.
     
@@ -93,6 +118,22 @@ def calculate_cost_typed(usage: dict, rates: dict) -> CostBreakdown:
             "cached_input_price" : float   or None
             "output_price"       : float   (USD / 1M tokens)
         }
+    
+    tool_usage
+        {
+            "WebSearchTool": 2,
+            "FileSearchTool": 1,
+            ...
+        }
+        Optional. Dict mapping tool names to call counts. Defaults to empty dict.
+    
+    tool_pricing
+        {
+            "WebSearchTool": 0.01,
+            "FileSearchTool": 0.05,
+            ...
+        }
+        Optional. Dict mapping tool names to price per call (USD). Defaults to empty dict.
 
     Returns
     -------
@@ -101,19 +142,22 @@ def calculate_cost_typed(usage: dict, rates: dict) -> CostBreakdown:
         - prompt_cost_uncached: Decimal
         - prompt_cost_cached: Decimal  
         - completion_cost: Decimal
+        - tool_cost: Decimal
         - total_cost: Decimal
         
     Examples
     --------
     >>> usage = {"prompt_tokens": 1000, "completion_tokens": 500, "cached_tokens": 100}
     >>> rates = {"input_price": 0.5, "cached_input_price": 0.25, "output_price": 1.0}
-    >>> cost = calculate_cost_typed(usage, rates)
-    >>> cost.total_cost  # Decimal('0.00095000')
+    >>> tool_usage = {"WebSearchTool": 2}
+    >>> tool_pricing = {"WebSearchTool": 0.01}
+    >>> cost = calculate_cost_typed(usage, rates, tool_usage, tool_pricing)
+    >>> cost.total_cost  # Decimal('0.02095000')
     """
-    return _calculate_cost_typed(usage, rates)
+    return _calculate_cost_typed(usage, rates, tool_usage, tool_pricing)
 
 
-def calculate_cost(usage: dict, rates: dict) -> dict:
+def calculate_cost(usage: dict, rates: dict, tool_usage: dict = None, tool_pricing: dict = None) -> dict:
     """
     Parameters
     ----------
@@ -131,6 +175,12 @@ def calculate_cost(usage: dict, rates: dict) -> dict:
             "cached_input_price" : float   or None
             "output_price"       : float   (USD / 1M tokens)
         }
+    
+    tool_usage
+        Optional. Dict mapping tool names to call counts. Defaults to empty dict.
+    
+    tool_pricing
+        Optional. Dict mapping tool names to price per call (USD). Defaults to empty dict.
 
     Returns
     -------
@@ -139,6 +189,7 @@ def calculate_cost(usage: dict, rates: dict) -> dict:
             "prompt_cost_uncached": "...",
             "prompt_cost_cached"  : "...",
             "completion_cost"     : "...",
+            "tool_cost"           : "...",
             "total_cost"          : "..."
         }
         
@@ -148,5 +199,5 @@ def calculate_cost(usage: dict, rates: dict) -> dict:
     consider using calculate_cost_typed() which returns a strongly-typed
     CostBreakdown dataclass.
     """
-    cost_breakdown = _calculate_cost_typed(usage, rates)
+    cost_breakdown = _calculate_cost_typed(usage, rates, tool_usage, tool_pricing)
     return cost_breakdown.as_dict(stringify=True)

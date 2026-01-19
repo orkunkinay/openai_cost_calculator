@@ -11,12 +11,13 @@ class CostBreakdown:
     prompt_cost_uncached: Decimal
     prompt_cost_cached:   Decimal
     completion_cost:      Decimal
+    tool_cost:            Decimal
     total_cost:           Decimal
 
     # -- helpers ------------------------------------------------------------
     def as_dict(self, stringify: bool = True) -> Dict[str, str | Decimal]:
         """
-        Return the four fields as a plain dict.
+        Return the fields as a plain dict.
         * If ``stringify`` (default) ⇒ 8‑dp strings (legacy format)
         * Else ⇒ raw Decimal objects
         """

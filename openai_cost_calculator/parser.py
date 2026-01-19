@@ -80,3 +80,69 @@ def extract_usage(obj: Any) -> Dict[str, int]:
         "completion_tokens": int(completion_tokens),
         "cached_tokens": int(cached_tokens),
     }
+
+
+# --------------------------------------------------------------------------- #
+#   Tool usage parser                                                         #
+# --------------------------------------------------------------------------- #
+def extract_tool_usage(obj: Any) -> Dict[str, int]:
+    """
+    Extract tool call counts from a response object.
+    
+    Works with Responses API response objects that have a `tools` array
+    containing tool definitions. Each tool in the array represents one use.
+    
+    Returns a dict mapping tool type names to call counts:
+        {
+            "WebSearchTool": 1,
+            "FileSearchTool": 1,
+            ...
+        }
+    
+    Tool types are detected by examining the `tools` array, which is the
+    official source for tool usage.
+    
+    Supported tool types:
+    - WebSearchTool
+    - FileSearchTool
+    - ComputerTool
+    - CodeInterpreterTool
+    - HostedMCPTool
+    - ImageGenerationTool
+    - LocalShellTool
+    """
+    tool_counts: Dict[str, int] = {}
+    
+    # Get tools array - this is the official source for tool usage
+    # Handle both dict-like and object-like access
+    if isinstance(obj, dict):
+        tools = obj.get("tools", None)
+    else:
+        tools = getattr(obj, "tools", None)
+    
+    if tools is None:
+        return tool_counts
+    
+    # List of supported tool class names
+    supported_tools = [
+        "WebSearchTool",
+        "FileSearchTool",
+        "ComputerTool",
+        "CodeInterpreterTool",
+        "HostedMCPTool",
+        "ImageGenerationTool",
+        "LocalShellTool",
+    ]
+    
+    # Count each tool occurrence in the tools array
+    for tool in tools:
+        # Convert tool to string representation to check for class names
+        tool_str = str(tool)
+        
+        # Check for tool class names in the string
+        for tool_name in supported_tools:
+            if tool_name in tool_str:
+                tool_counts[tool_name] = tool_counts.get(tool_name, 0) + 1
+                break
+    
+    return tool_counts

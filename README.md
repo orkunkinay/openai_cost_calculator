@@ -111,9 +111,28 @@ Recoverable issues raise `CostEstimateError` with a clear message (missing prici
 
 ## Troubleshooting
 
-- **“Pricing not found”** → confirm row exists in the CSV; call `refresh_pricing()`.  
+- **"Pricing not found"** → confirm row exists in the CSV; call `refresh_pricing()`.  
 - **`cached_tokens = 0`** → ensure `include_usage_details=True` (classic) or `stream_options={"include_usage": True}` (streaming).  
 - **Model string has no date** → the latest row with `date ≤ today` is used.
+
+---
+
+## Running Tests
+
+To run the test suite:
+
+```bash
+# Install test dependencies
+pip install -r requirements-dev.txt
+
+# Run tests
+pytest tests/ -v
+
+# Run with coverage (if pytest-cov is installed)
+pytest tests/ --cov=openai_cost_calculator --cov-report=html
+```
+
+The test suite includes unit tests for cost calculation, integration tests for the estimation API, and tests for pricing management and tool cost functionality.
 
 ---
 

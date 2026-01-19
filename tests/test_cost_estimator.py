@@ -7,7 +7,7 @@ import openai_cost_calculator as occ
 
 from openai_cost_calculator.core import calculate_cost, calculate_cost_typed
 from openai_cost_calculator.estimate import estimate_cost, estimate_cost_typed, CostEstimateError
-from openai_cost_calculator.parser import extract_model_details, extract_usage
+from openai_cost_calculator.parser import extract_model_details, extract_usage, extract_tool_usage
 from openai_cost_calculator.types import CostBreakdown
 
 class _Struct:
@@ -59,6 +59,7 @@ def test_calculate_cost_basic_rounding():
         "prompt_cost_uncached": "0.00080000",   # 800 / 1M * $1
         "prompt_cost_cached"  : "0.00010000",   # 200 / 1M * $0.5
         "completion_cost"     : "0.00400000",   # 2 000 / 1M * $2
+        "tool_cost"           : "0.00000000",   # No tools used
         "total_cost"          : "0.00490000",
     }
 
@@ -76,12 +77,14 @@ def test_calculate_cost_typed_basic():
     assert isinstance(cost_breakdown.prompt_cost_uncached, Decimal)
     assert isinstance(cost_breakdown.prompt_cost_cached, Decimal)
     assert isinstance(cost_breakdown.completion_cost, Decimal)
+    assert isinstance(cost_breakdown.tool_cost, Decimal)
     assert isinstance(cost_breakdown.total_cost, Decimal)
     
     # Verify correct values
     assert cost_breakdown.prompt_cost_uncached == Decimal("0.0008")   # 800 / 1M * $1
     assert cost_breakdown.prompt_cost_cached == Decimal("0.0001")     # 200 / 1M * $0.5
     assert cost_breakdown.completion_cost == Decimal("0.004")         # 2000 / 1M * $2
+    assert cost_breakdown.tool_cost == Decimal("0")                  # No tools used
     assert cost_breakdown.total_cost == Decimal("0.0049")
 
 
@@ -110,11 +113,13 @@ def test_cost_breakdown_as_dict():
     # Test stringify=True (default)
     string_dict = cost_breakdown.as_dict(stringify=True)
     assert all(isinstance(v, str) for v in string_dict.values())
+    assert "tool_cost" in string_dict
     assert string_dict["total_cost"] == "0.00490000"
     
     # Test stringify=False  
     decimal_dict = cost_breakdown.as_dict(stringify=False)
     assert all(isinstance(v, Decimal) for v in decimal_dict.values())
+    assert "tool_cost" in decimal_dict
     assert decimal_dict["total_cost"] == Decimal("0.0049")
 
 
@@ -139,6 +144,50 @@ def test_extract_usage_classic_and_new():
         }
 
 
+def test_extract_tool_usage():
+    """Test tool usage extraction from response objects."""
+    # Test with string representation
+    resp_str = _Struct(
+        tools=["WebSearchTool(type=\"web_search\", ...)", "FileSearchTool(type=\"file_search\", ...)"]
+    )
+    tool_usage = extract_tool_usage(resp_str)
+    assert tool_usage == {"WebSearchTool": 1, "FileSearchTool": 1}
+    
+    # Test with single tool
+    resp_single = _Struct(tools=["WebSearchTool(...)"])
+    tool_usage_single = extract_tool_usage(resp_single)
+    assert tool_usage_single == {"WebSearchTool": 1}
+    
+    # Test with no tools
+    resp_no_tools = _Struct(tools=[])
+    tool_usage_none = extract_tool_usage(resp_no_tools)
+    assert tool_usage_none == {}
+    
+    # Test with missing tools attribute
+    resp_no_attr = _Struct(model="test")
+    tool_usage_missing = extract_tool_usage(resp_no_attr)
+    assert tool_usage_missing == {}
+    
+    # Test with dict-like access
+    resp_dict = {"tools": ["WebSearchTool(...)", "WebSearchTool(...)", "FileSearchTool(...)"]}
+    tool_usage_dict = extract_tool_usage(resp_dict)
+    assert tool_usage_dict == {"WebSearchTool": 2, "FileSearchTool": 1}
+    
+    # Test with all supported tool types
+    resp_all = _Struct(tools=[
+        "WebSearchTool(...)",
+        "FileSearchTool(...)",
+        "ComputerTool(...)",
+        "CodeInterpreterTool(...)",
+        "HostedMCPTool(...)",
+        "ImageGenerationTool(...)",
+        "LocalShellTool(...)",
+    ])
+    tool_usage_all = extract_tool_usage(resp_all)
+    assert len(tool_usage_all) == 7
+    assert all(count == 1 for count in tool_usage_all.values())
+
+
 # --------------------------------------------------------------------------- #
 # Integration tests: estimate_cost                                            #
 # --------------------------------------------------------------------------- #
@@ -149,7 +198,8 @@ def test_estimate_cost_single_response():
     assert all(isinstance(v, str) for v in cost.values())
     total = sum(map(float, (cost["prompt_cost_uncached"],
                             cost["prompt_cost_cached"],
-                            cost["completion_cost"])))
+                            cost["completion_cost"],
+                            cost["tool_cost"])))
     assert float(cost["total_cost"]) == pytest.approx(total)
 
 
@@ -165,10 +215,11 @@ def test_estimate_cost_typed_single_response():
     assert isinstance(cost.prompt_cost_uncached, Decimal)
     assert isinstance(cost.prompt_cost_cached, Decimal)
     assert isinstance(cost.completion_cost, Decimal)
+    assert isinstance(cost.tool_cost, Decimal)
     assert isinstance(cost.total_cost, Decimal)
     
     # Verify total is sum of parts (with Decimal precision)
-    expected_total = cost.prompt_cost_uncached + cost.prompt_cost_cached + cost.completion_cost
+    expected_total = cost.prompt_cost_uncached + cost.prompt_cost_cached + cost.completion_cost + cost.tool_cost
     assert cost.total_cost == expected_total
 
 
@@ -231,6 +282,12 @@ def test_public_api_imports():
     assert hasattr(occ, 'estimate_cost_typed')
     assert hasattr(occ, 'calculate_cost_typed')
     assert hasattr(occ, 'CostBreakdown')
+    
+    # Test that tool pricing functions are available
+    assert hasattr(occ, 'add_tool_pricing')
+    assert hasattr(occ, 'add_tool_pricings')
+    assert hasattr(occ, 'clear_tool_pricing')
+    assert hasattr(occ, 'load_tool_pricing')
     
     # Test that legacy functions are still available
     assert hasattr(occ, 'estimate_cost')
@@ -516,3 +573,258 @@ def test_set_offline_mode_refresh_noop(monkeypatch):
     assert d[("y", "2025-03-03")] == {
         "input_price": 0.2, "cached_input_price": None, "output_price": 0.4
     }
+
+
+# --------------------------------------------------------------------------- #
+# Tool cost calculation tests                                                 #
+# --------------------------------------------------------------------------- #
+def test_calculate_cost_with_tools():
+    """Test cost calculation with tool usage."""
+    usage = {"prompt_tokens": 1_000, "completion_tokens": 500, "cached_tokens": 100}
+    rates = {"input_price": 1.0, "cached_input_price": 0.5, "output_price": 2.0}
+    tool_usage = {"WebSearchTool": 2, "FileSearchTool": 1}
+    tool_pricing = {"WebSearchTool": 0.01, "FileSearchTool": 0.0025}
+    
+    cost = calculate_cost(usage, rates, tool_usage, tool_pricing)
+    
+    # Token costs: (900/1M * $1) + (100/1M * $0.5) + (500/1M * $2) = 0.0009 + 0.00005 + 0.001 = 0.00195
+    # Tool costs: 2 * $0.01 + 1 * $0.0025 = $0.0225
+    assert cost["tool_cost"] == "0.02250000"
+    # Total should include tool costs
+    assert float(cost["total_cost"]) == pytest.approx(0.00195 + 0.0225)
+
+
+def test_calculate_cost_typed_with_tools():
+    """Test typed cost calculation with tool usage."""
+    usage = {"prompt_tokens": 1_000, "completion_tokens": 500, "cached_tokens": 100}
+    rates = {"input_price": 1.0, "cached_input_price": 0.5, "output_price": 2.0}
+    tool_usage = {"WebSearchTool": 1}
+    tool_pricing = {"WebSearchTool": 0.01}
+    
+    cost = calculate_cost_typed(usage, rates, tool_usage, tool_pricing)
+    
+    assert isinstance(cost, CostBreakdown)
+    assert cost.tool_cost == Decimal("0.01")
+    # Token costs: 0.00195, tool cost: 0.01
+    assert cost.total_cost == Decimal("0.00195") + Decimal("0.01")
+
+
+def test_calculate_cost_with_tools_no_pricing():
+    """Test that tools without pricing don't contribute to cost."""
+    usage = {"prompt_tokens": 1_000, "completion_tokens": 500, "cached_tokens": 100}
+    rates = {"input_price": 1.0, "cached_input_price": 0.5, "output_price": 2.0}
+    tool_usage = {"WebSearchTool": 1, "UnknownTool": 5}
+    tool_pricing = {"WebSearchTool": 0.01}  # UnknownTool not in pricing
+    
+    cost = calculate_cost_typed(usage, rates, tool_usage, tool_pricing)
+    
+    # Only WebSearchTool should contribute
+    assert cost.tool_cost == Decimal("0.01")
+    # Token costs: 0.00195, tool cost: 0.01
+    assert cost.total_cost == Decimal("0.00195") + Decimal("0.01")
+
+
+def test_calculate_cost_with_tools_zero_calls():
+    """Test that zero tool calls result in zero tool cost."""
+    usage = {"prompt_tokens": 1_000, "completion_tokens": 500, "cached_tokens": 100}
+    rates = {"input_price": 1.0, "cached_input_price": 0.5, "output_price": 2.0}
+    tool_usage = {"WebSearchTool": 0}
+    tool_pricing = {"WebSearchTool": 0.01}
+    
+    cost = calculate_cost_typed(usage, rates, tool_usage, tool_pricing)
+    
+    assert cost.tool_cost == Decimal("0")
+    # Token costs only: 0.00195
+    assert cost.total_cost == Decimal("0.00195")
+
+
+def test_calculate_cost_with_tools_none():
+    """Test that None tool_usage and tool_pricing work correctly."""
+    usage = {"prompt_tokens": 1_000, "completion_tokens": 500, "cached_tokens": 100}
+    rates = {"input_price": 1.0, "cached_input_price": 0.5, "output_price": 2.0}
+    
+    cost = calculate_cost_typed(usage, rates, None, None)
+    
+    assert cost.tool_cost == Decimal("0")
+    # Token costs only: 0.00195
+    assert cost.total_cost == Decimal("0.00195")
+
+
+# --------------------------------------------------------------------------- #
+# Tool pricing management tests                                               #
+# --------------------------------------------------------------------------- #
+def test_add_tool_pricing():
+    """Test adding tool pricing."""
+    importlib.reload(occ.pricing)
+    pricing = occ.pricing
+    
+    pricing._TOOL_PRICING.clear()
+    
+    pricing.add_tool_pricing("WebSearchTool", 0.01)
+    pricing.add_tool_pricing("FileSearchTool", 0.0025)
+    
+    tool_pricing = pricing.load_tool_pricing()
+    assert tool_pricing["WebSearchTool"] == 0.01
+    assert tool_pricing["FileSearchTool"] == 0.0025
+
+
+def test_add_tool_pricing_replace():
+    """Test that add_tool_pricing replaces existing pricing by default."""
+    importlib.reload(occ.pricing)
+    pricing = occ.pricing
+    
+    pricing._TOOL_PRICING.clear()
+    pricing.add_tool_pricing("WebSearchTool", 0.01)
+    pricing.add_tool_pricing("WebSearchTool", 0.02, replace=True)
+    
+    tool_pricing = pricing.load_tool_pricing()
+    assert tool_pricing["WebSearchTool"] == 0.02
+
+
+def test_add_tool_pricing_no_replace():
+    """Test that add_tool_pricing raises KeyError when replace=False and tool exists."""
+    importlib.reload(occ.pricing)
+    pricing = occ.pricing
+    
+    pricing._TOOL_PRICING.clear()
+    pricing.add_tool_pricing("WebSearchTool", 0.01)
+    
+    with pytest.raises(KeyError):
+        pricing.add_tool_pricing("WebSearchTool", 0.02, replace=False)
+
+
+def test_add_tool_pricing_validation():
+    """Test validation for add_tool_pricing."""
+    importlib.reload(occ.pricing)
+    pricing = occ.pricing
+    
+    with pytest.raises(ValueError):
+        pricing.add_tool_pricing("", 0.01)
+    
+    with pytest.raises(ValueError):
+        pricing.add_tool_pricing("WebSearchTool", -0.01)
+
+
+def test_add_tool_pricings():
+    """Test bulk adding tool pricing."""
+    importlib.reload(occ.pricing)
+    pricing = occ.pricing
+    
+    pricing._TOOL_PRICING.clear()
+    pricing.add_tool_pricings([
+        ("WebSearchTool", 0.01),
+        ("FileSearchTool", 0.0025),
+        ("ComputerTool", 0.05),
+    ])
+    
+    tool_pricing = pricing.load_tool_pricing()
+    assert tool_pricing["WebSearchTool"] == 0.01
+    assert tool_pricing["FileSearchTool"] == 0.0025
+    assert tool_pricing["ComputerTool"] == 0.05
+
+
+def test_add_tool_pricings_replace_flag():
+    """Test replace flag in add_tool_pricings."""
+    importlib.reload(occ.pricing)
+    pricing = occ.pricing
+    
+    pricing._TOOL_PRICING.clear()
+    pricing.add_tool_pricings([("WebSearchTool", 0.01)])
+    
+    # Should raise KeyError if replace=False
+    with pytest.raises(KeyError):
+        pricing.add_tool_pricings([("WebSearchTool", 0.02)], replace=False)
+    
+    # Should update if replace=True
+    pricing.add_tool_pricings([("WebSearchTool", 0.02)], replace=True)
+    tool_pricing = pricing.load_tool_pricing()
+    assert tool_pricing["WebSearchTool"] == 0.02
+
+
+def test_clear_tool_pricing():
+    """Test clearing tool pricing and restoring defaults."""
+    importlib.reload(occ.pricing)
+    pricing = occ.pricing
+    
+    pricing._TOOL_PRICING.clear()
+    pricing.add_tool_pricing("CustomTool", 0.1)
+    assert "CustomTool" in pricing.load_tool_pricing()
+    
+    pricing.clear_tool_pricing()
+    tool_pricing = pricing.load_tool_pricing()
+    
+    # Should restore defaults
+    assert "WebSearchTool" in tool_pricing
+    assert "FileSearchTool" in tool_pricing
+    assert tool_pricing["WebSearchTool"] == 0.01
+    assert tool_pricing["FileSearchTool"] == 0.0025
+    assert "CustomTool" not in tool_pricing
+
+
+def test_load_tool_pricing():
+    """Test loading tool pricing."""
+    importlib.reload(occ.pricing)
+    pricing = occ.pricing
+    
+    # Should return a copy
+    tool_pricing1 = pricing.load_tool_pricing()
+    tool_pricing2 = pricing.load_tool_pricing()
+    
+    assert tool_pricing1 == tool_pricing2
+    assert tool_pricing1 is not tool_pricing2  # Should be a copy
+    
+    # Modifying the copy shouldn't affect the original
+    tool_pricing1["TestTool"] = 0.99
+    tool_pricing3 = pricing.load_tool_pricing()
+    assert "TestTool" not in tool_pricing3
+
+
+# --------------------------------------------------------------------------- #
+# Integration tests: estimate_cost with tools                                 #
+# --------------------------------------------------------------------------- #
+def test_estimate_cost_with_tools(monkeypatch):
+    """Test estimate_cost with tool usage."""
+    importlib.reload(occ.pricing)
+    pricing = occ.pricing
+    
+    # Set up tool pricing
+    pricing._TOOL_PRICING.clear()
+    pricing.add_tool_pricing("WebSearchTool", 0.01)
+    
+    # Create response with tools
+    resp = _classic_response(1_000, 500, 100)
+    resp.tools = ["WebSearchTool(...)"]
+    
+    # Mock tool pricing loading
+    monkeypatch.setattr(occ.pricing, "load_tool_pricing", lambda: {"WebSearchTool": 0.01})
+    
+    cost = estimate_cost(resp)
+    
+    # Should include tool cost
+    assert float(cost["tool_cost"]) > 0
+    assert float(cost["total_cost"]) > float(cost["prompt_cost_uncached"]) + float(cost["prompt_cost_cached"]) + float(cost["completion_cost"])
+
+
+def test_estimate_cost_typed_with_tools(monkeypatch):
+    """Test estimate_cost_typed with tool usage."""
+    importlib.reload(occ.pricing)
+    pricing = occ.pricing
+    
+    # Set up tool pricing
+    pricing._TOOL_PRICING.clear()
+    pricing.add_tool_pricing("WebSearchTool", 0.01)
+    pricing.add_tool_pricing("FileSearchTool", 0.0025)
+    
+    # Create response with multiple tools
+    resp = _classic_response(1_000, 500, 100)
+    resp.tools = ["WebSearchTool(...)", "FileSearchTool(...)"]
+    
+    # Mock tool pricing loading
+    monkeypatch.setattr(occ.pricing, "load_tool_pricing", lambda: {"WebSearchTool": 0.01, "FileSearchTool": 0.0025})
+    
+    cost = estimate_cost_typed(resp)
+    
+    # Should include tool costs: $0.01 + $0.0025 = $0.0125
+    assert cost.tool_cost == Decimal("0.0125")
+    expected_total = cost.prompt_cost_uncached + cost.prompt_cost_cached + cost.completion_cost + cost.tool_cost
+    assert cost.total_cost == expected_total
