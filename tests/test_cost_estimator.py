@@ -40,11 +40,18 @@ _PRICING = {("gpt-4o-mini", "2024-07-18"): {
     "cached_input_price": 0.25,
     "output_price"      : 1.00,
 }}
+_PRICING_TIERED = {("gpt-4o-mini", "2024-07-18"): [{
+    "input_price"       : 0.50,
+    "cached_input_price": 0.25,
+    "output_price"      : 1.00,
+    "minimum_tokens"    : 0,
+}]}
 
 @pytest.fixture(autouse=True)
 def monkeypatch_pricing(monkeypatch):
-    """Force `load_pricing()` to return our static dict."""
+    """Force pricing loaders to return our static dicts."""
     monkeypatch.setattr(occ.pricing, "load_pricing", lambda: _PRICING)
+    monkeypatch.setattr(occ.pricing, "load_pricing_tiered", lambda: _PRICING_TIERED)
 
 
 # --------------------------------------------------------------------------- #
@@ -225,6 +232,25 @@ def test_missing_pricing_raises_typed():
         estimate_cost_typed(resp)
 
 
+def test_estimate_cost_tier_boundary_selection(monkeypatch):
+    tiered = {
+        ("gpt-5.4", "2026-01-01"): [
+            {"input_price": 2.50, "cached_input_price": 0.25, "output_price": 15.00, "minimum_tokens": 0},
+            {"input_price": 5.00, "cached_input_price": 0.50, "output_price": 22.50, "minimum_tokens": 272001},
+        ]
+    }
+    monkeypatch.setattr(occ.pricing, "load_pricing_tiered", lambda: tiered)
+
+    at_boundary = _classic_response(272_000, 0, 0, model="gpt-5.4-2026-01-01")
+    over_boundary = _classic_response(272_001, 0, 0, model="gpt-5.4-2026-01-01")
+
+    cost_at_boundary = estimate_cost_typed(at_boundary)
+    cost_over_boundary = estimate_cost_typed(over_boundary)
+
+    assert cost_at_boundary.prompt_cost_uncached == Decimal("0.68")
+    assert cost_over_boundary.prompt_cost_uncached == Decimal("1.360005")
+
+
 def test_public_api_imports():
     """Test that all new functions are properly exported."""
     # Test that new functions are available in the public API
@@ -243,6 +269,11 @@ def test_public_api_imports():
 
 def _csv_text(rows):
     header = "Model Name,Model Date,Input Price,Cached Input Price,Output Price\n"
+    return header + "\n".join(rows) + "\n"
+
+
+def _csv_text_with_minimum(rows):
+    header = "Model Name,Model Date,Input Price,Cached Input Price,Output Price,Minimum Tokens\n"
     return header + "\n".join(rows) + "\n"
 
 
@@ -426,12 +457,14 @@ def test_add_pricing_entries_bulk_and_replace_flag():
     # Replace = True should update
     pricing.add_pricing_entries([
         ("m1", "2025-01-01", 1.1, 2.2, 0.0),  # 0.0 → None
+        ("m1", "2025-01-01", 1.9, 2.9, 0.9, 200000),  # tiered tuple format
     ], replace=True)
 
     d2 = pricing.load_pricing()
     assert d2[("m1", "2025-01-01")] == {
         "input_price": 1.1, "cached_input_price": None, "output_price": 2.2
     }
+    assert pricing.load_pricing_tiered()[("m1", "2025-01-01")][1]["minimum_tokens"] == 200000
 
 
 def test_refresh_pricing_immediate_fetch(monkeypatch):
@@ -491,6 +524,67 @@ def test_fetch_csv_parses_blank_cached_price_as_none(monkeypatch):
 
     d = pricing.load_pricing()
     assert d[("x", "2025-02-02")]["cached_input_price"] is None
+
+
+def test_fetch_csv_parses_minimum_tokens_and_keeps_tiers(monkeypatch):
+    importlib.reload(occ.pricing)
+    pricing = occ.pricing
+
+    pricing._CACHE = None
+    pricing._CACHE_TS = 0
+    pricing._LOCAL_OVERRIDES.clear()
+    pricing._OFFLINE_ONLY = False
+
+    csv_tiered = _csv_text_with_minimum([
+        "gpt-5.4,2026-01-01,2.50,0.25,15.00,0",
+        "gpt-5.4,2026-01-01,5.00,0.50,22.50,272001",
+    ])
+
+    class _Resp:
+        def __init__(self, text): self.text = text
+        def raise_for_status(self): return None
+
+    monkeypatch.setattr(pricing.requests, "get", lambda url, timeout: _Resp(csv_tiered))
+
+    tiered = pricing.load_pricing_tiered()
+    assert tiered[("gpt-5.4", "2026-01-01")] == [
+        {"input_price": 2.5, "cached_input_price": 0.25, "output_price": 15.0, "minimum_tokens": 0},
+        {"input_price": 5.0, "cached_input_price": 0.5, "output_price": 22.5, "minimum_tokens": 272001},
+    ]
+
+    # Backward-compatible flat view should still expose the base tier.
+    flat = pricing.load_pricing()
+    assert flat[("gpt-5.4", "2026-01-01")] == {
+        "input_price": 2.5, "cached_input_price": 0.25, "output_price": 15.0
+    }
+
+
+def test_add_pricing_entry_with_minimum_tokens(monkeypatch):
+    importlib.reload(occ.pricing)
+    pricing = occ.pricing
+
+    pricing._CACHE = None
+    pricing._CACHE_TS = 0
+    pricing._LOCAL_OVERRIDES.clear()
+    pricing.set_offline_mode(True)
+
+    pricing.add_pricing_entry(
+        "gpt-5.4", "2026-01-01",
+        input_price=2.5, output_price=15.0, cached_input_price=0.25, minimum_tokens=0
+    )
+    pricing.add_pricing_entry(
+        "gpt-5.4", "2026-01-01",
+        input_price=5.0, output_price=22.5, cached_input_price=0.5, minimum_tokens=272001
+    )
+
+    tiered = pricing.load_pricing_tiered()
+    assert tiered[("gpt-5.4", "2026-01-01")][1]["minimum_tokens"] == 272001
+
+    with pytest.raises(KeyError):
+        pricing.add_pricing_entry(
+            "gpt-5.4", "2026-01-01",
+            input_price=9.9, output_price=9.9, cached_input_price=9.9, minimum_tokens=272001, replace=False
+        )
 
 
 def test_set_offline_mode_refresh_noop(monkeypatch):

@@ -94,9 +94,14 @@ set_offline_mode(True)
 # Teach custom prices (per 1M tokens)
 add_pricing_entry(
   "ollama/qwen3:30b", "2025-08-01",
-  input_price=0.20, output_price=0.60, cached_input_price=0.04
+  input_price=0.20, output_price=0.60, cached_input_price=0.04,
+  minimum_tokens=0,  # optional tier floor; default is 0
 )
 ```
+
+If a model has tiered pricing by prompt/input size, add multiple rows for the same
+`(model_name, model_date)` with different `minimum_tokens` values. The calculator picks
+the highest matching tier where `minimum_tokens <= prompt_tokens`.
 
 Remote CSV (auto-fetched, cached 24h):  
 `https://raw.githubusercontent.com/orkunkinay/openai_cost_calculator/refs/heads/main/data/gpt_pricing_data.csv`
