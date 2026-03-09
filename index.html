@@ -326,20 +326,21 @@ print(estimate_cost_typed(resp))   # CostBreakdown</code></pre>
 
       <section id="pricing-utils">
         <h2>Pricing utilities</h2>
-        <p>The library resolves model rates from a remote CSV and merges local overrides.</p>
+        <p>The library resolves model rates from a remote CSV and merges local overrides, including tiered pricing by prompt/input size.</p>
         <table>
           <thead><tr><th>Function</th><th>Description</th></tr></thead>
           <tbody>
             <tr><td><code>refresh_pricing()</code></td><td>Force-reload the remote CSV (24-hour cache is bypassed).</td></tr>
             <tr><td><code>set_offline_mode(True)</code></td><td>Disable all network fetches; only local overrides are used.</td></tr>
-            <tr><td><code>add_pricing_entry(name,date, …)</code></td><td>Add/override a single (model, YYYY-MM-DD) row.</td></tr>
-            <tr><td><code>add_pricing_entries([...])</code></td><td>Bulk add/override multiple rows.</td></tr>
+            <tr><td><code>add_pricing_entry(name,date, …)</code></td><td>Add/override a single (model, YYYY-MM-DD) row; supports <code>minimum_tokens</code> for tiers.</td></tr>
+            <tr><td><code>add_pricing_entries([...])</code></td><td>Bulk add/override multiple rows (5-tuple or tiered 6-tuple format).</td></tr>
             <tr><td><code>clear_local_pricing()</code></td><td>Drop all in-process overrides (remote cache unaffected).</td></tr>
           </tbody>
         </table>
         <div class="note">
-          <strong>Note:</strong> The pricing CSV contains only Text token prices (no Token-Type column). If a model string lacks a date suffix,
-          the calculator uses <em>today’s date</em> and selects the latest pricing row with <code>date ≤ today</code>.
+          <strong>Note:</strong> The pricing CSV contains Text token prices (no Token-Type column) and can include a
+          <code>Minimum Tokens</code> column for tiered pricing. If a model string lacks a date suffix, the calculator
+          uses <em>today’s date</em> and selects the latest pricing row with <code>date ≤ today</code>.
         </div>
       </section>
 
@@ -349,6 +350,7 @@ print(estimate_cost_typed(resp))   # CostBreakdown</code></pre>
           <li><strong>Remote CSV</strong> (GitHub) is fetched at most once every 24 hours per process.</li>
           <li><strong>Local overrides</strong> always take precedence over remote rows on key collision.</li>
           <li><strong>Offline mode</strong> disables remote fetches — ideal for air-gapped or pinned deployments.</li>
+          <li><strong>Tier selection</strong> picks the highest matching tier where <code>minimum_tokens ≤ prompt_tokens</code>.</li>
         </ul>
 <pre><button class="copy" data-copy>Copy</button><code class="language-python">from openai_cost_calculator import set_offline_mode, refresh_pricing
 set_offline_mode(False)  # allow using the remote CSV
@@ -394,12 +396,13 @@ except CostEstimateError as e:
 from openai_cost_calculator import estimate_cost_typed, set_offline_mode, add_pricing_entry
 
 set_offline_mode(True)
-# Teach the library a new price point:
+# Teach the library a new base price point:
 add_pricing_entry(
     "ollama/qwen3:30b", "2025-08-01",
     input_price=0.20,         # USD per 1M input tokens
     output_price=0.60,        # USD per 1M output tokens
     cached_input_price=0.04,  # optional
+    minimum_tokens=0,         # optional tier floor (default: 0)
 )
 
 response = completion(
@@ -409,10 +412,21 @@ response = completion(
 )
 
 print(estimate_cost_typed(response))</code></pre>
+<pre><button class="copy" data-copy>Copy</button><code class="language-python"># Example: add a higher tier for long contexts (same model/date, higher minimum_tokens)
+add_pricing_entry(
+    "gpt-5.4", "2026-01-01",
+    input_price=2.50, output_price=15.00, cached_input_price=0.25,
+    minimum_tokens=0,
+)
+add_pricing_entry(
+    "gpt-5.4", "2026-01-01",
+    input_price=5.00, output_price=22.50, cached_input_price=0.50,
+    minimum_tokens=272001,  # applies when prompt/input tokens exceed 272K
+)</code></pre>
         <div class="tip">
           <strong>Works for any model name:</strong> choose a stable identifier (e.g., your deployment name),
           pick a date string (<code>YYYY-MM-DD</code>) you control, and supply the per-1M token prices.
-          Add more entries over time to reflect price changes by date.
+          Add more entries over time to reflect price changes by date, and use <code>minimum_tokens</code> tiers when pricing depends on context size.
         </div>
       </section>
 
@@ -430,6 +444,9 @@ print(estimate_cost_typed(response))</code></pre>
 
         <h3>What if the model string has no date?</h3>
         <p>The library uses today’s date and selects the latest CSV row with <code>date ≤ today</code>.</p>
+
+        <h3>How are token tiers applied?</h3>
+        <p>For a chosen model/date row set, the calculator picks the highest tier whose <code>minimum_tokens</code> is less than or equal to prompt/input tokens.</p>
       </section>
 
       <section id="license">

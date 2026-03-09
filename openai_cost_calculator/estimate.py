@@ -7,11 +7,11 @@ Public façade – import **one function** and you're done:
 
 from __future__ import annotations
 
-from typing import Iterable, Any, Dict, Tuple
+from typing import Iterable, Any, Dict, Tuple, List
 
 from .core import calculate_cost_typed
 from .parser import extract_model_details, extract_usage
-from .pricing import load_pricing
+from . import pricing as pricing_store
 from .types import CostBreakdown
 
 
@@ -30,11 +30,34 @@ def _pick_last_chunk(response: Iterable[Any]) -> Any:
     return last
 
 
-def _find_rates(model_name: str, model_date: str) -> Dict[str, float]:
-    pricing = load_pricing()
+def _pick_rates_for_prompt(tiers_or_row: Dict[str, float] | List[Dict[str, float]], prompt_tokens: int) -> Dict[str, float]:
+    # Backward compatibility: allow a legacy flat row.
+    if isinstance(tiers_or_row, dict):
+        return tiers_or_row
+
+    if not tiers_or_row:
+        raise CostEstimateError("Pricing row has no tiers")
+
+    # Pick tier with the greatest minimum_tokens that still applies.
+    selected = None
+    for tier in tiers_or_row:
+        min_tokens = int(tier.get("minimum_tokens", 0))
+        if min_tokens <= prompt_tokens:
+            selected = tier
+        else:
+            break
+
+    if selected is None:
+        selected = tiers_or_row[0]
+
+    return selected
+
+
+def _find_rates(model_name: str, model_date: str, prompt_tokens: int) -> Dict[str, float]:
+    pricing = pricing_store.load_pricing_tiered()
     key_exact: Tuple[str, str] = (model_name, model_date)
     if key_exact in pricing:
-        return pricing[key_exact]
+        return _pick_rates_for_prompt(pricing[key_exact], prompt_tokens)
 
     # Fallback: latest entry for that model (max date ≤ requested)
     candidates = [
@@ -47,8 +70,8 @@ def _find_rates(model_name: str, model_date: str) -> Dict[str, float]:
             f"No pricing data for model '{model_name}' (date {model_date})"
         )
     # pick the newest among the older dates
-    selected_date, rates = max(candidates, key=lambda t: t[0])
-    return rates
+    selected_date, tiers_or_row = max(candidates, key=lambda t: t[0])
+    return _pick_rates_for_prompt(tiers_or_row, prompt_tokens)
 
 
 # --------------------------------------------------------------------------- #
@@ -98,7 +121,7 @@ def estimate_cost_typed(response: Any) -> CostBreakdown:
 
         # ------------------------------------------------------------- model
         details = extract_model_details(chunk.model)
-        rates = _find_rates(details["model_name"], details["model_date"])
+        rates = _find_rates(details["model_name"], details["model_date"], usage["prompt_tokens"])
 
         # -------------------------------------------------------------- cost
         return calculate_cost_typed(usage, rates)

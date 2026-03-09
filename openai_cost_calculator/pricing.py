@@ -1,6 +1,8 @@
 """
-Remote CSV → in-memory dict  (with a tiny 24-hour cache).
-The CSV **no longer** has a Token-Type column – every row is Text.
+Remote CSV → in-memory dict (with a tiny 24-hour cache).
+
+Pricing CSV may contain tiered rows per (model, date) using `Minimum Tokens`.
+If the column is missing, rows are treated as a single tier with minimum 0.
 """
 
 from __future__ import annotations
@@ -9,7 +11,7 @@ import csv
 import io
 import time
 import threading
-from typing import Dict, Tuple, Iterable, Mapping, Optional
+from typing import Dict, Tuple, Iterable, Mapping, Optional, List
 import requests
 
 _PRICING_CSV_URL = (
@@ -17,13 +19,13 @@ _PRICING_CSV_URL = (
 )
 
 # Existing cache for remote CSV
-_CACHE: Dict[Tuple[str, str], dict] | None = None
+_CACHE: Dict[Tuple[str, str], List[dict]] | None = None
 _CACHE_TS = 0
 _TTL = 60 * 60 * 24  # 24h
 
-# local, in-process overrides
-# Keys match your finder: (model_name, model_date) with YYYY-MM-DD dates.
-_LOCAL_OVERRIDES: Dict[Tuple[str, str], dict] = {}
+# local, in-process overrides (tiered by minimum_tokens)
+# Keys are (model_name, model_date) with YYYY-MM-DD dates.
+_LOCAL_OVERRIDES: Dict[Tuple[str, str], Dict[int, dict]] = {}
 _LOCK = threading.RLock()
 _OFFLINE_ONLY = False  # if True, never fetch remote CSV
 
@@ -35,15 +37,40 @@ def _validate_date_str(date: str) -> None:
     if not (y.isdigit() and m.isdigit() and d.isdigit()):
         raise ValueError("model_date must be 'YYYY-MM-DD'")
 
-def _normalize_row(input_price: float, output_price: float, cached_input_price: Optional[float]) -> dict:
+def _normalize_row(
+    input_price: float,
+    output_price: float,
+    cached_input_price: Optional[float],
+    *,
+    minimum_tokens: int = 0,
+) -> dict:
     if input_price < 0 or output_price < 0:
         raise ValueError("Prices must be non-negative")
+    if not isinstance(minimum_tokens, int) or isinstance(minimum_tokens, bool) or minimum_tokens < 0:
+        raise ValueError("minimum_tokens must be a non-negative integer")
     row = {
         "input_price": float(input_price),
         "output_price": float(output_price),
         "cached_input_price": float(cached_input_price) if cached_input_price not in (None, 0) else None,
+        "minimum_tokens": int(minimum_tokens),
     }
     return row
+
+
+def _coerce_minimum_tokens(raw_value: str | None) -> int:
+    if raw_value is None:
+        return 0
+    s = str(raw_value).strip()
+    if s == "":
+        return 0
+    value = int(s)
+    if value < 0:
+        raise ValueError("Minimum Tokens must be non-negative")
+    return value
+
+
+def _sorted_tiers(min_to_row: Mapping[int, dict]) -> List[dict]:
+    return [dict(min_to_row[min_tokens]) for min_tokens in sorted(min_to_row.keys())]
 
 def add_pricing_entry(
     model_name: str,
@@ -52,6 +79,7 @@ def add_pricing_entry(
     input_price: float,
     output_price: float,
     cached_input_price: Optional[float] = None,
+    minimum_tokens: int = 0,
     replace: bool = True,
 ) -> None:
     """
@@ -67,30 +95,56 @@ def add_pricing_entry(
     if not model_name or not isinstance(model_name, str):
         raise ValueError("model_name must be a non-empty string")
     _validate_date_str(model_date)
-    row = _normalize_row(input_price, output_price, cached_input_price)
+    row = _normalize_row(
+        input_price,
+        output_price,
+        cached_input_price,
+        minimum_tokens=minimum_tokens,
+    )
 
     with _LOCK:
         key = (model_name, model_date)
-        if not replace and key in _LOCAL_OVERRIDES:
-            raise KeyError(f"Pricing already exists for {key}; set replace=True to override.")
-        _LOCAL_OVERRIDES[key] = row
+        by_min = _LOCAL_OVERRIDES.setdefault(key, {})
+        if not replace and minimum_tokens in by_min:
+            raise KeyError(
+                f"Pricing already exists for {key} at minimum_tokens={minimum_tokens}; "
+                "set replace=True to override."
+            )
+        by_min[minimum_tokens] = row
 
 def add_pricing_entries(
-    entries: Iterable[Tuple[str, str, float, float, Optional[float]]],
+    entries: Iterable[tuple],
     *,
     replace: bool = True,
 ) -> None:
     """
-    Bulk add: each tuple is (model_name, model_date, input_price, output_price, cached_input_price).
+    Bulk add. Supported tuple formats:
+      - (model_name, model_date, input_price, output_price, cached_input_price)
+      - (model_name, model_date, input_price, output_price, cached_input_price, minimum_tokens)
     """
     with _LOCK:
-        for model_name, model_date, ip, op, cip in entries:
+        for entry in entries:
+            if len(entry) == 5:
+                model_name, model_date, ip, op, cip = entry
+                minimum_tokens = 0
+            elif len(entry) == 6:
+                model_name, model_date, ip, op, cip, minimum_tokens = entry
+            else:
+                raise ValueError(
+                    "Each entry must be a 5-tuple or 6-tuple: "
+                    "(model_name, model_date, input_price, output_price, "
+                    "cached_input_price[, minimum_tokens])"
+                )
             _validate_date_str(model_date)
-            row = _normalize_row(ip, op, cip)
+            row = _normalize_row(ip, op, cip, minimum_tokens=minimum_tokens)
             key = (model_name, model_date)
-            if not replace and key in _LOCAL_OVERRIDES:
-                raise KeyError(f"Pricing already exists for {key}; set replace=True to override.")
-            _LOCAL_OVERRIDES[key] = row
+            by_min = _LOCAL_OVERRIDES.setdefault(key, {})
+            if not replace and minimum_tokens in by_min:
+                raise KeyError(
+                    f"Pricing already exists for {key} at minimum_tokens={minimum_tokens}; "
+                    "set replace=True to override."
+                )
+            by_min[minimum_tokens] = row
 
 def clear_local_pricing() -> None:
     """Remove all user-added overrides (remote CSV remains unaffected)."""
@@ -107,40 +161,67 @@ def set_offline_mode(offline: bool = True) -> None:
         _OFFLINE_ONLY = bool(offline)
 
 # remote fetch
-def _fetch_csv() -> Dict[Tuple[str, str], dict]:
+def _fetch_csv() -> Dict[Tuple[str, str], List[dict]]:
     resp = requests.get(_PRICING_CSV_URL, timeout=5)
     resp.raise_for_status()
     reader = csv.DictReader(io.StringIO(resp.text))
-    data = {}
+    data: Dict[Tuple[str, str], Dict[int, dict]] = {}
     for row in reader:
         key = (row["Model Name"], row["Model Date"])
-        data[key] = {
-            "input_price": float(row["Input Price"]),
-            "cached_input_price": float(row["Cached Input Price"] or 0) or None,
-            "output_price": float(row["Output Price"]),
-        }
-    return data
+        minimum_tokens = _coerce_minimum_tokens(row.get("Minimum Tokens"))
+        cached_raw = (row.get("Cached Input Price") or "").strip()
+        cached_input_price = float(cached_raw) if cached_raw else None
+        parsed = _normalize_row(
+            input_price=float((row.get("Input Price") or "").strip()),
+            output_price=float((row.get("Output Price") or "").strip()),
+            cached_input_price=cached_input_price,
+            minimum_tokens=minimum_tokens,
+        )
+        data.setdefault(key, {})[minimum_tokens] = parsed
+    return {key: _sorted_tiers(by_min) for key, by_min in data.items()}
 
-def load_pricing() -> Dict[Tuple[str, str], dict]:
+
+def load_pricing_tiered() -> Dict[Tuple[str, str], List[dict]]:
     """
-    Returns the authoritative pricing map:
+    Authoritative tiered pricing map:
         - Remote CSV (cached ~24h) unless offline mode is enabled.
-        - PLUS user overrides, which always win on key collisions.
+        - PLUS user overrides, where each (key, minimum_tokens) override wins.
     """
     global _CACHE, _CACHE_TS
-    base: Dict[Tuple[str, str], dict] = {}
+    base: Dict[Tuple[str, str], List[dict]] = {}
 
     if not _OFFLINE_ONLY:
         now = time.time()
         if _CACHE is None or (now - _CACHE_TS) > _TTL:
             _CACHE = _fetch_csv()
             _CACHE_TS = now
-        base.update(_CACHE)
+        base = {key: [dict(tier) for tier in tiers] for key, tiers in _CACHE.items()}
 
     with _LOCK:
-        base.update(_LOCAL_OVERRIDES)  # local entries always take precedence
+        for key, local_by_min in _LOCAL_OVERRIDES.items():
+            merged_by_min = {int(t["minimum_tokens"]): dict(t) for t in base.get(key, [])}
+            for min_tokens, local_row in local_by_min.items():
+                merged_by_min[int(min_tokens)] = dict(local_row)
+            base[key] = _sorted_tiers(merged_by_min)
 
     return base
+
+def load_pricing() -> Dict[Tuple[str, str], dict]:
+    """
+    Backward-compatible flat pricing view.
+
+    Returns one row per (model, date) by selecting the lowest tier (`minimum_tokens=0` if present).
+    For tier-aware resolution, use `load_pricing_tiered()`.
+    """
+    tiered = load_pricing_tiered()
+    flat: Dict[Tuple[str, str], dict] = {}
+    for key, tiers in tiered.items():
+        if not tiers:
+            continue
+        row = dict(tiers[0])
+        row.pop("minimum_tokens", None)
+        flat[key] = row
+    return flat
 
 def refresh_pricing() -> None:
     """
