@@ -217,6 +217,7 @@
         <a href="#pricing-sources">Pricing sources & cache</a>
         <a href="#streaming">Streaming</a>
         <a href="#errors">Error handling</a>
+        <a href="#comparison">LiteLLM vs this library</a>
 
         <h6>Cookbook</h6>
         <a href="#cookbook">Add your own model pricing</a>
@@ -383,6 +384,81 @@ except CostEstimateError as e:
         <div class="note">
           Azure OpenAI responses include the original model string (e.g., <code>gpt-4o-mini-2024-07-18</code>) — deployments names are ignored.
         </div>
+      </section>
+
+      <section id="comparison">
+        <h2>Comparison: LiteLLM vs openai_cost_calculator</h2>
+      
+        <p class="lead">
+          There are multiple ways to estimate LLM usage costs. One alternative is LiteLLM’s
+          <code>completion_cost</code>, which is part of a broader multi-provider framework.
+        </p>
+      
+        <p>
+          This library takes a different approach: it focuses on being a
+          <strong>small, framework-independent cost estimation layer</strong>
+          that can be used anywhere.
+        </p>
+      
+        <h3>When to use openai_cost_calculator</h3>
+        <ul>
+          <li><strong>Lightweight with minimal dependencies</strong> (no heavy frameworks)</li>
+          <li><strong>Simple and transparent</strong> (explicit pricing logic)</li>
+          <li><strong>Framework-independent</strong> (works with any pipeline)</li>
+          <li><strong>Easy to integrate</strong> into existing systems</li>
+        </ul>
+        <div class="tip">
+          Best if you want a <strong>minimal, reliable cost estimation utility</strong>
+          without adopting a larger LLM framework.
+        </div>
+      
+        <h3>When to use LiteLLM</h3>
+        <ul>
+          <li>Supports <strong>multiple providers</strong> (OpenAI, Gemini, Anthropic, etc.)</li>
+          <li>Handles <strong>advanced request types</strong> (tools, audio/video, service tiers)</li>
+          <li>Integrates with a full <strong>LLM orchestration layer</strong></li>
+        </ul>
+        <div class="note">
+          Best if you are already using LiteLLM or need <strong>broad provider support</strong>.
+        </div>
+      
+        <h3>Key Tradeoffs</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Aspect</th>
+              <th>openai_cost_calculator</th>
+              <th>LiteLLM</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Dependencies</td>
+              <td>Minimal (<code>requests</code>)</td>
+              <td>Requires LiteLLM</td>
+            </tr>
+            <tr>
+              <td>Scope</td>
+              <td>Cost estimation only</td>
+              <td>Full LLM framework</td>
+            </tr>
+            <tr>
+              <td>Transparency</td>
+              <td>High (explicit logic)</td>
+              <td>Abstracted</td>
+            </tr>
+            <tr>
+              <td>Setup complexity</td>
+              <td>Minimal</td>
+              <td>Higher</td>
+            </tr>
+            <tr>
+              <td>Advanced features</td>
+              <td>Limited</td>
+              <td>Extensive</td>
+            </tr>
+          </tbody>
+        </table>
       </section>
 
       <section id="cookbook">
