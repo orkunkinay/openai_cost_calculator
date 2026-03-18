@@ -77,6 +77,51 @@ print(estimate_cost_typed(stream))
 
 ---
 
+## Comparison: LiteLLM vs openai_cost_calculator
+
+There are multiple ways to estimate LLM usage costs. One alternative is LiteLLM’s `completion_cost` helper, which is part of a broader multi-provider framework.
+
+This library takes a different approach: it focuses on being a **small, framework-independent cost estimation layer** that can be used anywhere.
+
+---
+
+### When to use openai_cost_calculator
+
+This library is designed to be:
+
+* **Lightweight with minimal dependencies** (no heavy frameworks)
+* **Simple and transparent** (explicit pricing logic)
+* **Framework-independent** (works with any pipeline or stack)
+* **Easy to integrate into existing systems**
+
+👉 Best if you want a **minimal, reliable cost estimation utility** without adopting a larger LLM framework.
+
+---
+
+### When to use LiteLLM (`completion_cost`)
+
+LiteLLM provides a more feature-complete solution:
+
+* Supports **multiple providers** (OpenAI, Gemini, Anthropic, etc.)
+* Handles **advanced request types** (tool calls, audio/video, service tiers)
+* Integrates with a full **LLM routing/orchestration layer**
+
+👉 Best if you are already using LiteLLM or need **broad provider support and advanced features**.
+
+---
+
+### Key Tradeoffs
+
+| Aspect            | openai_cost_calculator | LiteLLM            |
+| ----------------- | ---------------------- | ------------------ |
+| Dependencies      | Minimal (`requests`)   | Requires LiteLLM   |
+| Scope             | Cost estimation only   | Full LLM framework |
+| Transparency      | High (explicit logic)  | Abstracted         |
+| Setup complexity  | Minimal                | Higher             |
+| Advanced features | Limited                | Extensive          |
+
+---
+
 ## Pricing utilities
 
 ```python
