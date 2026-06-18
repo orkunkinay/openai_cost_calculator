@@ -37,6 +37,7 @@ from .pricing import (
     set_offline_mode, refresh_pricing
 )
 from .types import CostBreakdown
+from .tracker import CostTracker, Turn, CallRecord
 
 __all__ = [
     "estimate_cost", 
@@ -48,5 +49,8 @@ __all__ = [
     "clear_local_pricing",
     "set_offline_mode",
     "CostEstimateError",
-    "CostBreakdown"
+    "CostBreakdown",
+    "CostTracker",
+    "Turn",
+    "CallRecord",
 ]
