@@ -68,6 +68,38 @@ print(estimate_cost_typed(stream))
 
 ---
 
+## Tracking agent turns
+
+Use `CostTracker` when one user-visible turn can make many OpenAI calls and you
+want a running total.
+
+```python
+from openai import OpenAI
+from openai_cost_calculator import CostTracker
+
+tracker = CostTracker()
+client = tracker.wrap(OpenAI())
+
+with tracker.turn("Refactor auth") as turn:
+    client.chat.completions.create(
+        model="gpt-5.4-mini",
+        messages=[{"role": "user", "content": "Plan the refactor"}],
+    )
+    client.responses.create(
+        model="gpt-5.4-mini",
+        input=[{"role": "user", "content": "Summarize the changes"}],
+    )
+
+print(turn.total_cost)
+print(turn.cost_by_model)
+print(tracker.session_total)
+```
+
+For streaming calls, pass `stream_options={"include_usage": True}` so the final
+usage chunk is available for cost tracking.
+
+---
+
 ## Highlights
 
 - **Typed API:** `CostBreakdown` dataclass with `Decimal` precision  
