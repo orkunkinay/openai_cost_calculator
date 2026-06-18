@@ -6,8 +6,9 @@ from decimal import Decimal
 import time
 from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 
-from .estimate import estimate_cost_typed
-from .parser import extract_usage
+from .core import calculate_cost_typed
+from .estimate import _find_rates, estimate_cost_typed
+from .parser import extract_model_details, extract_usage
 from .types import CostBreakdown
 
 
@@ -187,6 +188,20 @@ class CostTracker:
         self.session_total += record.cost.total_cost
         return record
 
+    def record_call(
+        self,
+        model: str,
+        usage: dict,
+        *,
+        turn_label: Optional[str] = None,
+    ) -> Optional[CallRecord]:
+        try:
+            return self._record_call(model, usage, turn_label=turn_label)
+        except Exception as exc:
+            if self.on_error is not None:
+                self.on_error(exc)
+            return None
+
     def wrap(self, client: Any) -> Any:
         chat_completions = getattr(getattr(client, "chat", None), "completions", None)
         if chat_completions is not None:
@@ -202,6 +217,41 @@ class CostTracker:
         self.turns.clear()
         self.session_total = Decimal("0")
         self._active_turn = None
+
+    def _find_or_create_turn(self, label: Optional[str]) -> Turn:
+        for turn in self.turns:
+            if turn.label == label:
+                return turn
+        turn = Turn(label)
+        self.turns.append(turn)
+        return turn
+
+    def _record_call(
+        self,
+        model: str,
+        usage: dict,
+        *,
+        turn_label: Optional[str] = None,
+    ) -> CallRecord:
+        details = extract_model_details(model)
+        rates = _find_rates(
+            details["model_name"],
+            details["model_date"],
+            usage["prompt_tokens"],
+        )
+        cost = calculate_cost_typed(usage, rates)
+        record = CallRecord(
+            model=model,
+            prompt_tokens=usage["prompt_tokens"],
+            completion_tokens=usage["completion_tokens"],
+            cached_tokens=usage["cached_tokens"],
+            cost=cost,
+            timestamp=time.time(),
+        )
+        turn = self._active_turn or self._find_or_create_turn(turn_label)
+        turn.add(record)
+        self.session_total += record.cost.total_cost
+        return record
 
     def _wrap_create(self, owner: Any) -> None:
         original = getattr(owner, "create", None)

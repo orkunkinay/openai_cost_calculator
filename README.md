@@ -100,6 +100,47 @@ usage chunk is available for cost tracking.
 
 ---
 
+## Zero-config tracking with the proxy
+
+Install the optional proxy dependencies:
+
+```bash
+pip install openai-cost-calculator[proxy]
+```
+
+Run the local OpenAI-compatible proxy:
+
+```bash
+openai-cost-calculator proxy --port 8100
+```
+
+Point any OpenAI-compatible agent, IDE, or SDK client at:
+
+```text
+http://127.0.0.1:8100/v1
+```
+
+The proxy forwards requests to `https://api.openai.com/v1` by default, preserving
+the request body and `Authorization` header. To use another OpenAI-compatible
+upstream:
+
+```bash
+openai-cost-calculator proxy --port 8100 --upstream https://example.com/v1
+```
+
+Read accumulated costs at:
+
+```text
+http://127.0.0.1:8100/_occ/costs
+```
+
+For grouping, send `X-OCC-Session` to separate agent sessions and `X-OCC-Turn`
+to group calls within a visible turn. Streaming calls should set
+`stream_options={"include_usage": true}` so the final SSE usage event can be
+costed.
+
+---
+
 ## Highlights
 
 - **Typed API:** `CostBreakdown` dataclass with `Decimal` precision  
