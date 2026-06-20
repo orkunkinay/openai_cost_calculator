@@ -43,8 +43,12 @@ def create_app(
     app.state.occ_transport = transport
 
     @app.get("/_occ/costs")
-    async def costs() -> JSONResponse:
-        return JSONResponse(app.state.occ_registry.summary())
+    async def costs(session: Optional[str] = None) -> JSONResponse:
+        return JSONResponse(app.state.occ_registry.summary(session))
+
+    @app.post("/_occ/checkpoint")
+    async def checkpoint(session: Optional[str] = None) -> JSONResponse:
+        return JSONResponse(app.state.occ_registry.checkpoint(session))
 
     @app.post("/_occ/reset")
     async def reset() -> JSONResponse:

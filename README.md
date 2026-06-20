@@ -141,6 +141,61 @@ costed.
 
 ---
 
+## Show cost inside Claude Code & Codex
+
+Install the Claude Code UI adapters:
+
+```bash
+openai-cost-calculator install claude-code
+```
+
+This adds a Claude Code status line command and a `Stop` hook. The status line
+shows the running Claude Code session cost, and the hook prints an inline
+per-turn line after each assistant response:
+
+```text
+💰 $0.0123 session · last 8.5k->1.2k tok (cache 2.0k) · Sonnet 4.6 · ctx 14%
+💰 This turn cost $0.0041 (12.3k in / 1.1k out)
+```
+
+Claude Code session totals come from Claude Code's own status-line JSON. The
+per-turn hook prefers exact per-message costs from the local transcript; if only
+usage is available, it estimates from seeded Claude prices.
+
+Install the Codex adapters:
+
+```bash
+openai-cost-calculator install codex --proxy-url http://127.0.0.1:8100 --session default
+```
+
+Run the proxy and route Codex's OpenAI-compatible provider through it:
+
+```bash
+openai-cost-calculator proxy --port 8100
+```
+
+Codex notifications use the proxy checkpoint endpoint, so one
+`agent-turn-complete` notification corresponds to one cost checkpoint:
+
+```text
+💰 $0.0188 session · last $0.0032
+💰 Turn $0.0032 · gpt-5.5 1.2k->500
+```
+
+Codex does not pass token or cost data to `notify`; these numbers come from the
+local proxy. Current Codex docs expose `notify` as an external program and the
+TUI status line as built-in footer items, so `occ-codex-statusline` is provided
+for wrappers or future Codex builds that can run an external status command.
+
+Undo either install with:
+
+```bash
+openai-cost-calculator uninstall claude-code
+openai-cost-calculator uninstall codex
+```
+
+---
+
 ## Highlights
 
 - **Typed API:** `CostBreakdown` dataclass with `Decimal` precision  
