@@ -11,10 +11,23 @@ authors = [
 ]
 license = { text = "MIT" }
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
+dependencies = [
+    "requests",
+]
 
-[tool.setuptools]
-packages = ["openai_cost_calculator"]
+[project.optional-dependencies]
+proxy = [
+    "fastapi",
+    "httpx",
+    "uvicorn",
+]
+
+[project.scripts]
+openai-cost-calculator = "openai_cost_calculator.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["openai_cost_calculator*"]
 
 [project.urls]
 Homepage = "https://github.com/orkunkinay/openai_cost_calculator"

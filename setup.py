@@ -13,10 +13,18 @@ setup(
         "openai_cost_calculator": ["data/gpt_pricing_data.csv"],
     },
     install_requires=["requests"],
+    extras_require={
+        "proxy": ["fastapi", "httpx", "uvicorn"],
+    },
+    entry_points={
+        "console_scripts": [
+            "openai-cost-calculator=openai_cost_calculator.cli:main",
+        ],
+    },
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    python_requires='>=3.8',
+    python_requires='>=3.9',
 )

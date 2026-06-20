@@ -6,7 +6,7 @@ the `responses.create` flavours).
 
 import re
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 # --------------------------------------------------------------------------- #
@@ -79,4 +79,44 @@ def extract_usage(obj: Any) -> Dict[str, int]:
         "prompt_tokens": int(prompt_tokens),
         "completion_tokens": int(completion_tokens),
         "cached_tokens": int(cached_tokens),
+    }
+
+
+def _get_nested_int(data: Dict[str, Any], *keys: str) -> int:
+    current: Any = data
+    for key in keys:
+        if not isinstance(current, dict):
+            return 0
+        current = current.get(key)
+    return int(current or 0)
+
+
+def extract_usage_from_payload(payload: Dict[str, Any]) -> Optional[Dict[str, int]]:
+    """
+    Extract usage from a raw OpenAI-compatible JSON response payload.
+
+    Supports both Chat Completions and Responses API usage schemas. Returns
+    None when the payload has no top-level ``usage`` object.
+    """
+    usage = payload.get("usage")
+    if not isinstance(usage, dict):
+        return None
+
+    if "input_tokens" in usage or "output_tokens" in usage:
+        prompt_tokens = _get_nested_int(usage, "input_tokens")
+        completion_tokens = _get_nested_int(usage, "output_tokens")
+        cached_tokens = _get_nested_int(
+            usage, "input_tokens_details", "cached_tokens"
+        )
+    else:
+        prompt_tokens = _get_nested_int(usage, "prompt_tokens")
+        completion_tokens = _get_nested_int(usage, "completion_tokens")
+        cached_tokens = _get_nested_int(
+            usage, "prompt_tokens_details", "cached_tokens"
+        )
+
+    return {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "cached_tokens": cached_tokens,
     }
