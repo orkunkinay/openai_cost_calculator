@@ -19,6 +19,10 @@ setup(
     entry_points={
         "console_scripts": [
             "openai-cost-calculator=openai_cost_calculator.cli:main",
+            "occ-cc-statusline=openai_cost_calculator.adapters.claude_code:statusline_main",
+            "occ-cc-stop-hook=openai_cost_calculator.adapters.claude_code:stop_hook_main",
+            "occ-codex-notify=openai_cost_calculator.adapters.codex:notify_main",
+            "occ-codex-statusline=openai_cost_calculator.adapters.codex:statusline_main",
         ],
     },
     classifiers=[

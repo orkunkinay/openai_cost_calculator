@@ -38,6 +38,7 @@ from .pricing import (
 )
 from .types import CostBreakdown
 from .tracker import CostTracker, Turn, CallRecord
+from .adapters.anthropic_pricing import seed_anthropic_pricing
 
 __all__ = [
     "estimate_cost", 
@@ -53,4 +54,5 @@ __all__ = [
     "CostTracker",
     "Turn",
     "CallRecord",
+    "seed_anthropic_pricing",
 ]
