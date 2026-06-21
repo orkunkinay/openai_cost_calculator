@@ -5,7 +5,7 @@ from decimal     import Decimal
 from typing      import Dict
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class CostBreakdown:
     """Strongly‑typed view of a cost estimate (all values are Decimal)."""
     prompt_cost_uncached: Decimal
