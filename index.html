@@ -205,6 +205,15 @@
         <a href="#install">Installation</a>
         <a href="#quickstart">Quick start</a>
 
+        <h6>Tracking &amp; agents</h6>
+        <a href="#tracking-agent-turns">Tracking agent turns</a>
+        <a href="#zero-config-proxy">Zero-config proxy</a>
+        <a href="#agent-adapters">Claude Code &amp; Codex</a>
+        <div class="sub">
+          <a href="#claude-code">Claude Code</a>
+          <a href="#codex">Codex</a>
+        </div>
+
         <h6>API reference</h6>
         <a href="#typed-api">Typed API</a>
         <div class="sub">
@@ -214,7 +223,7 @@
         <a href="#pricing-utils">Pricing utilities</a>
 
         <h6>Concepts</h6>
-        <a href="#pricing-sources">Pricing sources & cache</a>
+        <a href="#pricing-sources">Pricing sources &amp; cache</a>
         <a href="#streaming">Streaming</a>
         <a href="#errors">Error handling</a>
         <a href="#comparison">LiteLLM vs this library</a>
@@ -231,8 +240,8 @@
     <!-- Main -->
     <main>
       <div class="hero">
-        <h1>Instant, accurate USD cost estimates for OpenAI & Azure OpenAI</h1>
-        <p class="lead">Turn any API response (Chat Completions or Responses API, streaming or non-streaming) into precise, per-request costs — 8-decimal strings or <code>Decimal</code> via a typed dataclass.</p>
+        <h1>Instant, accurate USD cost estimates for OpenAI &amp; Azure OpenAI</h1>
+        <p class="lead">v1.2.0 turns any API response (Chat Completions or Responses API, streaming or non-streaming) into precise, per-request costs — 8-decimal strings or <code>Decimal</code> via a typed dataclass.</p>
       </div>
 
       <section id="overview">
@@ -245,6 +254,9 @@
         <ul>
           <li><strong>Typed API</strong> for exact financial arithmetic (<code>Decimal</code>)</li>
           <li><strong>Legacy API</strong> for drop-in string output (8 decimal places)</li>
+          <li><strong>Agent turn tracking</strong> with <code>CostTracker</code>, <code>Turn</code>, session totals, and per-model rollups</li>
+          <li><strong>OpenAI-compatible proxy</strong> for zero-config cost capture from agents, IDEs, and SDK clients</li>
+          <li><strong>Claude Code &amp; Codex adapters</strong> for status lines, hooks, and per-turn cost notifications</li>
           <li><strong>Pricing</strong> loaded from a remote CSV with a <em>24h cache</em> + local overrides</li>
           <li><strong>Offline mode</strong> for pinned environments (no network calls)</li>
         </ul>
@@ -302,6 +314,113 @@ print(estimate_cost(resp))         # dict[str, str]
 print(estimate_cost_typed(resp))   # CostBreakdown</code></pre>
       </section>
 
+      <section id="tracking-agent-turns">
+        <h2>Tracking agent turns</h2>
+        <p>
+          Use <code>CostTracker</code> when one user-visible turn can make many OpenAI calls and you want a running total.
+          Wrap an SDK client with <code>wrap(client)</code>, group work with <code>turn()</code>, and read totals from the returned <code>Turn</code> plus the tracker session.
+        </p>
+<pre><button class="copy" data-copy>Copy</button><code class="language-python">from openai import OpenAI
+from openai_cost_calculator import CostTracker
+
+tracker = CostTracker()
+client = tracker.wrap(OpenAI())
+
+with tracker.turn("Refactor auth") as turn:
+    client.chat.completions.create(
+        model="gpt-5.4-mini",
+        messages=[{"role": "user", "content": "Plan the refactor"}],
+    )
+    client.responses.create(
+        model="gpt-5.4-mini",
+        input=[{"role": "user", "content": "Summarize the changes"}],
+    )
+
+print(turn.total_cost)
+print(turn.cost_by_model)
+print(tracker.session_total)</code></pre>
+        <table>
+          <thead><tr><th>API</th><th>What it tracks</th></tr></thead>
+          <tbody>
+            <tr><td><code>CostTracker</code></td><td>Stateful tracker for a whole session.</td></tr>
+            <tr><td><code>tracker.wrap(client)</code></td><td>Wraps Chat Completions and Responses API calls on an OpenAI SDK client.</td></tr>
+            <tr><td><code>tracker.turn(label)</code></td><td>Creates a <code>Turn</code> context for one visible agent turn.</td></tr>
+            <tr><td><code>turn.total_cost</code></td><td>Total <code>Decimal</code> cost for calls made inside that turn.</td></tr>
+            <tr><td><code>turn.cost_by_model</code></td><td>Per-model <code>Decimal</code> totals for the turn.</td></tr>
+            <tr><td><code>tracker.session_total</code></td><td>Running <code>Decimal</code> total across the tracker session.</td></tr>
+          </tbody>
+        </table>
+        <div class="note">
+          For streaming calls, pass <code>stream_options={"include_usage": True}</code> so the final usage chunk is available for cost tracking.
+        </div>
+      </section>
+
+      <section id="zero-config-proxy">
+        <h2>Zero-config tracking with the proxy</h2>
+        <p>
+          Install the optional proxy dependencies, run the local OpenAI-compatible proxy, and point any OpenAI-compatible
+          agent, IDE, or SDK client at its <code>base_url</code>.
+        </p>
+<pre><button class="copy" data-copy>Copy</button><code>pip install openai-cost-calculator[proxy]</code></pre>
+<pre><button class="copy" data-copy>Copy</button><code>openai-cost-calculator proxy --port 8100</code></pre>
+        <p>Set the agent or client <code>base_url</code> to:</p>
+<pre><button class="copy" data-copy>Copy</button><code>http://127.0.0.1:8100/v1</code></pre>
+        <p>
+          The proxy forwards requests to <code>https://api.openai.com/v1</code> by default, preserving the request body and
+          <code>Authorization</code> header. To use another OpenAI-compatible upstream:
+        </p>
+<pre><button class="copy" data-copy>Copy</button><code>openai-cost-calculator proxy --port 8100 --upstream https://example.com/v1</code></pre>
+        <p>Read accumulated costs at:</p>
+<pre><button class="copy" data-copy>Copy</button><code>http://127.0.0.1:8100/_occ/costs</code></pre>
+        <div class="note">
+          For grouping, send <code>X-OCC-Session</code> to separate agent sessions and <code>X-OCC-Turn</code> to group calls within a visible turn.
+          Streaming calls should set <code>stream_options={"include_usage": true}</code> so the final SSE usage event can be costed.
+        </div>
+      </section>
+
+      <section id="agent-adapters">
+        <h2>Show cost inside Claude Code &amp; Codex</h2>
+        <p>
+          The installer can add Claude Code status-line and hook integration, or configure Codex notifications to read
+          turn checkpoints from the local proxy.
+        </p>
+
+        <h3 id="claude-code">Claude Code</h3>
+        <p>Install the Claude Code UI adapters:</p>
+<pre><button class="copy" data-copy>Copy</button><code>openai-cost-calculator install claude-code</code></pre>
+        <p>
+          This adds a Claude Code status line command and a <code>Stop</code> hook. The status line shows the running
+          Claude Code session cost, and the hook prints an inline per-turn line after each assistant response:
+        </p>
+<pre><code>💰 $0.0123 session · last 8.5k->1.2k tok (cache 2.0k) · Sonnet 4.6 · ctx 14%
+💰 This turn cost $0.0041 (12.3k in / 1.1k out)</code></pre>
+        <p>
+          Claude Code session totals come from Claude Code's own status-line JSON. The per-turn hook prefers exact
+          per-message costs from the local transcript; if only usage is available, it estimates from seeded Claude prices.
+        </p>
+
+        <h3 id="codex">Codex</h3>
+        <p>Install the Codex adapters:</p>
+<pre><button class="copy" data-copy>Copy</button><code>openai-cost-calculator install codex --proxy-url http://127.0.0.1:8100 --session default</code></pre>
+        <p>Run the proxy and route Codex's OpenAI-compatible provider through it:</p>
+<pre><button class="copy" data-copy>Copy</button><code>openai-cost-calculator proxy --port 8100</code></pre>
+        <p>
+          Codex notifications use the proxy checkpoint endpoint, so one <code>agent-turn-complete</code> notification
+          corresponds to one cost checkpoint:
+        </p>
+<pre><code>💰 $0.0188 session · last $0.0032
+💰 Turn $0.0032 · gpt-5.5 1.2k->500</code></pre>
+        <p>
+          Codex does not pass token or cost data to <code>notify</code>; these numbers come from the local proxy. Current
+          Codex docs expose <code>notify</code> as an external program and the TUI status line as built-in footer items, so
+          <code>occ-codex-statusline</code> is provided for wrappers or future Codex builds that can run an external status command.
+        </p>
+
+        <h3>Uninstall</h3>
+<pre><button class="copy" data-copy>Copy</button><code>openai-cost-calculator uninstall claude-code
+openai-cost-calculator uninstall codex</code></pre>
+      </section>
+
       <section id="costbreakdown">
         <h2>CostBreakdown dataclass</h2>
         <p>Typed results are returned as a frozen dataclass with <code>Decimal</code> fields:</p>
@@ -346,7 +465,7 @@ print(estimate_cost_typed(resp))   # CostBreakdown</code></pre>
       </section>
 
       <section id="pricing-sources">
-        <h2>Pricing sources & cache</h2>
+        <h2>Pricing sources &amp; cache</h2>
         <ul>
           <li><strong>Remote CSV</strong> (GitHub) is fetched at most once every 24 hours per process.</li>
           <li><strong>Local overrides</strong> always take precedence over remote rows on key collision.</li>
@@ -526,8 +645,8 @@ add_pricing_entry(
       </section>
 
       <section id="license">
-        <h2>License & contributions</h2>
-        <p>MIT License © 2025 Orkun Kınay & Murat Barkın Kınay. PRs that enhance robustness (SDK changes, pricing formats) are welcome.</p>
+        <h2>License &amp; contributions</h2>
+        <p>MIT License © 2025 Orkun Kınay &amp; Murat Barkın Kınay. PRs that enhance robustness (SDK changes, pricing formats) are welcome.</p>
       </section>
 
       <footer>
