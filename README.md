@@ -174,6 +174,12 @@ Run the proxy and route Codex's OpenAI-compatible provider through it:
 openai-cost-calculator proxy --port 8100
 ```
 
+The Codex installer adds a managed `~/.codex/config.toml` block that selects an
+`openai_cost_calculator` custom provider, points it at
+`http://127.0.0.1:8100/v1`, uses `wire_api = "responses"`, and disables
+websockets so the HTTP proxy can observe usage. The provider uses
+`OPENAI_API_KEY`, so make sure that environment variable is available to Codex.
+
 Codex notifications use the proxy checkpoint endpoint, so one
 `agent-turn-complete` notification corresponds to one cost checkpoint:
 
@@ -183,9 +189,10 @@ Codex notifications use the proxy checkpoint endpoint, so one
 ```
 
 Codex does not pass token or cost data to `notify`; these numbers come from the
-local proxy. Current Codex docs expose `notify` as an external program and the
-TUI status line as built-in footer items, so `occ-codex-statusline` is provided
-for wrappers or future Codex builds that can run an external status command.
+local proxy. Current Codex docs expose `notify` as an external program; some
+Codex surfaces, including `codex exec`, run the notifier but do not display its
+stdout. `occ-codex-statusline` is provided for wrappers or future Codex builds
+that can run an external status command.
 
 Undo either install with:
 

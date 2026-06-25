@@ -153,6 +153,44 @@ def test_streaming_sse_passes_body_through_and_costs_final_usage_event():
     assert costs["sessions"]["stream-session"]["session_total"] == "0.00775000"
 
 
+def test_streaming_responses_completed_event_costs_nested_usage():
+    completed = {
+        "type": "response.completed",
+        "response": {
+            "id": "resp-test",
+            "model": "gpt-test-2025-01-01",
+            "usage": {
+                "input_tokens": 1_000,
+                "output_tokens": 2_000,
+                "input_tokens_details": {"cached_tokens": 100},
+            },
+        },
+    }
+    chunks = [
+        b'event: response.output_text.delta\ndata: {"delta":"hi"}\n\n',
+        f"event: response.completed\ndata: {json.dumps(completed)}\n\n".encode("utf-8"),
+    ]
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert json.loads((await request.aread()).decode("utf-8"))["stream"] is True
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            stream=AsyncChunkStream(chunks),
+        )
+
+    client = _client(handler)
+    response = client.post(
+        "/v1/responses",
+        json={"model": "gpt-test-2025-01-01", "stream": True},
+        headers={"x-occ-session": "responses-stream"},
+    )
+
+    assert response.content == b"".join(chunks)
+    costs = client.get("/_occ/costs").json()
+    assert costs["sessions"]["responses-stream"]["session_total"] == "0.00495000"
+
+
 def test_costs_endpoint_reflects_turn_grouping():
     calls = [
         {

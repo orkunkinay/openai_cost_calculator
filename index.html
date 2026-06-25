@@ -402,8 +402,15 @@ print(tracker.session_total)</code></pre>
         <h3 id="codex">Codex</h3>
         <p>Install the Codex adapters:</p>
 <pre><button class="copy" data-copy>Copy</button><code>openai-cost-calculator install codex --proxy-url http://127.0.0.1:8100 --session default</code></pre>
-        <p>Run the proxy and route Codex's OpenAI-compatible provider through it:</p>
+        <p>Run the proxy:</p>
 <pre><button class="copy" data-copy>Copy</button><code>openai-cost-calculator proxy --port 8100</code></pre>
+        <p>
+          The Codex installer adds a managed <code>~/.codex/config.toml</code> block that selects an
+          <code>openai_cost_calculator</code> custom provider, points it at
+          <code>http://127.0.0.1:8100/v1</code>, uses <code>wire_api = "responses"</code>, and disables
+          websockets so the HTTP proxy can observe usage. The provider uses <code>OPENAI_API_KEY</code>,
+          so make sure that environment variable is available to Codex.
+        </p>
         <p>
           Codex notifications use the proxy checkpoint endpoint, so one <code>agent-turn-complete</code> notification
           corresponds to one cost checkpoint:
@@ -412,7 +419,8 @@ print(tracker.session_total)</code></pre>
 💰 Turn $0.0032 · gpt-5.5 1.2k->500</code></pre>
         <p>
           Codex does not pass token or cost data to <code>notify</code>; these numbers come from the local proxy. Current
-          Codex docs expose <code>notify</code> as an external program and the TUI status line as built-in footer items, so
+          Codex docs expose <code>notify</code> as an external program; some Codex surfaces, including
+          <code>codex exec</code>, run the notifier but do not display its stdout.
           <code>occ-codex-statusline</code> is provided for wrappers or future Codex builds that can run an external status command.
         </p>
 
