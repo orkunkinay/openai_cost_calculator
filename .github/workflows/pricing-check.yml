@@ -1,0 +1,54 @@
+name: Check Model Pricing
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  pricing-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set Up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Check Pricing
+        run: python scripts/check_pricing.py
+
+      - name: Detect Pricing CSV Changes
+        id: pricing_diff
+        run: |
+          if git diff --quiet -- data/gpt_pricing_data.csv; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open Pricing Update PR
+        if: steps.pricing_diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: automated/pricing-update
+          title: Update model pricing from upstream
+          commit-message: Update model pricing from upstream
+          body-path: pricing_diff.md
+          labels: |
+            pricing
+            automated
+          add-paths: |
+            data/gpt_pricing_data.csv
