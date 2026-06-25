@@ -310,11 +310,18 @@ class _SSEUsageParser:
         if raw_data == "[DONE]":
             return
         payload = _json_from_bytes(raw_data.encode("utf-8"))
-        if not payload or extract_usage_from_payload(payload) is None:
+        if not payload:
             return
-        if "model" not in payload and isinstance(self._default_model, str):
-            payload = {**payload, "model": self._default_model}
-        self.usage_payload = payload
+        usage_payload = payload
+        if extract_usage_from_payload(usage_payload) is None:
+            nested_response = payload.get("response")
+            if isinstance(nested_response, dict):
+                usage_payload = nested_response
+        if extract_usage_from_payload(usage_payload) is None:
+            return
+        if "model" not in usage_payload and isinstance(self._default_model, str):
+            usage_payload = {**usage_payload, "model": self._default_model}
+        self.usage_payload = usage_payload
 
 
 app = create_app()

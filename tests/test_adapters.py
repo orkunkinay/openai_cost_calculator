@@ -14,6 +14,7 @@ from openai_cost_calculator.adapters.claude_code import (
 )
 from openai_cost_calculator.adapters.codex import (
     checkpoint_text,
+    notify_main,
     statusline_text as codex_statusline_text,
 )
 from openai_cost_calculator.adapters.install import (
@@ -143,6 +144,69 @@ def test_codex_adapters_render_and_silently_handle_network_errors(monkeypatch):
     assert codex_statusline_text(session="s1") == "💰 cost offline"
 
 
+def test_codex_notify_uses_installed_session_and_chains_previous_notifier(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+):
+    codex_home = tmp_path / ".codex"
+    codex_home.mkdir()
+    previous_log = tmp_path / "previous.log"
+    previous = tmp_path / "previous.py"
+    previous.write_text(
+        "import pathlib, sys\n"
+        f"pathlib.Path({str(previous_log)!r}).write_text(sys.argv[-1])\n",
+        encoding="utf-8",
+    )
+    (codex_home / "config.toml").write_text(
+        "# >>> openai-cost-calculator\n"
+        f"# previous_notify = notify = [\"python3\", \"{previous}\"]\n"
+        'notify = ["occ-codex-notify"]\n'
+        'model_provider = "openai_cost_calculator"\n'
+        'occ_codex_proxy_url = "http://127.0.0.1:8100"\n'
+        'occ_codex_session = "installed-session"\n'
+        'occ_codex_statusline_command = "occ-codex-statusline"\n'
+        "# <<< openai-cost-calculator\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+
+    requested_urls = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def read(self):
+            return json.dumps(
+                {
+                    "total_cost": "0.00400000",
+                    "prompt_tokens": 2_000,
+                    "completion_tokens": 1_000,
+                    "models": {"gpt-test": {"total_cost": "0.00400000"}},
+                }
+            ).encode("utf-8")
+
+    def fake_urlopen(request, timeout):
+        requested_urls.append(request.full_url)
+        return Response()
+
+    notification = {
+        "type": "agent-turn-complete",
+        "thread-id": "thread-session",
+    }
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("sys.argv", ["occ-codex-notify", json.dumps(notification)])
+
+    assert notify_main() == 0
+    assert "💰 Turn $0.0040 · gpt-test 2.0k->1.0k" in capsys.readouterr().out
+    assert "session=installed-session" in requested_urls[0]
+    assert json.loads(previous_log.read_text(encoding="utf-8")) == notification
+
+
 def test_proxy_checkpoint_advances_cursor_and_costs_remain_cumulative():
     calls = [
         {
@@ -198,22 +262,31 @@ def test_installers_are_idempotent_and_reversible(tmp_path: Path, monkeypatch):
     codex_dir.mkdir()
     codex_config = codex_dir / "config.toml"
     codex_config.write_text(
-        'notify = ["existing-notifier"]\nmodel = "gpt-test"\n',
+        'notify = ["existing-notifier"]\n'
+        'model_provider = "existing-provider"\n'
+        'model = "gpt-test"\n',
         encoding="utf-8",
     )
     install_codex("http://127.0.0.1:8100", "s1")
     install_codex("http://127.0.0.1:8100", "s1")
     text = codex_config.read_text(encoding="utf-8")
-    assert text.count("openai-cost-calculator") == 2
+    assert text.count("openai-cost-calculator") == 4
     assert text.count("occ-codex-notify") == 1
     assert "occ-codex-statusline" in text
+    assert 'model_provider = "openai_cost_calculator"' in text
+    assert "[model_providers.openai_cost_calculator]" in text
+    assert 'base_url = "http://127.0.0.1:8100/v1"' in text
+    assert "supports_websockets = false" in text
     active_notify_lines = [
         line for line in text.splitlines() if line.startswith('notify = ["')
     ]
     assert active_notify_lines == ['notify = ["occ-codex-notify"]']
     assert "# previous_notify = notify = [\"existing-notifier\"]" in text
+    assert '# previous_model_provider = model_provider = "existing-provider"' in text
     assert 'model = "gpt-test"' in text
     uninstall_codex()
     assert codex_config.read_text(encoding="utf-8").strip() == (
-        'notify = ["existing-notifier"]\nmodel = "gpt-test"'
+        'model_provider = "existing-provider"\n'
+        'notify = ["existing-notifier"]\n'
+        'model = "gpt-test"'
     )

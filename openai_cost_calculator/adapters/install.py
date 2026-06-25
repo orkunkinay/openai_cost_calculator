@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import time
 from pathlib import Path
@@ -73,31 +74,52 @@ def uninstall_claude_code(scope: str = "user") -> list[str]:
 
 
 def install_codex(proxy_url: str, session: str) -> list[str]:
-    path = Path.home() / ".codex" / "config.toml"
+    path = _codex_config_path()
     text = _read_text(path)
-    previous_notify = _managed_previous_notify(text)
+    previous_notify = _managed_previous_key(text, "notify")
+    previous_model_provider = _managed_previous_key(text, "model_provider")
+    previous_openai_base_url = _managed_previous_key(text, "openai_base_url")
     base = _remove_managed_block(text)
+    if (
+        previous_openai_base_url
+        and _extract_top_level_key(base, "openai_base_url")[0] is None
+    ):
+        base = f"{previous_openai_base_url}\n{base.lstrip()}"
     extracted_notify, base = _extract_top_level_key(base, "notify")
+    extracted_model_provider, base = _extract_top_level_key(base, "model_provider")
     previous_notify = previous_notify or extracted_notify
-    block = _codex_block(proxy_url, session, previous_notify)
-    new_text = _prepend_managed_block(base, block)
+    previous_model_provider = previous_model_provider or extracted_model_provider
+    top_block, provider_block = _codex_blocks(
+        proxy_url,
+        session,
+        previous_notify,
+        previous_model_provider,
+    )
+    new_text = _insert_codex_blocks(base, top_block, provider_block)
     if new_text != text:
         _backup(path)
         _write_text(path, new_text)
         return [
-            f"{path}: installed notify/statusline adapter block",
-            "Route Codex through the proxy with base_url http://127.0.0.1:8100/v1 and X-OCC-Session if your provider supports static headers.",
+            f"{path}: installed Codex cost adapter block",
+            f"Run the proxy with: openai-cost-calculator proxy --port {_proxy_port(proxy_url)}",
+            "Ensure OPENAI_API_KEY is available to Codex for the proxy provider.",
         ]
     return [f"{path}: already installed"]
 
 
 def uninstall_codex() -> list[str]:
-    path = Path.home() / ".codex" / "config.toml"
+    path = _codex_config_path()
     text = _read_text(path)
-    previous_notify = _managed_previous_notify(text)
+    previous_notify = _managed_previous_key(text, "notify")
+    previous_model_provider = _managed_previous_key(text, "model_provider")
     new_text = _remove_managed_block(text)
     if previous_notify and _extract_top_level_key(new_text, "notify")[0] is None:
         new_text = f"{previous_notify}\n{new_text.lstrip()}"
+    if previous_model_provider and _extract_top_level_key(new_text, "model_provider")[0] is None:
+        insert = previous_model_provider
+        if not insert.endswith("\n"):
+            insert = f"{insert}\n"
+        new_text = f"{insert}{new_text.lstrip()}"
     if new_text != text:
         _backup(path)
         _write_text(path, new_text)
@@ -109,6 +131,10 @@ def _claude_settings_path(scope: str) -> Path:
     if scope == "project":
         return Path.cwd() / ".claude" / "settings.json"
     return Path.home() / ".claude" / "settings.json"
+
+
+def _codex_config_path() -> Path:
+    return Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex") / "config.toml"
 
 
 def _read_json_object(path: Path) -> dict[str, Any]:
@@ -186,26 +212,44 @@ def _remove_hook(entry: Any, command: str) -> Any:
     return next_entry
 
 
-def _codex_block(
+def _codex_blocks(
     proxy_url: str,
     session: str,
     previous_notify: Optional[str] = None,
-) -> str:
+    previous_model_provider: Optional[str] = None,
+) -> tuple[str, str]:
     escaped_proxy = proxy_url.replace("\\", "\\\\").replace('"', '\\"')
+    api_base = _proxy_api_base(proxy_url)
+    escaped_api_base = api_base.replace("\\", "\\\\").replace('"', '\\"')
     escaped_session = session.replace("\\", "\\\\").replace('"', '\\"')
-    previous = f"# previous_notify = {previous_notify}\n" if previous_notify else ""
-    return (
+    previous = ""
+    if previous_notify:
+        previous += f"# previous_notify = {previous_notify}\n"
+    if previous_model_provider:
+        previous += f"# previous_model_provider = {previous_model_provider}\n"
+    top_block = (
         f"{CODEX_BEGIN}\n"
-        '# Codex notify is documented as an external program. Current Codex\n'
-        '# docs expose TUI status_line as built-in item identifiers, so the\n'
-        '# statusline command is stored here for wrappers that support it.\n'
+        "# OpenAI Cost Calculator routes Codex through the local proxy\n"
+        "# and prints a checkpoint after each turn.\n"
         f"{previous}"
         'notify = ["occ-codex-notify"]\n'
+        'model_provider = "openai_cost_calculator"\n'
         f'occ_codex_proxy_url = "{escaped_proxy}"\n'
         f'occ_codex_session = "{escaped_session}"\n'
         'occ_codex_statusline_command = "occ-codex-statusline"\n'
         f"{CODEX_END}\n"
     )
+    provider_block = (
+        f"{CODEX_BEGIN}\n"
+        "[model_providers.openai_cost_calculator]\n"
+        'name = "OpenAI Cost Calculator Proxy"\n'
+        f'base_url = "{escaped_api_base}"\n'
+        'env_key = "OPENAI_API_KEY"\n'
+        'wire_api = "responses"\n'
+        "supports_websockets = false\n"
+        f"{CODEX_END}\n"
+    )
+    return top_block, provider_block
 
 
 def _prepend_managed_block(text: str, block: str) -> str:
@@ -213,6 +257,22 @@ def _prepend_managed_block(text: str, block: str) -> str:
     if stripped:
         return f"{block}\n{stripped}\n"
     return block
+
+
+def _insert_codex_blocks(text: str, top_block: str, provider_block: str) -> str:
+    base = _remove_managed_block(text).strip()
+    if not base:
+        return f"{top_block}\n{provider_block}"
+    top_level, sections = _split_first_section(base)
+    top_level = top_level.strip()
+    sections = sections.strip()
+    parts = [top_block.rstrip()]
+    if top_level:
+        parts.append(top_level)
+    parts.append(provider_block.rstrip())
+    if sections:
+        parts.append(sections)
+    return "\n\n".join(parts) + "\n"
 
 
 def _remove_managed_block(text: str) -> str:
@@ -231,7 +291,8 @@ def _remove_managed_block(text: str) -> str:
     return "".join(output).rstrip() + ("\n" if output else "")
 
 
-def _managed_previous_notify(text: str) -> Optional[str]:
+def _managed_previous_key(text: str, key: str) -> Optional[str]:
+    marker = f"# previous_{key} = "
     in_block = False
     for line in text.splitlines():
         if line.strip() == CODEX_BEGIN:
@@ -239,8 +300,8 @@ def _managed_previous_notify(text: str) -> Optional[str]:
             continue
         if line.strip() == CODEX_END:
             return None
-        if in_block and line.startswith("# previous_notify = "):
-            value = line.removeprefix("# previous_notify = ").strip()
+        if in_block and line.startswith(marker):
+            value = line.removeprefix(marker).strip()
             return value or None
     return None
 
@@ -263,3 +324,29 @@ def _extract_top_level_key(text: str, key: str) -> Tuple[Optional[str], str]:
             continue
         output.append(line)
     return found, "".join(output)
+
+
+def _split_first_section(text: str) -> tuple[str, str]:
+    lines = text.splitlines(keepends=True)
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            return "".join(lines[:index]), "".join(lines[index:])
+    return text, ""
+
+
+def _proxy_api_base(proxy_url: str) -> str:
+    base = proxy_url.rstrip("/")
+    if base.endswith("/v1"):
+        return base
+    return f"{base}/v1"
+
+
+def _proxy_port(proxy_url: str) -> str:
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(proxy_url)
+        return str(parsed.port or 8100)
+    except Exception:
+        return "8100"
