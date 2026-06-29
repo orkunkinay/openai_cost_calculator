@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import csv
 import os
+import re
 import sys
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
@@ -32,6 +33,10 @@ CSV_PATH = Path(os.environ.get("PRICING_CSV_PATH", "data/gpt_pricing_data.csv"))
 SUMMARY_PATH = Path(os.environ.get("PRICING_DIFF_PATH", "pricing_diff.md"))
 TOLERANCE = Decimal("1e-9")
 PER_MILLION = Decimal("1000000")
+ABOVE_272K_MIN_TOKENS = 272001
+AUTO_ADD_GPT_MIN_MAJOR = int(os.environ.get("PRICING_AUTO_ADD_GPT_MIN_MAJOR", "5"))
+DATED_UPSTREAM_KEY_RE = re.compile(r"^(?P<model>.+)-(?P<date>\d{4}-\d{2}-\d{2})$")
+GPT_MODEL_RE = re.compile(r"^gpt-(?P<major>\d+)(?:[.\w-].*)?$")
 
 PRICE_FIELDS = (
     ("Input Price", "input_cost_per_token", "input_cost_per_token_above_272k_tokens"),
@@ -58,6 +63,15 @@ class RowChange:
     minimum_tokens: str
     upstream_key: str
     changes: list[FieldChange]
+
+
+@dataclass(frozen=True)
+class AddedRow:
+    model_name: str
+    model_date: str
+    minimum_tokens: str
+    upstream_key: str
+    row: dict[str, str]
 
 
 def fetch_upstream() -> dict[str, dict[str, Any]]:
@@ -114,7 +128,7 @@ def parse_price(value: str) -> Decimal | None:
 
 
 def upstream_price(model_info: dict[str, Any], base_key: str, above_272k_key: str, minimum_tokens: int) -> Decimal | None:
-    key = above_272k_key if minimum_tokens >= 272001 and above_272k_key in model_info else base_key
+    key = above_272k_key if minimum_tokens >= ABOVE_272K_MIN_TOKENS and above_272k_key in model_info else base_key
     raw_value = model_info.get(key)
     if raw_value is None:
         return None
@@ -168,6 +182,110 @@ def upstream_key_for_row(row: dict[str, str], upstream: dict[str, dict[str, Any]
     if name in upstream:
         return name
     return None
+
+
+def split_dated_upstream_key(upstream_key: str) -> tuple[str, str]:
+    match = DATED_UPSTREAM_KEY_RE.match(upstream_key)
+    if match:
+        return match.group("model"), match.group("date")
+    return upstream_key, ""
+
+
+def is_auto_addable_gpt_model(upstream_key: str, model_info: dict[str, Any]) -> bool:
+    if model_info.get("litellm_provider") != "openai":
+        return False
+
+    model_name, _model_date = split_dated_upstream_key(upstream_key)
+    match = GPT_MODEL_RE.match(model_name)
+    if not match:
+        return False
+
+    if int(match.group("major")) < AUTO_ADD_GPT_MIN_MAJOR:
+        return False
+
+    return (
+        upstream_price(model_info, "input_cost_per_token", "input_cost_per_token", 0) is not None
+        and upstream_price(model_info, "output_cost_per_token", "output_cost_per_token", 0) is not None
+    )
+
+
+def has_above_272k_pricing(model_info: dict[str, Any]) -> bool:
+    return any(above_272k_key in model_info for _csv_field, _base_key, above_272k_key in PRICE_FIELDS)
+
+
+def new_price_text(value: Decimal | None) -> str:
+    if value is None:
+        return ""
+    return format_price(value, "0.0")
+
+
+def build_new_row(
+    model_name: str,
+    model_date: str,
+    minimum_tokens_value: int,
+    upstream_key: str,
+    model_info: dict[str, Any],
+) -> AddedRow:
+    prices = {
+        csv_field: new_price_text(upstream_price(model_info, base_key, above_272k_key, minimum_tokens_value))
+        for csv_field, base_key, above_272k_key in PRICE_FIELDS
+    }
+    row = {
+        "Model Name": model_name,
+        "Model Date": model_date,
+        "Input Price": prices["Input Price"],
+        "Cached Input Price": prices["Cached Input Price"],
+        "Output Price": prices["Output Price"],
+        "Minimum Tokens": str(minimum_tokens_value),
+    }
+    return AddedRow(model_name, model_date, str(minimum_tokens_value), upstream_key, row)
+
+
+def new_gpt_rows(
+    upstream: dict[str, dict[str, Any]], represented_models: set[str], existing_rows: list[dict[str, str]]
+) -> list[AddedRow]:
+    added_rows: list[AddedRow] = []
+    existing_row_keys = {
+        (
+            row.get("Model Name", "").strip(),
+            row.get("Model Date", "").strip(),
+            str(minimum_tokens(row)),
+        )
+        for row in existing_rows
+    }
+    planned_model_names = set(represented_models)
+
+    for upstream_key in sorted(upstream):
+        model_info = upstream[upstream_key]
+        if not is_auto_addable_gpt_model(upstream_key, model_info):
+            continue
+
+        model_name, model_date = split_dated_upstream_key(upstream_key)
+        if upstream_key in planned_model_names or model_name in planned_model_names:
+            continue
+
+        minimum_token_values = [0]
+        if has_above_272k_pricing(model_info):
+            minimum_token_values.append(ABOVE_272K_MIN_TOKENS)
+
+        row_additions: list[AddedRow] = []
+        for min_tokens in minimum_token_values:
+            row_key = (model_name, model_date, str(min_tokens))
+            if row_key in existing_row_keys:
+                continue
+            row_additions.append(build_new_row(model_name, model_date, min_tokens, upstream_key, model_info))
+
+        if not row_additions:
+            continue
+
+        added_rows.extend(row_additions)
+        planned_model_names.add(upstream_key)
+        planned_model_names.add(model_name)
+        if model_date:
+            planned_model_names.add(f"{model_name}-{model_date}")
+        existing_row_keys.update((row.model_name, row.model_date, row.minimum_tokens) for row in row_additions)
+
+    return added_rows
 
 
 def price_changed(old_price: Decimal | None, new_price: Decimal | None) -> bool:
@@ -264,6 +382,7 @@ def display_price(value: Decimal | None) -> str:
 def write_summary(
     path: Path,
     changes: list[RowChange],
+    added_rows: list[AddedRow],
     candidates: list[tuple[str, Decimal | None, Decimal | None, Decimal | None]],
 ) -> None:
     lines = [
@@ -288,11 +407,31 @@ def write_summary(
                 lines.append(f"- {field_change.field}: `{field_change.old}` -> `{field_change.new}`")
             lines.append("")
     else:
-        lines.extend(["## Changed Rows", "", "No pricing drift detected.", ""])
+        lines.extend(["## Changed Rows", "", "No existing row price drift detected.", ""])
+
+    lines.extend(["## Added GPT Models", ""])
+    if added_rows:
+        lines.append(
+            f"Automatically added OpenAI GPT models with major version {AUTO_ADD_GPT_MIN_MAJOR} or newer."
+        )
+        lines.append("")
+        lines.append("| Model | Date | Minimum tokens | Input | Cached input | Output | Upstream key |")
+        lines.append("| --- | --- | ---: | ---: | ---: | ---: | --- |")
+        for added_row in added_rows:
+            row = added_row.row
+            lines.append(
+                f"| `{added_row.model_name}` | {added_row.model_date or '(blank)'} | "
+                f"{added_row.minimum_tokens} | {row['Input Price'] or '(blank)'} | "
+                f"{row['Cached Input Price'] or '(blank)'} | {row['Output Price'] or '(blank)'} | "
+                f"`{added_row.upstream_key}` |"
+            )
+        lines.append("")
+    else:
+        lines.extend(["No new auto-addable GPT models detected.", ""])
 
     lines.extend(["## Upstream Models Not In CSV", ""])
     if candidates:
-        lines.append("These are candidates only. They are not added automatically because model dates are unknown.")
+        lines.append("These are candidates only. They do not match the conservative GPT auto-add filter.")
         lines.append("")
         lines.append("| Upstream model | Input | Cached input | Output |")
         lines.append("| --- | ---: | ---: | ---: |")
@@ -313,10 +452,16 @@ def main() -> int:
         upstream = fetch_upstream()
         fieldnames, rows, lineterminator = read_csv(CSV_PATH)
         changes, matched_upstream_keys, represented_models, updated_rows = apply_updates(rows, upstream)
+        added_rows = new_gpt_rows(upstream, represented_models, updated_rows)
+        if added_rows:
+            updated_rows.extend(added_row.row for added_row in added_rows)
+            matched_upstream_keys.update(added_row.upstream_key for added_row in added_rows)
+            represented_models.update(added_row.model_name for added_row in added_rows)
+            represented_models.update(added_row.upstream_key for added_row in added_rows)
         candidates = candidate_models(upstream, matched_upstream_keys, represented_models)
-        write_summary(SUMMARY_PATH, changes, candidates)
+        write_summary(SUMMARY_PATH, changes, added_rows, candidates)
 
-        if changes:
+        if changes or added_rows:
             write_csv(CSV_PATH, fieldnames, updated_rows, lineterminator)
             print(f"Pricing drift detected: updated {CSV_PATH} and wrote {SUMMARY_PATH}.")
         else:
