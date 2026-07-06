@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import csv
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
