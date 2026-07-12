@@ -227,7 +227,7 @@ def test_costs_endpoint_reflects_turn_grouping():
     assert costs["sessions"]["agent-b"]["session_total"] == "0.00300000"
 
 
-def test_upstream_error_and_missing_usage_record_nothing():
+def test_upstream_error_records_nothing_and_missing_usage_reports_diagnostic():
     responses = [
         httpx.Response(
             500,
@@ -247,10 +247,9 @@ def test_upstream_error_and_missing_usage_record_nothing():
     client = _client(handler)
     assert client.post("/v1/chat/completions").status_code == 500
     assert client.post("/v1/chat/completions").status_code == 200
-    assert client.get("/_occ/costs").json() == {
-        "sessions": {},
-        "grand_total": "0.00000000",
-    }
+    costs = client.get("/_occ/costs").json()
+    assert costs["grand_total"] == "0.00000000"
+    assert costs["sessions"]["default"]["errors"][0]["code"] == "missing_usage"
 
 
 def test_costing_failure_is_swallowed_and_response_is_unchanged():
@@ -267,7 +266,49 @@ def test_costing_failure_is_swallowed_and_response_is_unchanged():
     response = client.post("/v1/chat/completions", headers={"x-occ-session": "bad"})
 
     assert response.content == upstream_body
-    assert client.get("/_occ/costs").json() == {
-        "sessions": {},
-        "grand_total": "0.00000000",
-    }
+    costs = client.get("/_occ/costs").json()
+    assert costs["grand_total"] == "0.00000000"
+    assert costs["sessions"]["bad"]["session_total"] == "0.00000000"
+    assert costs["sessions"]["bad"]["turns"] == []
+    assert costs["sessions"]["bad"]["errors"][0]["code"] == "cost_estimation_failed"
+    assert "unknown" in costs["sessions"]["bad"]["errors"][0]["message"]
+
+
+def test_missing_usage_is_reported_instead_of_appearing_as_zero_cost_success():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            json={"id": "resp-without-usage", "model": "gpt-test-2025-01-01"},
+        )
+
+    client = _client(handler)
+    response = client.post("/v1/responses", headers={"x-occ-session": "missing"})
+
+    assert response.status_code == 200
+    session = client.get("/_occ/costs?session=missing").json()["sessions"]["missing"]
+    assert session["session_total"] == "0.00000000"
+    assert session["errors"][0]["code"] == "missing_usage"
+
+
+def test_request_hop_by_hop_headers_are_not_forwarded():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["authorization"] == "Bearer test-token"
+        assert request.headers["x-keep"] == "yes"
+        assert "keep-alive" not in request.headers
+        assert "x-remove" not in request.headers
+        return httpx.Response(500, json={"error": "expected"})
+
+    client = _client(handler)
+    response = client.post(
+        "/v1/responses",
+        headers={
+            "authorization": "Bearer test-token",
+            "connection": "keep-alive, x-remove",
+            "keep-alive": "timeout=5",
+            "x-remove": "private",
+            "x-keep": "yes",
+        },
+    )
+
+    assert response.status_code == 500

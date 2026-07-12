@@ -171,6 +171,12 @@ async def _forward_streaming(
                         turn_label,
                         usage_payload,
                     )
+                else:
+                    app.state.occ_registry.record_error(
+                        session_id,
+                        "missing_usage",
+                        "successful streaming response ended without final usage data",
+                    )
             await upstream_response.aclose()
             await client.aclose()
 
@@ -196,10 +202,14 @@ def _upstream_url(app: FastAPI, path: str, request: Request) -> str:
 
 
 def _forward_headers(request: Request) -> list[tuple[bytes, bytes]]:
+    excluded = {name.encode("ascii") for name in _HOP_BY_HOP_HEADERS}
+    excluded.update({b"host", b"content-length"})
+    for value in request.headers.getlist("connection"):
+        excluded.update(token.strip().lower().encode("ascii") for token in value.split(","))
     return [
         (name, value)
         for name, value in request.headers.raw
-        if name.lower() not in {b"host", b"content-length"}
+        if name.lower() not in excluded
     ]
 
 
@@ -209,6 +219,8 @@ def _response_headers(
     streaming: bool = False,
 ) -> dict[str, str]:
     excluded = set(_HOP_BY_HOP_HEADERS)
+    for value in headers.get_list("connection"):
+        excluded.update(token.strip().lower() for token in value.split(","))
     if streaming:
         excluded.add("content-length")
     return {
@@ -252,7 +264,19 @@ def _record_json_payload(
 ) -> None:
     usage = extract_usage_from_payload(payload)
     model = payload.get("model")
-    if usage is None or not isinstance(model, str):
+    if usage is None:
+        registry.record_error(
+            session_id,
+            "missing_usage",
+            "successful JSON response did not contain a usage object",
+        )
+        return
+    if not isinstance(model, str):
+        registry.record_error(
+            session_id,
+            "missing_model",
+            "successful JSON response with usage did not identify a model",
+        )
         return
     registry.record_call(session_id, model, usage, turn_label=turn_label)
 
