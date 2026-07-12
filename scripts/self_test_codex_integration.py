@@ -194,6 +194,16 @@ def main() -> int:
         if Decimal(str(after["grand_total"])) != recorded:
             raise SelfTestError("filtered grand total does not equal session total")
 
+        statusline = _run(
+            [str(Path(sys.executable).parent / "occ-codex-statusline")],
+            env=env,
+            cwd=workdir,
+        )
+        if statusline.returncode != 0 or "cost offline" in statusline.stdout:
+            raise SelfTestError(f"Codex status line failed: {statusline.stderr.strip()}")
+        if "session" not in statusline.stdout or "$0.0000" in statusline.stdout:
+            raise SelfTestError(f"Codex status line did not expose captured cost: {statusline.stdout!r}")
+
         first_checkpoint = _post_json(f"{proxy_url}/_occ/checkpoint?{_query(session)}")
         second_checkpoint = _post_json(f"{proxy_url}/_occ/checkpoint?{_query(session)}")
         after_repeat = _get_json(f"{proxy_url}/_occ/costs?{_query(session)}")
@@ -210,10 +220,11 @@ def main() -> int:
             "result": "PASS",
             "session": session,
             "proxy_port": port,
-            "proxy_command": _sanitized_command(proxy_command),
-            "codex_command": _sanitized_command(codex_command),
+            "proxy_command": _sanitized_command(proxy_command, temp_root),
+            "codex_command": _sanitized_command(codex_command, temp_root),
             "codex_exit_status": nested.returncode,
             "codex_response": nested_output,
+            "codex_statusline": statusline.stdout.strip(),
             "auth_method": auth_method,
             "auth_mode": auth_mode,
             "isolated_codex_home": True,
@@ -457,11 +468,19 @@ def _last_nonempty_line(text: str) -> str:
     return next((line.strip() for line in reversed(text.splitlines()) if line.strip()), "")
 
 
-def _sanitized_command(command: list[str]) -> str:
-    replacements = {str(Path.home()): "$HOME", str(ROOT): "$REPO"}
+def _sanitized_command(command: list[str], temp_root: Path) -> str:
+    replacements = sorted(
+        (
+            (str(ROOT), "$REPO"),
+            (str(temp_root), "$TMP"),
+            (str(Path.home()), "$HOME"),
+        ),
+        key=lambda item: len(item[0]),
+        reverse=True,
+    )
     rendered = []
     for item in command:
-        for source, replacement in replacements.items():
+        for source, replacement in replacements:
             item = item.replace(source, replacement)
         rendered.append(json.dumps(item))
     return " ".join(rendered)
