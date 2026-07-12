@@ -177,11 +177,17 @@ openai-cost-calculator proxy --port 8100
 The Codex installer adds a managed `~/.codex/config.toml` block that selects an
 `openai_cost_calculator` custom provider, points it at
 `http://127.0.0.1:8100/v1`, uses `wire_api = "responses"`, and disables
-websockets so the HTTP proxy can observe usage. The provider uses
-Codex's existing OpenAI authentication, so sign in with ChatGPT or an API key
-before using the integration. The configured session is sent as an
-`X-OCC-Session` header so proxy accounting and notifications use the same
-isolated session.
+websockets so the HTTP proxy can observe usage.
+The provider uses Codex's existing OpenAI authentication, so sign in with ChatGPT or an API key before using the integration.
+The configured session is sent as an `X-OCC-Session` header so proxy accounting and notifications use the same isolated session.
+
+The proxy's upstream must match the Codex login method.
+For an API-key login, use the default command shown above.
+For a ChatGPT login, run:
+
+```bash
+openai-cost-calculator proxy --port 8100 --upstream https://chatgpt.com/backend-api/codex
+```
 
 Codex notifications use the proxy checkpoint endpoint, so one
 `agent-turn-complete` notification corresponds to one cost checkpoint:
@@ -203,6 +209,18 @@ Undo either install with:
 openai-cost-calculator uninstall claude-code
 openai-cost-calculator uninstall codex
 ```
+
+### Maintainer Codex self-test
+
+After installing the current checkout in editable mode with proxy and development dependencies, run the real integration self-test:
+
+```bash
+python scripts/self_test_codex_integration.py
+```
+
+The script uses a free local port and a unique session, creates an isolated temporary `CODEX_HOME`, installs the adapter through the public CLI, copies an existing file-backed Codex login or imports `OPENAI_API_KEY` without printing it, launches one read-only `codex exec` turn, independently recomputes the cost from the working-tree pricing CSV, verifies checkpoint stability, and removes all temporary files.
+Use `--model` or `--upstream` only when the detected Codex login needs an explicit override.
+The command exits nonzero with a sanitized diagnostic when credentials, model access, routing, usage, pricing, or accounting validation fails.
 
 ---
 

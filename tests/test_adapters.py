@@ -293,3 +293,20 @@ def test_installers_are_idempotent_and_reversible(tmp_path: Path, monkeypatch):
         'notify = ["existing-notifier"]\n'
         'model = "gpt-test"'
     )
+
+
+def test_codex_installer_refuses_invalid_config_without_modifying_it(
+    tmp_path: Path,
+    monkeypatch,
+):
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    config = tmp_path / "config.toml"
+    original = 'model = "unterminated\n'
+    config.write_text(original, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Refusing to modify invalid Codex configuration"):
+        install_codex("http://127.0.0.1:8100", "s1")
+
+    assert config.read_text(encoding="utf-8") == original
+    assert list(tmp_path.glob("config.toml.occ-backup-*")) == []
+    assert list(tmp_path.glob(".config.toml.*.tmp")) == []

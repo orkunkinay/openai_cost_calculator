@@ -12,7 +12,7 @@ setup(
     package_data={
         "openai_cost_calculator": ["data/gpt_pricing_data.csv"],
     },
-    install_requires=["requests"],
+    install_requires=["requests", "tomli; python_version < '3.11'"],
     extras_require={
         "proxy": ["fastapi", "httpx", "uvicorn"],
     },
