@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from decimal import Decimal
 from threading import RLock
+import time
 from typing import Dict, Iterable, Optional
 
 from openai_cost_calculator.tracker import CallRecord, CostTracker
@@ -12,6 +13,7 @@ class TrackerRegistry:
     def __init__(self, on_error=None) -> None:
         self._trackers: Dict[str, CostTracker] = {}
         self._checkpoint_cursors: Dict[str, int] = {}
+        self._errors: Dict[str, list[dict]] = {}
         self._subscribers: list[asyncio.Queue] = []
         self._lock = RLock()
         self._on_error = on_error
@@ -21,7 +23,13 @@ class TrackerRegistry:
         with self._lock:
             tracker = self._trackers.get(key)
             if tracker is None:
-                tracker = CostTracker(on_error=self._on_error)
+                tracker = CostTracker(
+                    on_error=lambda exc: self.record_error(
+                        key,
+                        "cost_estimation_failed",
+                        str(exc),
+                    )
+                )
                 self._trackers[key] = tracker
             return tracker
 
@@ -35,11 +43,12 @@ class TrackerRegistry:
     ) -> Optional[CallRecord]:
         key = session_id or "default"
         tracker = self.get(key)
-        record = tracker.record_call(
-            model,
-            usage,
-            turn_label=turn_label,
-        )
+        with self._lock:
+            record = tracker.record_call(
+                model,
+                usage,
+                turn_label=turn_label,
+            )
         if record is not None:
             self.notify()
         elif tracker.session_total == Decimal("0") and not tracker.turns:
@@ -48,10 +57,24 @@ class TrackerRegistry:
                     del self._trackers[key]
         return record
 
+    def record_error(self, session_id: Optional[str], code: str, message: str) -> None:
+        key = session_id or "default"
+        error = {
+            "code": code,
+            "message": message,
+            "timestamp": time.time(),
+        }
+        with self._lock:
+            self._errors.setdefault(key, []).append(error)
+        if self._on_error is not None:
+            self._on_error(RuntimeError(f"{code}: {message}"))
+        self.notify()
+
     def reset(self) -> None:
         with self._lock:
             self._trackers.clear()
             self._checkpoint_cursors.clear()
+            self._errors.clear()
         self.notify()
 
     def subscribe(self) -> asyncio.Queue:
@@ -76,18 +99,23 @@ class TrackerRegistry:
         with self._lock:
             if session_id is None:
                 trackers = dict(self._trackers)
+                errors = {key: list(value) for key, value in self._errors.items()}
             else:
                 key = session_id or "default"
                 tracker = self._trackers.get(key)
                 trackers = {key: tracker} if tracker is not None else {}
+                errors = {key: list(self._errors.get(key, []))} if key in self._errors else {}
 
         sessions = {}
         grand_total = Decimal("0")
-        for session_id, tracker in trackers.items():
-            grand_total += tracker.session_total
-            sessions[session_id] = {
-                "session_total": f"{tracker.session_total:.8f}",
-                "turns": [turn.as_dict() for turn in tracker.turns],
+        for current_session in sorted(set(trackers) | set(errors)):
+            tracker = trackers.get(current_session)
+            session_total = tracker.session_total if tracker is not None else Decimal("0")
+            grand_total += session_total
+            sessions[current_session] = {
+                "session_total": f"{session_total:.8f}",
+                "turns": [turn.as_dict() for turn in tracker.turns] if tracker is not None else [],
+                "errors": errors.get(current_session, []),
             }
 
         return {

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import tempfile
 import time
 from pathlib import Path
 from typing import Any, Optional, Tuple
@@ -76,6 +77,7 @@ def uninstall_claude_code(scope: str = "user") -> list[str]:
 def install_codex(proxy_url: str, session: str) -> list[str]:
     path = _codex_config_path()
     text = _read_text(path)
+    _validate_toml(text, path)
     previous_notify = _managed_previous_key(text, "notify")
     previous_model_provider = _managed_previous_key(text, "model_provider")
     previous_openai_base_url = _managed_previous_key(text, "openai_base_url")
@@ -101,8 +103,11 @@ def install_codex(proxy_url: str, session: str) -> list[str]:
         _write_text(path, new_text)
         return [
             f"{path}: installed Codex cost adapter block",
-            f"Run the proxy with: openai-cost-calculator proxy --port {_proxy_port(proxy_url)}",
-            "Ensure OPENAI_API_KEY is available to Codex for the proxy provider.",
+            f"API-key login proxy: openai-cost-calculator proxy --port {_proxy_port(proxy_url)}",
+            "ChatGPT login proxy: openai-cost-calculator proxy "
+            f"--port {_proxy_port(proxy_url)} "
+            "--upstream https://chatgpt.com/backend-api/codex",
+            "Ensure Codex is logged in with ChatGPT or an OpenAI API key.",
         ]
     return [f"{path}: already installed"]
 
@@ -110,6 +115,7 @@ def install_codex(proxy_url: str, session: str) -> list[str]:
 def uninstall_codex() -> list[str]:
     path = _codex_config_path()
     text = _read_text(path)
+    _validate_toml(text, path)
     previous_notify = _managed_previous_key(text, "notify")
     previous_model_provider = _managed_previous_key(text, "model_provider")
     new_text = _remove_managed_block(text)
@@ -148,10 +154,9 @@ def _read_json_object(path: Path) -> dict[str, Any]:
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
+    _atomic_write_text(
+        path,
         json.dumps(payload, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
     )
 
 
@@ -163,8 +168,46 @@ def _read_text(path: Path) -> str:
 
 
 def _write_text(path: Path, text: str) -> None:
+    _atomic_write_text(path, text)
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    previous_mode = path.stat().st_mode & 0o777 if path.exists() else 0o600
+    temporary_path: Optional[Path] = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary_path = Path(handle.name)
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary_path.chmod(previous_mode)
+        os.replace(temporary_path, path)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
+def _validate_toml(text: str, path: Path) -> None:
+    if not text.strip():
+        return
+    try:
+        try:
+            import tomllib  # type: ignore[attr-defined]
+        except ImportError:  # pragma: no cover - Python < 3.11
+            import tomli as tomllib  # type: ignore[no-redef]
+        tomllib.loads(text)
+    except Exception as exc:
+        raise ValueError(
+            f"Refusing to modify invalid Codex configuration at {path}: {exc}"
+        ) from exc
 
 
 def _backup(path: Path) -> None:
@@ -244,9 +287,10 @@ def _codex_blocks(
         "[model_providers.openai_cost_calculator]\n"
         'name = "OpenAI Cost Calculator Proxy"\n'
         f'base_url = "{escaped_api_base}"\n'
-        'env_key = "OPENAI_API_KEY"\n'
+        "requires_openai_auth = true\n"
         'wire_api = "responses"\n'
         "supports_websockets = false\n"
+        f'http_headers = {{ "X-OCC-Session" = "{escaped_session}" }}\n'
         f"{CODEX_END}\n"
     )
     return top_block, provider_block
