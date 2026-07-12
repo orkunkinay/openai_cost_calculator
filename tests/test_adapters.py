@@ -276,7 +276,10 @@ def test_installers_are_idempotent_and_reversible(tmp_path: Path, monkeypatch):
     assert 'model_provider = "openai_cost_calculator"' in text
     assert "[model_providers.openai_cost_calculator]" in text
     assert 'base_url = "http://127.0.0.1:8100/v1"' in text
+    assert "requires_openai_auth = true" in text
+    assert 'env_key = "OPENAI_API_KEY"' not in text
     assert "supports_websockets = false" in text
+    assert 'http_headers = { "X-OCC-Session" = "s1" }' in text
     active_notify_lines = [
         line for line in text.splitlines() if line.startswith('notify = ["')
     ]

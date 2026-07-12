@@ -178,7 +178,10 @@ The Codex installer adds a managed `~/.codex/config.toml` block that selects an
 `openai_cost_calculator` custom provider, points it at
 `http://127.0.0.1:8100/v1`, uses `wire_api = "responses"`, and disables
 websockets so the HTTP proxy can observe usage. The provider uses
-`OPENAI_API_KEY`, so make sure that environment variable is available to Codex.
+Codex's existing OpenAI authentication, so sign in with ChatGPT or an API key
+before using the integration. The configured session is sent as an
+`X-OCC-Session` header so proxy accounting and notifications use the same
+isolated session.
 
 Codex notifications use the proxy checkpoint endpoint, so one
 `agent-turn-complete` notification corresponds to one cost checkpoint:

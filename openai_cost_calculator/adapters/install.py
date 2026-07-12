@@ -102,7 +102,7 @@ def install_codex(proxy_url: str, session: str) -> list[str]:
         return [
             f"{path}: installed Codex cost adapter block",
             f"Run the proxy with: openai-cost-calculator proxy --port {_proxy_port(proxy_url)}",
-            "Ensure OPENAI_API_KEY is available to Codex for the proxy provider.",
+            "Ensure Codex is logged in with ChatGPT or an OpenAI API key.",
         ]
     return [f"{path}: already installed"]
 
@@ -244,9 +244,10 @@ def _codex_blocks(
         "[model_providers.openai_cost_calculator]\n"
         'name = "OpenAI Cost Calculator Proxy"\n'
         f'base_url = "{escaped_api_base}"\n'
-        'env_key = "OPENAI_API_KEY"\n'
+        "requires_openai_auth = true\n"
         'wire_api = "responses"\n'
         "supports_websockets = false\n"
+        f'http_headers = {{ "X-OCC-Session" = "{escaped_session}" }}\n'
         f"{CODEX_END}\n"
     )
     return top_block, provider_block
