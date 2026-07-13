@@ -52,6 +52,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     codex_install = install_subparsers.add_parser("codex")
     codex_install.add_argument("--proxy-url", default="http://127.0.0.1:8100")
     codex_install.add_argument("--session", default="default")
+    codex_install.add_argument(
+        "--websockets",
+        action="store_true",
+        help="Opt in to Codex Responses WebSockets (HTTP is the cost-safe default)",
+    )
 
     uninstall_parser = subparsers.add_parser("uninstall", help="Uninstall agent UI adapters")
     uninstall_subparsers = uninstall_parser.add_subparsers(dest="target", required=True)
@@ -214,7 +219,11 @@ def _install(args: argparse.Namespace) -> int:
     if args.target == "claude-code":
         messages = install_claude_code(args.scope)
     elif args.target == "codex":
-        messages = install_codex(args.proxy_url, args.session)
+        messages = install_codex(
+            args.proxy_url,
+            args.session,
+            supports_websockets=args.websockets,
+        )
     else:
         raise AssertionError(args.target)
     for message in messages:

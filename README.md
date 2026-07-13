@@ -256,8 +256,15 @@ openai-cost-calculator proxy --port 8100 --auth-mode auto
 
 The Codex installer adds a managed `~/.codex/config.toml` block that selects an
 `openai_cost_calculator` custom provider, points it at
-`http://127.0.0.1:8100/v1`, uses `wire_api = "responses"`, and enables
-WebSockets because both HTTP and WebSocket Responses traffic is observed.
+`http://127.0.0.1:8100/v1`, and uses `wire_api = "responses"`.
+HTTP is the default because it preserves the validated one-request self-test behavior.
+The proxy also observes Responses WebSocket traffic; opt in when desired:
+
+```bash
+openai-cost-calculator install codex --websockets --proxy-url http://127.0.0.1:8100 --session default
+```
+
+Codex may issue more than one Responses request for one CLI turn when its WebSocket transport is enabled, and every completed response is accounted independently.
 The provider uses Codex's existing OpenAI authentication, so sign in with ChatGPT or an API key before using the integration.
 The configured session is sent as an `X-OCC-Session` header so proxy accounting and notifications use the same isolated session.
 

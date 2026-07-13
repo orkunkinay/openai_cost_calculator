@@ -73,7 +73,12 @@ def uninstall_claude_code(scope: str = "user") -> list[str]:
     return [f"{path}: removed {', '.join(changed)}"] if changed else [f"{path}: not installed"]
 
 
-def install_codex(proxy_url: str, session: str) -> list[str]:
+def install_codex(
+    proxy_url: str,
+    session: str,
+    *,
+    supports_websockets: bool = False,
+) -> list[str]:
     path = _codex_config_path()
     _refuse_symlink(path)
     text = _read_text(path)
@@ -124,6 +129,7 @@ def install_codex(proxy_url: str, session: str) -> list[str]:
         None
         if stashed_model_provider or extracted_model_provider
         else previous_model_provider,
+        supports_websockets=supports_websockets,
         trim_final_newline=trim_final_newline,
     )
     new_text = _insert_codex_blocks(base, top_block, provider_block)
@@ -348,6 +354,7 @@ def _codex_blocks(
     previous_notify: Optional[str] = None,
     previous_model_provider: Optional[str] = None,
     *,
+    supports_websockets: bool = False,
     trim_final_newline: bool = False,
 ) -> tuple[str, str]:
     escaped_proxy = proxy_url.replace("\\", "\\\\").replace('"', '\\"')
@@ -380,7 +387,7 @@ def _codex_blocks(
         f'base_url = "{escaped_api_base}"\n'
         "requires_openai_auth = true\n"
         'wire_api = "responses"\n'
-        "supports_websockets = true\n"
+        f"supports_websockets = {'true' if supports_websockets else 'false'}\n"
         f'http_headers = {{ "X-OCC-Session" = "{escaped_session}" }}\n'
         f"{CODEX_END}\n"
     )
