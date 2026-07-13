@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import codecs
+import hashlib
 from typing import Any, AsyncIterator, Optional
 
 import httpx
@@ -73,8 +75,8 @@ def create_app(
     @app.api_route("/v1/{path:path}", methods=["GET", "POST"])
     async def forward(path: str, request: Request) -> Response:
         body = await request.body()
-        session_id = request.headers.get("x-occ-session")
-        turn_label = request.headers.get("x-occ-turn")
+        session_id = _bounded_identifier(request.headers.get("x-occ-session"), 128)
+        turn_label = _bounded_identifier(request.headers.get("x-occ-turn"), 256)
         request_payload = _json_from_bytes(body)
 
         if request.method == "POST" and request_payload.get("stream") is True:
@@ -160,6 +162,13 @@ async def _forward_streaming(
                 parser.feed(chunk)
                 yield chunk
             completed = True
+        except Exception as exc:
+            app.state.occ_registry.record_error(
+                session_id,
+                "stream_interrupted",
+                f"upstream stream ended unexpectedly: {type(exc).__name__}",
+            )
+            raise
         finally:
             parser.close()
             if completed and upstream_response.status_code < 400:
@@ -203,7 +212,7 @@ def _upstream_url(app: FastAPI, path: str, request: Request) -> str:
 
 def _forward_headers(request: Request) -> list[tuple[bytes, bytes]]:
     excluded = {name.encode("ascii") for name in _HOP_BY_HOP_HEADERS}
-    excluded.update({b"host", b"content-length"})
+    excluded.update({b"host", b"content-length", b"x-occ-session", b"x-occ-turn"})
     for value in request.headers.getlist("connection"):
         excluded.update(token.strip().lower().encode("ascii") for token in value.split(","))
     return [
@@ -288,40 +297,43 @@ def _sse_data(payload: dict) -> bytes:
 class _SSEUsageParser:
     def __init__(self, *, default_model: Any = None) -> None:
         self._buffer = ""
+        self._decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        self._pending_cr = False
         self._default_model = default_model
         self.usage_payload: Optional[dict] = None
 
     def feed(self, chunk: bytes) -> None:
         if not chunk:
             return
-        self._buffer += chunk.decode("utf-8", errors="ignore")
+        self._append_text(self._decoder.decode(chunk))
         while True:
-            event, separator = self._pop_event()
-            if separator is None:
+            event = self._pop_event()
+            if event is None:
                 return
             self._handle_event(event)
 
     def close(self) -> None:
+        self._append_text(self._decoder.decode(b"", final=True), final=True)
         if self._buffer.strip():
             self._handle_event(self._buffer)
         self._buffer = ""
 
-    def _pop_event(self) -> tuple[str, Optional[str]]:
-        indexes = [
-            index
-            for index in (
-                self._buffer.find("\n\n"),
-                self._buffer.find("\r\n\r\n"),
-            )
-            if index != -1
-        ]
-        if not indexes:
-            return "", None
-        index = min(indexes)
-        separator = "\r\n\r\n" if self._buffer.startswith("\r\n\r\n", index) else "\n\n"
+    def _append_text(self, text: str, *, final: bool = False) -> None:
+        if self._pending_cr:
+            text = "\r" + text
+            self._pending_cr = False
+        if text.endswith("\r") and not final:
+            text = text[:-1]
+            self._pending_cr = True
+        self._buffer += text.replace("\r\n", "\n").replace("\r", "\n")
+
+    def _pop_event(self) -> Optional[str]:
+        index = self._buffer.find("\n\n")
+        if index == -1:
+            return None
         event = self._buffer[:index]
-        self._buffer = self._buffer[index + len(separator) :]
-        return event, separator
+        self._buffer = self._buffer[index + 2 :]
+        return event
 
     def _handle_event(self, event: str) -> None:
         data_lines = []
@@ -346,6 +358,16 @@ class _SSEUsageParser:
         if "model" not in usage_payload and isinstance(self._default_model, str):
             usage_payload = {**usage_payload, "model": self._default_model}
         self.usage_payload = usage_payload
+
+
+def _bounded_identifier(value: Optional[str], limit: int) -> Optional[str]:
+    if value is None:
+        return None
+    cleaned = "".join(character if character.isprintable() else "?" for character in value)
+    if len(cleaned) <= limit:
+        return cleaned
+    digest = hashlib.sha256(cleaned.encode("utf-8")).hexdigest()[:12]
+    return f"{cleaned[: limit - 13]}#{digest}"
 
 
 app = create_app()

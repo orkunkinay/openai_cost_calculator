@@ -2,11 +2,19 @@ from __future__ import annotations
 
 import asyncio
 from decimal import Decimal
+import re
 from threading import RLock
 import time
 from typing import Dict, Iterable, Optional
 
 from openai_cost_calculator.tracker import CallRecord, CostTracker
+
+
+_MAX_ERRORS_PER_SESSION = 100
+_MAX_DIAGNOSTIC_LENGTH = 500
+_SECRET_RE = re.compile(
+    r"(?i)(?:bearer\s+)[^\s,;]+|(?:sk-[a-z0-9_-]{8,})"
+)
 
 
 class TrackerRegistry:
@@ -60,12 +68,14 @@ class TrackerRegistry:
     def record_error(self, session_id: Optional[str], code: str, message: str) -> None:
         key = session_id or "default"
         error = {
-            "code": code,
-            "message": message,
+            "code": _diagnostic_text(code, limit=64),
+            "message": _diagnostic_text(message),
             "timestamp": time.time(),
         }
         with self._lock:
-            self._errors.setdefault(key, []).append(error)
+            errors = self._errors.setdefault(key, [])
+            errors.append(error)
+            del errors[:-_MAX_ERRORS_PER_SESSION]
         if self._on_error is not None:
             self._on_error(RuntimeError(f"{code}: {message}"))
         self.notify()
@@ -78,7 +88,7 @@ class TrackerRegistry:
         self.notify()
 
     def subscribe(self) -> asyncio.Queue:
-        queue: asyncio.Queue = asyncio.Queue()
+        queue: asyncio.Queue = asyncio.Queue(maxsize=1)
         with self._lock:
             self._subscribers.append(queue)
         return queue
@@ -93,6 +103,11 @@ class TrackerRegistry:
         with self._lock:
             subscribers = list(self._subscribers)
         for queue in subscribers:
+            if queue.full():
+                try:
+                    queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
             queue.put_nowait(summary)
 
     def summary(self, session_id: Optional[str] = None) -> dict:
@@ -199,3 +214,10 @@ def _records_summary(session_id: str, records: Iterable[CallRecord]) -> dict:
 
 
 default_registry = TrackerRegistry()
+
+
+def _diagnostic_text(value: object, *, limit: int = _MAX_DIAGNOSTIC_LENGTH) -> str:
+    text = str(value).replace("\r", " ").replace("\n", " ")
+    text = "".join(character if character.isprintable() else "?" for character in text)
+    text = _SECRET_RE.sub("[REDACTED]", text)
+    return text[:limit]

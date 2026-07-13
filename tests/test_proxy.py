@@ -297,6 +297,8 @@ def test_request_hop_by_hop_headers_are_not_forwarded():
         assert request.headers["x-keep"] == "yes"
         assert "keep-alive" not in request.headers
         assert "x-remove" not in request.headers
+        assert "x-occ-session" not in request.headers
+        assert "x-occ-turn" not in request.headers
         return httpx.Response(500, json={"error": "expected"})
 
     client = _client(handler)
@@ -308,7 +310,62 @@ def test_request_hop_by_hop_headers_are_not_forwarded():
             "keep-alive": "timeout=5",
             "x-remove": "private",
             "x-keep": "yes",
+            "x-occ-session": "local-only",
+            "x-occ-turn": "local-turn",
         },
     )
 
     assert response.status_code == 500
+
+
+def test_stream_parser_handles_fragmented_utf8_crlf_comments_and_multiline_data():
+    payload = {
+        "model": "gpt-test-2025-01-01",
+        "usage": {"input_tokens": 1000, "output_tokens": 500},
+        "note": "£",
+    }
+    encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    pound = encoded.index("£".encode("utf-8"))
+    split_json = encoded[: pound + 1], encoded[pound + 1 :]
+    chunks = [
+        b": keep-alive\r",
+        b"\n\r\n",
+        b"data: " + split_json[0],
+        split_json[1] + b"\r\n",
+        b"data:\r\n\r\n",
+        b"data: [DONE]\r\n\r\n",
+    ]
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            stream=AsyncChunkStream(chunks),
+        )
+
+    client = _client(handler)
+    response = client.post(
+        "/v1/responses",
+        json={"model": "gpt-test-2025-01-01", "stream": True},
+        headers={"x-occ-session": "fragmented"},
+    )
+
+    assert response.content == b"".join(chunks)
+    session = client.get("/_occ/costs?session=fragmented").json()["sessions"]["fragmented"]
+    assert session["session_total"] == "0.00200000"
+
+
+def test_diagnostics_are_sanitized_and_bounded():
+    registry = TrackerRegistry()
+    for index in range(105):
+        registry.record_error(
+            "diagnostics",
+            "failure",
+            f"line {index}\nAuthorization: Bearer secret-{index} sk-exampletoken",
+        )
+
+    errors = registry.summary("diagnostics")["sessions"]["diagnostics"]["errors"]
+    assert len(errors) == 100
+    assert errors[0]["message"].startswith("line 5 ")
+    assert "secret" not in errors[-1]["message"]
+    assert "sk-exampletoken" not in errors[-1]["message"]

@@ -9,8 +9,11 @@ from __future__ import annotations
 
 import csv
 import io
+import math
 import time
 import threading
+from datetime import datetime
+from pathlib import Path
 from typing import Dict, Tuple, Iterable, Mapping, Optional, List
 import requests
 
@@ -30,11 +33,13 @@ _LOCK = threading.RLock()
 _OFFLINE_ONLY = False  # if True, never fetch remote CSV
 
 def _validate_date_str(date: str) -> None:
-    # very lightweight guard
-    if not isinstance(date, str) or len(date) != 10:
+    if not isinstance(date, str):
         raise ValueError("model_date must be 'YYYY-MM-DD'")
-    y, m, d = date.split("-")
-    if not (y.isdigit() and m.isdigit() and d.isdigit()):
+    try:
+        parsed = datetime.strptime(date, "%Y-%m-%d")
+    except ValueError as exc:
+        raise ValueError("model_date must be 'YYYY-MM-DD'") from exc
+    if parsed.strftime("%Y-%m-%d") != date:
         raise ValueError("model_date must be 'YYYY-MM-DD'")
 
 def _normalize_row(
@@ -44,14 +49,30 @@ def _normalize_row(
     *,
     minimum_tokens: int = 0,
 ) -> dict:
-    if input_price < 0 or output_price < 0:
-        raise ValueError("Prices must be non-negative")
+    prices = {
+        "input_price": input_price,
+        "output_price": output_price,
+        "cached_input_price": cached_input_price,
+    }
+    for name, value in prices.items():
+        if value is None and name == "cached_input_price":
+            continue
+        if isinstance(value, bool):
+            raise ValueError(f"{name} must be a finite non-negative number")
+        try:
+            number = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{name} must be a finite non-negative number") from exc
+        if not math.isfinite(number) or number < 0:
+            raise ValueError(f"{name} must be a finite non-negative number")
     if not isinstance(minimum_tokens, int) or isinstance(minimum_tokens, bool) or minimum_tokens < 0:
         raise ValueError("minimum_tokens must be a non-negative integer")
     row = {
         "input_price": float(input_price),
         "output_price": float(output_price),
-        "cached_input_price": float(cached_input_price) if cached_input_price not in (None, 0) else None,
+        "cached_input_price": (
+            float(cached_input_price) if cached_input_price is not None else None
+        ),
         "minimum_tokens": int(minimum_tokens),
     }
     return row
@@ -164,21 +185,67 @@ def set_offline_mode(offline: bool = True) -> None:
 def _fetch_csv() -> Dict[Tuple[str, str], List[dict]]:
     resp = requests.get(_PRICING_CSV_URL, timeout=5)
     resp.raise_for_status()
-    reader = csv.DictReader(io.StringIO(resp.text))
+    return _parse_csv(resp.text)
+
+
+def _parse_csv(text: str) -> Dict[Tuple[str, str], List[dict]]:
+    reader = csv.DictReader(io.StringIO(text))
+    expected = [
+        "Model Name",
+        "Model Date",
+        "Input Price",
+        "Cached Input Price",
+        "Output Price",
+        "Minimum Tokens",
+    ]
+    legacy = expected[:-1]
+    if reader.fieldnames not in (expected, legacy):
+        raise ValueError(
+            "pricing CSV columns must be: " + ", ".join(expected)
+        )
     data: Dict[Tuple[str, str], Dict[int, dict]] = {}
     for row in reader:
-        key = (row["Model Name"], row["Model Date"])
-        minimum_tokens = _coerce_minimum_tokens(row.get("Minimum Tokens"))
-        cached_raw = (row.get("Cached Input Price") or "").strip()
-        cached_input_price = float(cached_raw) if cached_raw else None
-        parsed = _normalize_row(
-            input_price=float((row.get("Input Price") or "").strip()),
-            output_price=float((row.get("Output Price") or "").strip()),
-            cached_input_price=cached_input_price,
-            minimum_tokens=minimum_tokens,
-        )
+        try:
+            model_name = (row.get("Model Name") or "").strip()
+            model_date = (row.get("Model Date") or "").strip()
+            if not model_name:
+                raise ValueError("Model Name must not be empty")
+            if model_date:
+                _validate_date_str(model_date)
+            key = (model_name, model_date)
+            minimum_tokens = _coerce_minimum_tokens(row.get("Minimum Tokens"))
+            if minimum_tokens in data.get(key, {}):
+                raise ValueError(
+                    f"duplicate tier for {model_name!r}, {model_date!r}, "
+                    f"minimum {minimum_tokens}"
+                )
+            cached_raw = (row.get("Cached Input Price") or "").strip()
+            cached_input_price = float(cached_raw) if cached_raw else None
+            parsed = _normalize_row(
+                input_price=float((row.get("Input Price") or "").strip()),
+                output_price=float((row.get("Output Price") or "").strip()),
+                cached_input_price=cached_input_price,
+                minimum_tokens=minimum_tokens,
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"invalid pricing CSV line {reader.line_num}: {exc}") from exc
         data.setdefault(key, {})[minimum_tokens] = parsed
+
+    if not data:
+        raise ValueError("pricing CSV contains no data rows")
+    missing_base = [key for key, tiers in data.items() if 0 not in tiers]
+    if missing_base:
+        model_name, model_date = sorted(missing_base)[0]
+        raise ValueError(
+            f"pricing for {model_name!r} ({model_date or 'undated'}) has no base tier"
+        )
     return {key: _sorted_tiers(by_min) for key, by_min in data.items()}
+
+
+def validate_pricing_file(path: str | Path) -> int:
+    """Validate a pricing CSV and return its number of distinct model/date rows."""
+    pricing = _parse_csv(Path(path).read_text(encoding="utf-8"))
+    return len(pricing)
 
 
 def load_pricing_tiered() -> Dict[Tuple[str, str], List[dict]]:

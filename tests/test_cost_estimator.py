@@ -70,6 +70,31 @@ def test_calculate_cost_basic_rounding():
     }
 
 
+def test_calculate_cost_rejects_malformed_usage_and_accepts_free_cache():
+    rates = {"input_price": 1, "cached_input_price": 0, "output_price": 2}
+    free_cache = calculate_cost_typed(
+        {"prompt_tokens": 100, "completion_tokens": 0, "cached_tokens": 100},
+        rates,
+    )
+    assert free_cache.total_cost == Decimal("0")
+
+    with pytest.raises(ValueError, match="cannot exceed"):
+        calculate_cost_typed(
+            {"prompt_tokens": 99, "completion_tokens": 0, "cached_tokens": 100},
+            rates,
+        )
+    with pytest.raises(ValueError, match="non-negative integer"):
+        calculate_cost_typed(
+            {"prompt_tokens": -1, "completion_tokens": 0, "cached_tokens": 0},
+            rates,
+        )
+    with pytest.raises(ValueError, match="finite"):
+        calculate_cost_typed(
+            {"prompt_tokens": 1, "completion_tokens": 0, "cached_tokens": 0},
+            {**rates, "input_price": float("inf")},
+        )
+
+
 def test_calculate_cost_typed_basic():
     """Test the new typed cost calculation function."""
     usage  = {"prompt_tokens": 1_000, "completion_tokens": 2_000, "cached_tokens": 200}
@@ -456,13 +481,13 @@ def test_add_pricing_entries_bulk_and_replace_flag():
 
     # Replace = True should update
     pricing.add_pricing_entries([
-        ("m1", "2025-01-01", 1.1, 2.2, 0.0),  # 0.0 → None
+        ("m1", "2025-01-01", 1.1, 2.2, 0.0),
         ("m1", "2025-01-01", 1.9, 2.9, 0.9, 200000),  # tiered tuple format
     ], replace=True)
 
     d2 = pricing.load_pricing()
     assert d2[("m1", "2025-01-01")] == {
-        "input_price": 1.1, "cached_input_price": None, "output_price": 2.2
+        "input_price": 1.1, "cached_input_price": 0.0, "output_price": 2.2
     }
     assert pricing.load_pricing_tiered()[("m1", "2025-01-01")][1]["minimum_tokens"] == 200000
 
@@ -604,9 +629,39 @@ def test_set_offline_mode_refresh_noop(monkeypatch):
     pricing.refresh_pricing()
     assert pricing.load_pricing() == {}
 
-    # Add an entry with cached_input_price=0 (treated as None)
+    # A zero cached-input price represents free cached input.
     pricing.add_pricing_entry("y", "2025-03-03", input_price=0.2, output_price=0.4, cached_input_price=0.0)
     d = pricing.load_pricing()
     assert d[("y", "2025-03-03")] == {
-        "input_price": 0.2, "cached_input_price": None, "output_price": 0.4
+        "input_price": 0.2, "cached_input_price": 0.0, "output_price": 0.4
     }
+
+
+@pytest.mark.parametrize(
+    "rows, message",
+    [
+        (["x,2025-02-30,0.5,0.1,1.0,0"], "model_date"),
+        (["x,2025-01-01,nan,0.1,1.0,0"], "finite"),
+        (["x,2025-01-01,0.5,0.1,1.0,100"], "no base tier"),
+        (
+            [
+                "x,2025-01-01,0.5,0.1,1.0,0",
+                "x,2025-01-01,0.6,0.1,1.0,0",
+            ],
+            "duplicate tier",
+        ),
+    ],
+)
+def test_pricing_loader_rejects_invalid_rows(monkeypatch, rows, message):
+    importlib.reload(occ.pricing)
+    pricing = occ.pricing
+
+    class _Resp:
+        text = _csv_text_with_minimum(rows)
+
+        def raise_for_status(self):
+            return None
+
+    monkeypatch.setattr(pricing.requests, "get", lambda url, timeout: _Resp())
+    with pytest.raises(ValueError, match=message):
+        pricing.load_pricing_tiered()

@@ -5,7 +5,7 @@ the `responses.create` flavours).
 """
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 
@@ -32,7 +32,7 @@ def extract_model_details(model: str) -> Dict[str, str]:
 
     name, date = m.groups()
     if date is None:
-        date = datetime.utcnow().strftime("%Y-%m-%d")
+        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     return {"model_name": name, "model_date": date}
 
