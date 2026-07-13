@@ -132,6 +132,8 @@ openai-cost-calculator proxy --port 8100 --auth-mode api-key --upstream https://
 
 An explicit custom upstream receives the forwarded `Authorization` header, so only configure an endpoint you trust.
 The proxy removes hop-by-hop transport headers and its local `X-OCC-Session` and `X-OCC-Turn` headers while preserving required end-to-end headers.
+HTTP streaming and WebSocket messages are relayed incrementally without changing upstream bytes, message types, ordering, queries, or negotiated subprotocols.
+Terminal WebSocket Responses events are costed immediately, and duplicate terminal events are ignored.
 
 Read accumulated costs at:
 
@@ -152,30 +154,43 @@ Pricing is selected by model alias, model date, and the highest applicable minim
 ### Durable accounting
 
 Accounting is in memory by default and is lost when the proxy exits.
-Enable the optional durable JSON ledger when totals must survive restarts:
+Use the SQLite backend when totals must survive restarts or more than one proxy process must share accounting state:
 
 ```bash
-openai-cost-calculator proxy --port 8100 --auth-mode auto --ledger ~/.local/state/openai-cost-calculator/ledger.json
+openai-cost-calculator proxy --port 8100 --auth-mode auto --database ~/.local/state/openai-cost-calculator/accounting.sqlite3
 ```
 
-The ledger stores model names, token counts, calculated `Decimal` cost components, turn labels, bounded diagnostics, and checkpoint cursors.
+SQLite uses WAL, full synchronous transactions, concurrent readers and writers, incremental call inserts, streamed summaries, and an atomic checkpoint transaction.
+It works across platforms supported by Python's standard `sqlite3` module and does not rely on POSIX file locking.
+Several proxy processes may share one local SQLite database, and the first successful checkpoint transaction consumes each call exactly once across those processes.
+SQLite storage is not supported on filesystems whose locking semantics are incompatible with SQLite, including many network filesystem configurations.
+
+The database stores model names, token counts, calculated `Decimal` cost components, turn labels, bounded diagnostics, and checkpoint cursors.
 It never stores request or response bodies, authorization headers, cookies, or authentication files.
-Writes use a same-directory temporary file, `fsync`, and atomic replacement, so an interrupted write leaves the last complete ledger usable.
 Historical calls retain their originally calculated prices rather than being repriced after a restart.
-Status output separates `historical_total` loaded at startup from `process_total` observed by the current proxy.
+Status output separates `historical_total` present at startup from `process_total` added since startup.
+After a reset by any process, all connected processes detect the new storage generation and restart those process-relative totals safely.
 
-One ledger supports exactly one proxy process at a time.
-The proxy holds an exclusive file lock and refuses a second writer instead of claiming unsupported cross-process safety.
-Use a different ledger for each simultaneously running proxy.
-The lightweight snapshot design is intended for a local observer, not a high-throughput shared gateway.
-To keep memory and storage failure modes bounded, one proxy accepts up to 1,024 sessions and 50,000 calls per session, retains at most 100 diagnostics per session, and reports `accounting_capacity_reached` instead of silently dropping into a false zero-cost success.
-
-Inspect or reset an offline ledger with:
+Inspect or reset the database while proxies are running or stopped:
 
 ```bash
+openai-cost-calculator database inspect ~/.local/state/openai-cost-calculator/accounting.sqlite3
+openai-cost-calculator database reset ~/.local/state/openai-cost-calculator/accounting.sqlite3 --yes
+```
+
+The previous atomic JSON snapshot backend remains available for compatibility:
+
+```bash
+openai-cost-calculator proxy --port 8100 --ledger ~/.local/state/openai-cost-calculator/ledger.json
 openai-cost-calculator ledger inspect ~/.local/state/openai-cost-calculator/ledger.json
 openai-cost-calculator ledger reset ~/.local/state/openai-cost-calculator/ledger.json --yes
 ```
+
+JSON ledgers remain single-process and POSIX-only; new installations should use SQLite.
+JSON writes use a same-directory temporary file, `fsync`, exclusive locking, and atomic replacement.
+To keep legacy in-memory snapshots bounded, JSON mode accepts up to 1,024 sessions and 50,000 calls per session.
+SQLite removes the per-session call-history limit and aggregates summaries and checkpoints without reconstructing every historical call in memory.
+Both backends retain at most 100 diagnostics per session and report capacity or storage failures explicitly.
 
 Use the proxy reset command while the proxy owns the ledger:
 
@@ -184,6 +199,25 @@ openai-cost-calculator reset --yes
 ```
 
 Reset is destructive and clears cumulative totals, diagnostics, and checkpoint cursors.
+
+### Remote exposure and administrative authentication
+
+The proxy binds to loopback by default.
+A non-loopback bind is refused unless remote exposure is explicit and a strong administrative bearer token is configured.
+Create a permission-protected token file and pass only its path:
+
+```bash
+mkdir -p ~/.config/openai-cost-calculator
+python -c 'import secrets; print(secrets.token_urlsafe(48))' > ~/.config/openai-cost-calculator/admin-token
+chmod 600 ~/.config/openai-cost-calculator/admin-token
+OCC_ADMIN_TOKEN_FILE=~/.config/openai-cost-calculator/admin-token \
+  openai-cost-calculator proxy --host 0.0.0.0 --allow-remote --auth-mode auto
+```
+
+When configured, the token protects every `/_occ` endpoint, including status streams and mutation commands.
+The CLI, notifier, and status line read `OCC_ADMIN_TOKEN` or `OCC_ADMIN_TOKEN_FILE` and send the token only in the administrative `Authorization` header.
+Tokens must contain at least 32 characters, token files must not be accessible by group or others, and token values are never printed or persisted by the package.
+Remote deployments must additionally use TLS and trusted network controls, normally through a reverse proxy.
 
 ---
 
@@ -222,8 +256,8 @@ openai-cost-calculator proxy --port 8100 --auth-mode auto
 
 The Codex installer adds a managed `~/.codex/config.toml` block that selects an
 `openai_cost_calculator` custom provider, points it at
-`http://127.0.0.1:8100/v1`, uses `wire_api = "responses"`, and disables
-websockets so the HTTP proxy can observe usage.
+`http://127.0.0.1:8100/v1`, uses `wire_api = "responses"`, and enables
+WebSockets because both HTTP and WebSocket Responses traffic is observed.
 The provider uses Codex's existing OpenAI authentication, so sign in with ChatGPT or an API key before using the integration.
 The configured session is sent as an `X-OCC-Session` header so proxy accounting and notifications use the same isolated session.
 
@@ -259,8 +293,10 @@ openai-cost-calculator checkpoint --session default --json
 
 `occ-codex-statusline` remains available for wrappers or Codex surfaces that can run an external status command.
 
-The installer changes only managed blocks plus the top-level `notify` and `model_provider` keys it must replace.
-It preserves the previous values inside the managed block so uninstall can restore them.
+The installer changes only managed blocks plus the top-level `notify` and `model_provider` assignments it must replace.
+Those assignments are converted in place to reversible lexical placeholders rather than moved or normalized.
+Unrelated comments, whitespace, quoting, Unicode, line endings, section order, inline comments, and the presence or absence of a final newline are preserved byte-for-byte.
+Uninstall decodes the original assignment bytes at their original locations, while unrelated user edits made after installation remain intact.
 It uses permission-preserving atomic replacement and refuses invalid TOML, malformed managed markers, symlinked configuration, or an existing user-owned provider named `openai_cost_calculator`.
 It does not copy the configuration into retained backup files because user configuration may contain secrets.
 If safe automatic merging is impossible, installation stops before modifying the file.
@@ -282,6 +318,14 @@ python scripts/self_test_codex_integration.py
 
 The script uses a free local port and a unique session, creates an isolated temporary `CODEX_HOME`, installs the adapter through the public CLI, copies an existing file-backed Codex login or imports `OPENAI_API_KEY` without printing it, launches one read-only `codex exec` turn, independently recomputes the cost from the working-tree pricing CSV, verifies checkpoint stability, and removes all temporary files.
 Use `--model` or `--upstream` only when the detected Codex login needs an explicit override.
+Use `--auth-mode chatgpt` to require an isolated copy of an existing ChatGPT login.
+Use `--auth-mode api-key` to require `OPENAI_API_KEY` and exercise the Platform route even when the source Codex installation is logged in through ChatGPT:
+
+```bash
+OPENAI_API_KEY=... python scripts/self_test_codex_integration.py --auth-mode api-key --model MODEL
+```
+
+The API key is passed to `codex login --with-api-key` over stdin and never appears in a command line or report.
 The command exits nonzero with a sanitized diagnostic when credentials, model access, routing, usage, pricing, or accounting validation fails.
 The live test is opt-in, makes exactly one paid model request when authentication succeeds, and costs whatever that request's selected model and token usage cost.
 Ordinary unit tests never contact an OpenAI service.
@@ -389,11 +433,14 @@ Recoverable issues raise `CostEstimateError` with a clear message (missing prici
 - **`cached_tokens = 0`** → the upstream did not report cached-token details; missing cached fields are treated as zero, not guessed.
 - **Model string has no date** → the latest pricing row with `date ≤ today` is used, including intentionally undated aliases.
 - **Notifier output is hidden** → use `openai-cost-calculator status --diagnostics`; Codex execution does not depend on notifier stdout.
-- **Ledger is already in use** → inspect through the running proxy or stop it before using offline `ledger` commands.
+- **JSON ledger is already in use** → inspect through the running proxy, stop it before using offline `ledger` commands, or migrate future operation to SQLite with `--database`.
 - **Ledger health is `ERROR`** → current in-memory totals may be newer than the last durable snapshot; fix the filesystem error before relying on restart recovery.
+- **`admin_auth_required`** → set the same `OCC_ADMIN_TOKEN` or `OCC_ADMIN_TOKEN_FILE` for the proxy, CLI, notifier, and status-line processes.
+- **Remote bind refused** → add `--allow-remote` and a protected administrative token only after TLS and network access controls are ready.
+- **`websocket_missing_terminal`** → the upstream connection closed before a terminal Responses event; inspect diagnostics and upstream connectivity without assuming a zero-cost success.
+- **WebSocket handshake failure** → confirm the selected authentication domain, custom upstream WebSocket support, forwarded subprotocol, and proxy optional dependencies.
 
-The administrative `/_occ` endpoints have no authentication.
-Keep the default loopback bind unless a separate trusted access-control layer protects the proxy.
+Keep the default loopback bind unless remote access is operationally necessary.
 
 ---
 

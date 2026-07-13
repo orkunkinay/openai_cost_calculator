@@ -53,7 +53,10 @@ def test_status_exposes_latest_call_diagnostics_and_routing(monkeypatch, capsys)
         "persistence": {"enabled": False, "healthy": True},
     }
 
+    monkeypatch.setenv("OCC_ADMIN_TOKEN", "s" * 32)
+
     def urlopen(request, timeout):
+        assert request.headers["Authorization"] == f"Bearer {'s' * 32}"
         return _Response(health if request.full_url.endswith("/_occ/health") else costs)
 
     monkeypatch.setattr("urllib.request.urlopen", urlopen)
