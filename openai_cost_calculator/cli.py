@@ -4,7 +4,6 @@ import argparse
 import json
 import os
 from pathlib import Path
-import subprocess
 import sys
 from typing import Optional, Sequence
 import urllib.error
@@ -83,10 +82,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         default=str(Path(__file__).resolve().parents[1] / "data" / "gpt_pricing_data.csv"),
     )
 
-    subparsers.add_parser(
-        "self-test-codex", help="Run the opt-in isolated real Codex self-test"
-    )
-
     args = parser.parse_args(argv)
     if args.command == "proxy":
         return _run_proxy(
@@ -110,8 +105,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _ledger(args)
     if args.command == "pricing":
         return _pricing(args)
-    if args.command == "self-test-codex":
-        return _self_test_codex()
 
     parser.error(f"unknown command: {args.command}")
     return 2
@@ -324,11 +317,6 @@ def _pricing(args: argparse.Namespace) -> int:
         return 1
     print(f"Pricing data valid: {count} model/date entries in {args.file}")
     return 0
-
-
-def _self_test_codex() -> int:
-    script = Path(__file__).resolve().parents[1] / "scripts" / "self_test_codex_integration.py"
-    return subprocess.run([sys.executable, str(script)], check=False).returncode
 
 
 def _request_json(
