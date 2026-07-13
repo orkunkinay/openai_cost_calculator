@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import sqlite3
 import tempfile
+from decimal import Decimal
 from typing import Any
 
 
@@ -212,7 +213,7 @@ class SQLiteLedger:
         payload: dict[str, Any],
         *,
         max_sessions: int,
-        max_calls_per_session: int,
+        max_calls_per_session: int | None,
     ) -> None:
         try:
             self._connection.execute("BEGIN IMMEDIATE")
@@ -285,7 +286,7 @@ class SQLiteLedger:
             self._rollback()
             raise LedgerError(f"cannot append SQLite diagnostic: {exc}") from exc
 
-    def checkpoint(self, session: str) -> list[dict[str, Any]]:
+    def checkpoint(self, session: str) -> dict[str, Any]:
         try:
             self._connection.execute("BEGIN IMMEDIATE")
             row = self._connection.execute(
@@ -301,8 +302,12 @@ class SQLiteLedger:
                 FROM calls WHERE session = ? AND id > ? ORDER BY id
                 """,
                 (session, cursor),
-            ).fetchall()
-            next_cursor = int(rows[-1]["id"]) if rows else cursor
+            )
+            state = _empty_checkpoint_state()
+            next_cursor = cursor
+            for item in rows:
+                next_cursor = int(item["id"])
+                _accumulate_checkpoint_row(state, item)
             self._connection.execute(
                 """
                 INSERT INTO checkpoints (session, call_id) VALUES (?, ?)
@@ -311,10 +316,93 @@ class SQLiteLedger:
                 (session, next_cursor),
             )
             self._connection.execute("COMMIT")
-            return [self._call_payload(item) for item in rows]
+            return _checkpoint_summary(session, state)
         except sqlite3.Error as exc:
             self._rollback()
             raise LedgerError(f"cannot consume SQLite checkpoint: {exc}") from exc
+
+    def summary(
+        self,
+        session_id: str | None,
+        initial_totals: dict[str, Decimal],
+    ) -> dict[str, Any]:
+        states: dict[str, dict[str, Any]] = {}
+        parameters: tuple[Any, ...] = ()
+        where = ""
+        if session_id is not None:
+            where = " WHERE session = ?"
+            parameters = (session_id,)
+        try:
+            cursor = self._connection.execute(
+                """
+                SELECT id, session, turn_label, model, prompt_tokens,
+                       completion_tokens, cached_tokens, prompt_cost_uncached,
+                       prompt_cost_cached, completion_cost, total_cost, timestamp
+                FROM calls
+                """
+                + where
+                + " ORDER BY id",
+                parameters,
+            )
+            for row in cursor:
+                state = states.setdefault(row["session"], _empty_summary_state())
+                _accumulate_summary_row(state, row)
+
+            diagnostic_cursor = self._connection.execute(
+                "SELECT session, code, message, timestamp FROM diagnostics"
+                + where
+                + " ORDER BY id",
+                parameters,
+            )
+            for row in diagnostic_cursor:
+                state = states.setdefault(row["session"], _empty_summary_state())
+                state["errors"].append(
+                    {
+                        "code": row["code"],
+                        "message": row["message"],
+                        "timestamp": row["timestamp"],
+                    }
+                )
+        except sqlite3.Error as exc:
+            raise LedgerError(f"cannot summarize SQLite ledger: {exc}") from exc
+
+        sessions = {}
+        grand_total = Decimal("0")
+        for session, state in sorted(states.items()):
+            total = state["total_cost"]
+            grand_total += total
+            historical = min(initial_totals.get(session, Decimal("0")), total)
+            sessions[session] = {
+                "session_total": f"{total:.8f}",
+                "historical_total": f"{historical:.8f}",
+                "process_total": f"{(total - historical):.8f}",
+                "turns": [_turn_summary(turn) for turn in state["turns"].values()],
+                "errors": state["errors"],
+                "latest_call": state["latest_call"],
+            }
+        return {"sessions": sessions, "grand_total": f"{grand_total:.8f}"}
+
+    def totals(self) -> dict[str, Decimal]:
+        totals: dict[str, Decimal] = {}
+        try:
+            for row in self._connection.execute(
+                "SELECT session, total_cost FROM calls ORDER BY id"
+            ):
+                totals[row["session"]] = totals.get(
+                    row["session"], Decimal("0")
+                ) + Decimal(row["total_cost"])
+        except (sqlite3.Error, ValueError) as exc:
+            raise LedgerError(f"cannot read SQLite totals: {exc}") from exc
+        return totals
+
+    def generation(self) -> int:
+        try:
+            row = self._connection.execute(
+                "SELECT value FROM metadata WHERE key = 'reset_generation'"
+            ).fetchone()
+        except sqlite3.Error as exc:
+            raise LedgerError(f"cannot read SQLite generation: {exc}") from exc
+        return int(row[0]) if row is not None else 0
 
     def reset(self) -> None:
         try:
@@ -322,6 +410,12 @@ class SQLiteLedger:
             self._connection.execute("DELETE FROM calls")
             self._connection.execute("DELETE FROM diagnostics")
             self._connection.execute("DELETE FROM checkpoints")
+            self._connection.execute(
+                """
+                UPDATE metadata SET value = CAST(value AS INTEGER) + 1
+                WHERE key = 'reset_generation'
+                """
+            )
             self._connection.execute("COMMIT")
         except sqlite3.Error as exc:
             self._rollback()
@@ -377,6 +471,12 @@ class SQLiteLedger:
             )
         elif row[0] != str(SCHEMA_VERSION):
             raise LedgerError(f"unsupported SQLite ledger schema: {row[0]!r}")
+        self._connection.execute(
+            """
+            INSERT OR IGNORE INTO metadata (key, value)
+            VALUES ('reset_generation', '0')
+            """
+        )
 
     def _enforce_capacity(
         self,
@@ -390,7 +490,7 @@ class SQLiteLedger:
             "SELECT COUNT(*) FROM calls WHERE session = ?",
             (session,),
         ).fetchone()[0]
-        if count >= max_calls_per_session:
+        if max_calls_per_session is not None and count >= max_calls_per_session:
             raise LedgerError("per-session SQLite call capacity reached")
 
     def _enforce_session_capacity(self, session: str, max_sessions: int) -> None:
@@ -434,3 +534,105 @@ class SQLiteLedger:
             self._connection.execute("ROLLBACK")
         except sqlite3.Error:
             pass
+
+
+def _empty_summary_state() -> dict[str, Any]:
+    return {
+        "total_cost": Decimal("0"),
+        "turns": {},
+        "errors": [],
+        "latest_call": None,
+    }
+
+
+def _accumulate_summary_row(state: dict[str, Any], row: sqlite3.Row) -> None:
+    cost = Decimal(row["total_cost"])
+    state["total_cost"] += cost
+    label = row["turn_label"]
+    turn = state["turns"].setdefault(
+        label,
+        {
+            "label": label,
+            "num_calls": 0,
+            "total_cost": Decimal("0"),
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "cached_tokens": 0,
+            "cost_by_model": {},
+        },
+    )
+    turn["num_calls"] += 1
+    turn["total_cost"] += cost
+    turn["prompt_tokens"] += row["prompt_tokens"]
+    turn["completion_tokens"] += row["completion_tokens"]
+    turn["cached_tokens"] += row["cached_tokens"]
+    model_costs = turn["cost_by_model"]
+    model_costs[row["model"]] = model_costs.get(row["model"], Decimal("0")) + cost
+    state["latest_call"] = SQLiteLedger._call_payload(row)
+
+
+def _turn_summary(turn: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **{key: value for key, value in turn.items() if key not in {"total_cost", "cost_by_model"}},
+        "total_cost": f"{turn['total_cost']:.8f}",
+        "cost_by_model": {
+            model: f"{cost:.8f}" for model, cost in turn["cost_by_model"].items()
+        },
+    }
+
+
+def _empty_checkpoint_state() -> dict[str, Any]:
+    return {
+        "num_calls": 0,
+        "total_cost": Decimal("0"),
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "cached_tokens": 0,
+        "models": {},
+    }
+
+
+def _accumulate_checkpoint_row(state: dict[str, Any], row: sqlite3.Row) -> None:
+    cost = Decimal(row["total_cost"])
+    state["num_calls"] += 1
+    state["total_cost"] += cost
+    state["prompt_tokens"] += row["prompt_tokens"]
+    state["completion_tokens"] += row["completion_tokens"]
+    state["cached_tokens"] += row["cached_tokens"]
+    model = state["models"].setdefault(
+        row["model"],
+        {
+            "num_calls": 0,
+            "total_cost": Decimal("0"),
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "cached_tokens": 0,
+        },
+    )
+    model["num_calls"] += 1
+    model["total_cost"] += cost
+    model["prompt_tokens"] += row["prompt_tokens"]
+    model["completion_tokens"] += row["completion_tokens"]
+    model["cached_tokens"] += row["cached_tokens"]
+
+
+def _checkpoint_summary(session: str, state: dict[str, Any]) -> dict[str, Any]:
+    models = {
+        name: {
+            **{key: value for key, value in model.items() if key != "total_cost"},
+            "total_cost": f"{model['total_cost']:.8f}",
+        }
+        for name, model in state["models"].items()
+    }
+    return {
+        "session": session,
+        "num_calls": state["num_calls"],
+        "total_cost": f"{state['total_cost']:.8f}",
+        "prompt_tokens": state["prompt_tokens"],
+        "completion_tokens": state["completion_tokens"],
+        "cached_tokens": state["cached_tokens"],
+        "models": models,
+        "cost_by_model": {
+            name: model["total_cost"] for name, model in models.items()
+        },
+    }

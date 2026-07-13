@@ -218,10 +218,33 @@ def test_sqlite_writes_are_incremental_without_snapshot_rewrites(
     def unexpected_save(payload):
         raise AssertionError("SQLite must not rewrite a JSON snapshot")
 
+    def unexpected_load():
+        raise AssertionError("SQLite summaries must not reconstruct call records")
+
     monkeypatch.setattr(registry._ledger, "save", unexpected_save, raising=False)
+    monkeypatch.setattr(registry._ledger, "load", unexpected_load)
     assert registry.record_call(
         "incremental",
         "gpt-test-2025-01-01",
         {"prompt_tokens": 1, "completion_tokens": 0, "cached_tokens": 0},
     ) is not None
+    assert registry.summary("incremental")["sessions"]["incremental"]["session_total"] == (
+        "0.00000100"
+    )
+    registry.close()
+
+
+def test_sqlite_history_is_not_limited_by_in_memory_call_capacity(
+    tmp_path: Path,
+    monkeypatch,
+):
+    import openai_cost_calculator.proxy.registry as registry_module
+
+    monkeypatch.setattr(registry_module, "_MAX_CALLS_PER_SESSION", 1)
+    registry = TrackerRegistry(database_path=tmp_path / "accounting.sqlite3")
+    usage = {"prompt_tokens": 1, "completion_tokens": 0, "cached_tokens": 0}
+    assert registry.record_call("long-lived", "gpt-test-2025-01-01", usage) is not None
+    assert registry.record_call("long-lived", "gpt-test-2025-01-01", usage) is not None
+    session = registry.summary("long-lived")["sessions"]["long-lived"]
+    assert session["turns"][0]["num_calls"] == 2
     registry.close()

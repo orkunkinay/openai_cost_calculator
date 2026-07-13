@@ -46,7 +46,11 @@ class TrackerRegistry:
         )
         self._ledger_healthy = True
         self._ledger_error: Optional[str] = None
-        if self._ledger is not None:
+        self._sqlite_generation: Optional[int] = None
+        if isinstance(self._ledger, SQLiteLedger):
+            self._initial_totals = self._ledger.totals()
+            self._sqlite_generation = self._ledger.generation()
+        elif self._ledger is not None:
             self._restore(self._ledger.load())
 
     def get(self, session_id: Optional[str]) -> CostTracker:
@@ -85,7 +89,10 @@ class TrackerRegistry:
             )
             return None
         with self._lock:
-            if len(_tracker_records(tracker)) >= _MAX_CALLS_PER_SESSION:
+            if (
+                not isinstance(self._ledger, SQLiteLedger)
+                and len(_tracker_records(tracker)) >= _MAX_CALLS_PER_SESSION
+            ):
                 self.record_error(
                     key,
                     "accounting_capacity_reached",
@@ -158,6 +165,8 @@ class TrackerRegistry:
             self._checkpoint_cursors.clear()
             self._errors.clear()
             self._initial_totals.clear()
+            if isinstance(self._ledger, SQLiteLedger):
+                self._sqlite_generation = self._ledger.generation()
             self._ledger_healthy = True
             self._ledger_error = None
         self.notify()
@@ -189,7 +198,14 @@ class TrackerRegistry:
 
     def summary(self, session_id: Optional[str] = None) -> dict:
         with self._lock:
-            self._refresh_sqlite_locked()
+            if isinstance(self._ledger, SQLiteLedger) and self._ledger_healthy:
+                generation = self._ledger.generation()
+                if generation != self._sqlite_generation:
+                    self._initial_totals = self._ledger.totals()
+                    self._sqlite_generation = generation
+                summary = self._ledger.summary(session_id, self._initial_totals)
+                summary["persistence"] = self.persistence_status()
+                return summary
             if session_id is None:
                 trackers = dict(self._trackers)
                 errors = {key: list(value) for key, value in self._errors.items()}
@@ -225,15 +241,12 @@ class TrackerRegistry:
         with self._lock:
             if isinstance(self._ledger, SQLiteLedger):
                 try:
-                    payloads = self._ledger.checkpoint(key)
+                    payload = self._ledger.checkpoint(key)
                 except LedgerError as exc:
                     self._mark_ledger_error(exc)
                     raise
                 self._mark_ledger_healthy()
-                return _records_summary(
-                    key,
-                    [_record_from_payload(payload) for payload in payloads],
-                )
+                return payload
             tracker = self._trackers.get(key)
             records = _tracker_records(tracker) if tracker is not None else []
             cursor = min(self._checkpoint_cursors.get(key, 0), len(records))
@@ -295,28 +308,13 @@ class TrackerRegistry:
                 turn_label,
                 _record_payload(record),
                 max_sessions=_MAX_SESSIONS,
-                max_calls_per_session=_MAX_CALLS_PER_SESSION,
+                max_calls_per_session=None,
             )
         except LedgerError as exc:
             self._mark_ledger_error(exc)
             return False
         self._mark_ledger_healthy()
         return True
-
-    def _refresh_sqlite_locked(self) -> None:
-        if not isinstance(self._ledger, SQLiteLedger) or not self._ledger_healthy:
-            return
-        try:
-            payload = self._ledger.load()
-        except LedgerError as exc:
-            self._mark_ledger_error(exc)
-            return
-        initial_totals = dict(self._initial_totals)
-        self._trackers.clear()
-        self._checkpoint_cursors.clear()
-        self._errors.clear()
-        self._restore(payload, set_initial=False)
-        self._initial_totals = initial_totals
 
     def _mark_ledger_error(self, exc: Exception) -> None:
         self._ledger_healthy = False
