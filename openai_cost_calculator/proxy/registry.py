@@ -10,7 +10,7 @@ from typing import Any, Dict, Iterable, Optional
 
 from openai_cost_calculator.tracker import CallRecord, CostTracker
 from openai_cost_calculator.types import CostBreakdown
-from openai_cost_calculator.proxy.ledger import DurableLedger, LedgerError
+from openai_cost_calculator.proxy.ledger import DurableLedger, LedgerError, SQLiteLedger
 
 
 _MAX_ERRORS_PER_SESSION = 100
@@ -23,7 +23,15 @@ _SECRET_RE = re.compile(
 
 
 class TrackerRegistry:
-    def __init__(self, on_error=None, *, ledger_path: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        on_error=None,
+        *,
+        ledger_path: str | Path | None = None,
+        database_path: str | Path | None = None,
+    ) -> None:
+        if ledger_path is not None and database_path is not None:
+            raise ValueError("pass either ledger_path or database_path, not both")
         self._trackers: Dict[str, CostTracker] = {}
         self._checkpoint_cursors: Dict[str, int] = {}
         self._errors: Dict[str, list[dict]] = {}
@@ -31,7 +39,11 @@ class TrackerRegistry:
         self._subscribers: list[asyncio.Queue] = []
         self._lock = RLock()
         self._on_error = on_error
-        self._ledger = DurableLedger(ledger_path) if ledger_path is not None else None
+        self._ledger = (
+            SQLiteLedger(database_path)
+            if database_path is not None
+            else DurableLedger(ledger_path) if ledger_path is not None else None
+        )
         self._ledger_healthy = True
         self._ledger_error: Optional[str] = None
         if self._ledger is not None:
@@ -86,7 +98,7 @@ class TrackerRegistry:
                 turn_label=turn_label,
             )
             if record is not None:
-                self._persist_locked()
+                self._persist_call_locked(key, turn_label, record)
         if record is not None:
             self.notify()
         elif tracker.session_total == Decimal("0") and not tracker.turns:
@@ -113,7 +125,20 @@ class TrackerRegistry:
             errors = self._errors.setdefault(key, [])
             errors.append(error)
             del errors[:-_MAX_ERRORS_PER_SESSION]
-            self._persist_locked()
+            if isinstance(self._ledger, SQLiteLedger):
+                try:
+                    self._ledger.append_error(
+                        key,
+                        error,
+                        max_sessions=_MAX_SESSIONS,
+                        max_errors=_MAX_ERRORS_PER_SESSION,
+                    )
+                except LedgerError as exc:
+                    self._mark_ledger_error(exc)
+                else:
+                    self._mark_ledger_healthy()
+            else:
+                self._persist_locked()
         if self._on_error is not None:
             self._on_error(RuntimeError(f"{code}: {message}"))
         self.notify()
@@ -122,10 +147,12 @@ class TrackerRegistry:
         with self._lock:
             if self._ledger is not None:
                 try:
-                    self._ledger.save({"schema_version": 1, "sessions": {}})
+                    if isinstance(self._ledger, SQLiteLedger):
+                        self._ledger.reset()
+                    else:
+                        self._ledger.save({"schema_version": 1, "sessions": {}})
                 except LedgerError as exc:
-                    self._ledger_healthy = False
-                    self._ledger_error = _diagnostic_text(exc)
+                    self._mark_ledger_error(exc)
                     raise
             self._trackers.clear()
             self._checkpoint_cursors.clear()
@@ -147,9 +174,11 @@ class TrackerRegistry:
                 self._subscribers.remove(queue)
 
     def notify(self) -> None:
-        summary = self.summary()
         with self._lock:
             subscribers = list(self._subscribers)
+        if not subscribers:
+            return
+        summary = self.summary()
         for queue in subscribers:
             if queue.full():
                 try:
@@ -160,6 +189,7 @@ class TrackerRegistry:
 
     def summary(self, session_id: Optional[str] = None) -> dict:
         with self._lock:
+            self._refresh_sqlite_locked()
             if session_id is None:
                 trackers = dict(self._trackers)
                 errors = {key: list(value) for key, value in self._errors.items()}
@@ -193,6 +223,17 @@ class TrackerRegistry:
     def checkpoint(self, session_id: Optional[str]) -> dict:
         key = session_id or "default"
         with self._lock:
+            if isinstance(self._ledger, SQLiteLedger):
+                try:
+                    payloads = self._ledger.checkpoint(key)
+                except LedgerError as exc:
+                    self._mark_ledger_error(exc)
+                    raise
+                self._mark_ledger_healthy()
+                return _records_summary(
+                    key,
+                    [_record_from_payload(payload) for payload in payloads],
+                )
             tracker = self._trackers.get(key)
             records = _tracker_records(tracker) if tracker is not None else []
             cursor = min(self._checkpoint_cursors.get(key, 0), len(records))
@@ -207,12 +248,22 @@ class TrackerRegistry:
         return _records_summary(key, new_records)
 
     def persistence_status(self) -> dict:
+        backend = (
+            "sqlite"
+            if isinstance(self._ledger, SQLiteLedger)
+            else "json" if isinstance(self._ledger, DurableLedger) else None
+        )
         return {
             "enabled": self._ledger is not None,
             "path": str(self._ledger.path) if self._ledger is not None else None,
             "healthy": self._ledger_healthy,
             "error": self._ledger_error,
-            "concurrency": "single-proxy" if self._ledger is not None else None,
+            "backend": backend,
+            "concurrency": (
+                "multi-proxy"
+                if isinstance(self._ledger, SQLiteLedger)
+                else "single-proxy" if self._ledger is not None else None
+            ),
         }
 
     def close(self) -> None:
@@ -225,12 +276,55 @@ class TrackerRegistry:
         try:
             self._ledger.save(self._snapshot_locked())
         except LedgerError as exc:
-            self._ledger_healthy = False
-            self._ledger_error = _diagnostic_text(exc)
+            self._mark_ledger_error(exc)
             return False
+        self._mark_ledger_healthy()
+        return True
+
+    def _persist_call_locked(
+        self,
+        session: str,
+        turn_label: Optional[str],
+        record: CallRecord,
+    ) -> bool:
+        if not isinstance(self._ledger, SQLiteLedger):
+            return self._persist_locked()
+        try:
+            self._ledger.append_call(
+                session,
+                turn_label,
+                _record_payload(record),
+                max_sessions=_MAX_SESSIONS,
+                max_calls_per_session=_MAX_CALLS_PER_SESSION,
+            )
+        except LedgerError as exc:
+            self._mark_ledger_error(exc)
+            return False
+        self._mark_ledger_healthy()
+        return True
+
+    def _refresh_sqlite_locked(self) -> None:
+        if not isinstance(self._ledger, SQLiteLedger) or not self._ledger_healthy:
+            return
+        try:
+            payload = self._ledger.load()
+        except LedgerError as exc:
+            self._mark_ledger_error(exc)
+            return
+        initial_totals = dict(self._initial_totals)
+        self._trackers.clear()
+        self._checkpoint_cursors.clear()
+        self._errors.clear()
+        self._restore(payload, set_initial=False)
+        self._initial_totals = initial_totals
+
+    def _mark_ledger_error(self, exc: Exception) -> None:
+        self._ledger_healthy = False
+        self._ledger_error = _diagnostic_text(exc)
+
+    def _mark_ledger_healthy(self) -> None:
         self._ledger_healthy = True
         self._ledger_error = None
-        return True
 
     def _snapshot_locked(self) -> dict[str, Any]:
         sessions: dict[str, Any] = {}
@@ -252,7 +346,7 @@ class TrackerRegistry:
             }
         return {"schema_version": 1, "sessions": sessions}
 
-    def _restore(self, payload: dict[str, Any]) -> None:
+    def _restore(self, payload: dict[str, Any], *, set_initial: bool = True) -> None:
         try:
             sessions = payload["sessions"]
             if len(sessions) > _MAX_SESSIONS + 1:
@@ -294,7 +388,8 @@ class TrackerRegistry:
                 self._checkpoint_cursors[key] = min(
                     cursor, len(_tracker_records(tracker))
                 )
-                self._initial_totals[key] = tracker.session_total
+                if set_initial:
+                    self._initial_totals[key] = tracker.session_total
         except (KeyError, TypeError, ValueError) as exc:
             raise LedgerError(f"durable ledger has invalid accounting data: {exc}") from exc
 

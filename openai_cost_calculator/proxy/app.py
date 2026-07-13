@@ -45,10 +45,13 @@ def create_app(
     registry: Optional[TrackerRegistry] = None,
     transport: Optional[httpx.AsyncBaseTransport] = None,
     ledger_path: Optional[str] = None,
+    database_path: Optional[str] = None,
     upstream_selection: Optional[UpstreamSelection] = None,
 ) -> FastAPI:
-    if registry is not None and ledger_path is not None:
-        raise ValueError("pass either registry or ledger_path, not both")
+    if registry is not None and (ledger_path is not None or database_path is not None):
+        raise ValueError("pass either registry or a persistence path, not both")
+    if ledger_path is not None and database_path is not None:
+        raise ValueError("pass either ledger_path or database_path, not both")
     app = FastAPI()
     if upstream_selection is not None:
         upstream = upstream_selection.url
@@ -63,7 +66,9 @@ def create_app(
     app.state.occ_registry = (
         registry
         if registry is not None
-        else TrackerRegistry(ledger_path=ledger_path) if ledger_path is not None else default_registry
+        else TrackerRegistry(ledger_path=ledger_path, database_path=database_path)
+        if ledger_path is not None or database_path is not None
+        else default_registry
     )
     app.state.occ_transport = transport
 

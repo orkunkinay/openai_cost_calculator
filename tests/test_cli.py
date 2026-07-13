@@ -70,6 +70,18 @@ def test_ledger_cli_inspects_and_resets_offline_state(tmp_path: Path, capsys):
     assert main(["ledger", "reset", str(path), "--yes"]) == 0
 
 
+def test_database_cli_inspects_and_resets_concurrent_state(tmp_path: Path, capsys):
+    path = tmp_path / "accounting.sqlite3"
+    assert main(["database", "inspect", str(path), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["sessions"] == {}
+    assert payload["persistence"]["backend"] == "sqlite"
+
+    assert main(["database", "reset", str(path)]) == 2
+    assert "without --yes" in capsys.readouterr().err
+    assert main(["database", "reset", str(path), "--yes"]) == 0
+
+
 def test_pricing_validate_cli_and_incompatible_proxy_config(capsys):
     assert main(["pricing", "validate"]) == 0
     assert "Pricing data valid" in capsys.readouterr().out

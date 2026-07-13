@@ -27,7 +27,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     proxy_parser.add_argument(
         "--ledger",
-        help="Persist accounting to this JSON file (single proxy process only)",
+        help="Persist accounting to a legacy JSON file (single proxy process only)",
+    )
+    proxy_parser.add_argument(
+        "--database",
+        help="Persist accounting to a concurrent SQLite database (recommended)",
     )
 
     install_parser = subparsers.add_parser("install", help="Install agent UI adapters")
@@ -74,6 +78,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ledger_reset.add_argument("path")
     ledger_reset.add_argument("--yes", action="store_true")
 
+    database_parser = subparsers.add_parser(
+        "database", help="Inspect or reset a SQLite accounting database"
+    )
+    database_subparsers = database_parser.add_subparsers(
+        dest="database_command", required=True
+    )
+    database_inspect = database_subparsers.add_parser("inspect")
+    database_inspect.add_argument("path")
+    database_inspect.add_argument("--json", action="store_true")
+    database_reset = database_subparsers.add_parser("reset")
+    database_reset.add_argument("path")
+    database_reset.add_argument("--yes", action="store_true")
+
     pricing_parser = subparsers.add_parser("pricing", help="Pricing data operations")
     pricing_subparsers = pricing_parser.add_subparsers(dest="pricing_command", required=True)
     pricing_validate = pricing_subparsers.add_parser("validate")
@@ -90,6 +107,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             args.upstream,
             auth_mode=args.auth_mode,
             ledger=args.ledger,
+            database=args.database,
         )
     if args.command == "install":
         return _install(args)
@@ -103,6 +121,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return _reset(args)
     if args.command == "ledger":
         return _ledger(args)
+    if args.command == "database":
+        return _database(args)
     if args.command == "pricing":
         return _pricing(args)
 
@@ -117,6 +137,7 @@ def _run_proxy(
     *,
     auth_mode: str,
     ledger: Optional[str],
+    database: Optional[str],
 ) -> int:
     try:
         import uvicorn
@@ -133,8 +154,14 @@ def _run_proxy(
     )
 
     try:
+        if ledger and database:
+            raise ValueError("pass either --ledger or --database, not both")
         selection = resolve_upstream(auth_mode=auth_mode, upstream=upstream)
-        app = create_app(upstream_selection=selection, ledger_path=ledger)
+        app = create_app(
+            upstream_selection=selection,
+            ledger_path=ledger,
+            database_path=database,
+        )
     except (UpstreamSelectionError, OSError, RuntimeError, ValueError) as exc:
         print(f"proxy configuration error: {exc}", file=sys.stderr)
         return 2
@@ -148,6 +175,8 @@ def _run_proxy(
     )
     if ledger:
         print(f"Durable ledger: {Path(ledger).expanduser()}")
+    if database:
+        print(f"SQLite database: {Path(database).expanduser()}")
     uvicorn.run(app, host=host, port=port)
     return 0
 
@@ -302,6 +331,36 @@ def _ledger(args: argparse.Namespace) -> int:
         return 0
     except LedgerError as exc:
         print(f"ledger operation failed: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        registry.close()
+
+
+def _database(args: argparse.Namespace) -> int:
+    from openai_cost_calculator.proxy.ledger import LedgerError
+    from openai_cost_calculator.proxy.registry import TrackerRegistry
+
+    try:
+        registry = TrackerRegistry(database_path=args.path)
+    except LedgerError as exc:
+        print(f"database unavailable: {exc}", file=sys.stderr)
+        return 1
+    try:
+        if args.database_command == "inspect":
+            summary = registry.summary()
+            if args.json:
+                print(json.dumps(summary, indent=2, sort_keys=True))
+            else:
+                _print_summary(summary, include_diagnostics=True)
+            return 0
+        if not args.yes:
+            print("refusing to reset the database without --yes", file=sys.stderr)
+            return 2
+        registry.reset()
+        print(f"SQLite accounting database reset: {Path(args.path).expanduser()}")
+        return 0
+    except LedgerError as exc:
+        print(f"database operation failed: {exc}", file=sys.stderr)
         return 1
     finally:
         registry.close()

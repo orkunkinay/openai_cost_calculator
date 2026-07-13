@@ -148,3 +148,80 @@ def test_registry_capacity_failure_is_explicit(monkeypatch):
     session = registry.summary("bounded")["sessions"]["bounded"]
     assert session["session_total"] == "0.00100000"
     assert session["errors"][-1]["code"] == "accounting_capacity_reached"
+
+
+def test_sqlite_database_supports_concurrent_proxies_and_atomic_checkpoint(
+    tmp_path: Path,
+):
+    path = tmp_path / "accounting.sqlite3"
+    first = TrackerRegistry(database_path=path)
+    second = TrackerRegistry(database_path=path)
+    usage = {"prompt_tokens": 1000, "completion_tokens": 0, "cached_tokens": 0}
+
+    assert first.record_call(
+        "shared",
+        "gpt-test-2025-01-01",
+        usage,
+        turn_label="first",
+    ) is not None
+    assert second.record_call(
+        "shared",
+        "gpt-test-2025-01-01",
+        usage,
+        turn_label="second",
+    ) is not None
+
+    summary = first.summary("shared")
+    session = summary["sessions"]["shared"]
+    assert session["session_total"] == "0.00200000"
+    assert [turn["label"] for turn in session["turns"]] == ["first", "second"]
+    assert summary["persistence"]["backend"] == "sqlite"
+    assert summary["persistence"]["concurrency"] == "multi-proxy"
+
+    checkpoint = first.checkpoint("shared")
+    assert checkpoint["num_calls"] == 2
+    assert second.checkpoint("shared")["num_calls"] == 0
+    assert path.stat().st_mode & 0o777 == 0o600
+    first.close()
+    second.close()
+
+
+def test_sqlite_database_restores_exact_costs_and_reset_is_transactional(
+    tmp_path: Path,
+):
+    path = tmp_path / "accounting.sqlite3"
+    registry = TrackerRegistry(database_path=path)
+    registry.record_call(
+        "persisted",
+        "gpt-test-2025-01-01",
+        {"prompt_tokens": 1000, "completion_tokens": 500, "cached_tokens": 100},
+    )
+    registry.record_error("persisted", "test", "retained diagnostic")
+    registry.close()
+
+    restored = TrackerRegistry(database_path=path)
+    session = restored.summary("persisted")["sessions"]["persisted"]
+    assert session["session_total"] == "0.00195000"
+    assert session["historical_total"] == "0.00195000"
+    assert session["errors"][0]["message"] == "retained diagnostic"
+    restored.reset()
+    assert restored.summary()["sessions"] == {}
+    restored.close()
+
+
+def test_sqlite_writes_are_incremental_without_snapshot_rewrites(
+    tmp_path: Path,
+    monkeypatch,
+):
+    registry = TrackerRegistry(database_path=tmp_path / "accounting.sqlite3")
+
+    def unexpected_save(payload):
+        raise AssertionError("SQLite must not rewrite a JSON snapshot")
+
+    monkeypatch.setattr(registry._ledger, "save", unexpected_save, raising=False)
+    assert registry.record_call(
+        "incremental",
+        "gpt-test-2025-01-01",
+        {"prompt_tokens": 1, "completion_tokens": 0, "cached_tokens": 0},
+    ) is not None
+    registry.close()
