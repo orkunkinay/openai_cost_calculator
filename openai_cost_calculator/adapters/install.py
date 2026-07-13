@@ -76,12 +76,15 @@ def uninstall_claude_code(scope: str = "user") -> list[str]:
 
 def install_codex(proxy_url: str, session: str) -> list[str]:
     path = _codex_config_path()
+    _refuse_symlink(path)
     text = _read_text(path)
     _validate_toml(text, path)
+    _validate_managed_blocks(text, path)
     previous_notify = _managed_previous_key(text, "notify")
     previous_model_provider = _managed_previous_key(text, "model_provider")
     previous_openai_base_url = _managed_previous_key(text, "openai_base_url")
     base = _remove_managed_block(text)
+    _refuse_conflicting_provider(base, path)
     if (
         previous_openai_base_url
         and _extract_top_level_key(base, "openai_base_url")[0] is None
@@ -112,8 +115,10 @@ def install_codex(proxy_url: str, session: str) -> list[str]:
 
 def uninstall_codex() -> list[str]:
     path = _codex_config_path()
+    _refuse_symlink(path)
     text = _read_text(path)
     _validate_toml(text, path)
+    _validate_managed_blocks(text, path)
     previous_notify = _managed_previous_key(text, "notify")
     previous_model_provider = _managed_previous_key(text, "model_provider")
     new_text = _remove_managed_block(text)
@@ -170,6 +175,7 @@ def _write_text(path: Path, text: str) -> None:
 
 
 def _atomic_write_text(path: Path, text: str) -> None:
+    _refuse_symlink(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     previous_mode = path.stat().st_mode & 0o777 if path.exists() else 0o600
     temporary_path: Optional[Path] = None
@@ -206,6 +212,49 @@ def _validate_toml(text: str, path: Path) -> None:
         raise ValueError(
             f"Refusing to modify invalid Codex configuration at {path}: {exc}"
         ) from exc
+
+
+def _validate_managed_blocks(text: str, path: Path) -> None:
+    depth = 0
+    blocks = 0
+    for line in text.splitlines():
+        marker = line.strip()
+        if marker == CODEX_BEGIN:
+            if depth:
+                raise ValueError(
+                    f"Refusing to modify malformed managed blocks at {path}: nested start marker"
+                )
+            depth = 1
+            blocks += 1
+        elif marker == CODEX_END:
+            if not depth:
+                raise ValueError(
+                    f"Refusing to modify malformed managed blocks at {path}: unmatched end marker"
+                )
+            depth = 0
+    if depth:
+        raise ValueError(
+            f"Refusing to modify malformed managed blocks at {path}: unmatched start marker"
+        )
+    if blocks not in {0, 2}:
+        raise ValueError(
+            f"Refusing to modify unexpected managed blocks at {path}: found {blocks}, expected 0 or 2"
+        )
+
+
+def _refuse_conflicting_provider(text: str, path: Path) -> None:
+    if "[model_providers.openai_cost_calculator]" in {
+        line.strip() for line in text.splitlines()
+    }:
+        raise ValueError(
+            "Refusing to overwrite existing Codex provider "
+            f"'openai_cost_calculator' at {path}"
+        )
+
+
+def _refuse_symlink(path: Path) -> None:
+    if path.is_symlink():
+        raise ValueError(f"Refusing to replace symlinked configuration at {path}")
 
 
 def _backup(path: Path) -> None:

@@ -339,3 +339,64 @@ def test_codex_installer_refuses_invalid_config_without_modifying_it(
     assert config.read_text(encoding="utf-8") == original
     assert list(tmp_path.glob("config.toml.occ-backup-*")) == []
     assert list(tmp_path.glob(".config.toml.*.tmp")) == []
+
+
+def test_codex_installer_refuses_conflicting_provider_and_malformed_markers(
+    tmp_path: Path,
+    monkeypatch,
+):
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    config = tmp_path / "config.toml"
+    conflicting = (
+        "[model_providers.openai_cost_calculator]\n"
+        'name = "user-owned"\n'
+    )
+    config.write_text(conflicting, encoding="utf-8")
+    with pytest.raises(ValueError, match="Refusing to overwrite existing Codex provider"):
+        install_codex("http://127.0.0.1:8100", "s1")
+    assert config.read_text(encoding="utf-8") == conflicting
+
+    malformed = "# >>> openai-cost-calculator\nmodel = \"gpt-test\"\n"
+    config.write_text(malformed, encoding="utf-8")
+    with pytest.raises(ValueError, match="unmatched start marker"):
+        uninstall_codex()
+    assert config.read_text(encoding="utf-8") == malformed
+
+
+def test_codex_installer_refuses_symlink_and_preserves_target(
+    tmp_path: Path,
+    monkeypatch,
+):
+    codex_home = tmp_path / "Codex üser"
+    codex_home.mkdir()
+    target = tmp_path / "actual-config.toml"
+    target.write_text('model = "gpt-test"\n', encoding="utf-8")
+    (codex_home / "config.toml").symlink_to(target)
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+
+    with pytest.raises(ValueError, match="symlinked configuration"):
+        install_codex("http://127.0.0.1:8100", "session ü")
+
+    assert target.read_text(encoding="utf-8") == 'model = "gpt-test"\n'
+
+
+def test_codex_atomic_write_failure_preserves_original_and_cleans_temp(
+    tmp_path: Path,
+    monkeypatch,
+):
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    config = tmp_path / "config.toml"
+    original = 'model = "gpt-test"\n'
+    config.write_text(original, encoding="utf-8")
+    config.chmod(0o640)
+
+    def interrupted_replace(source, destination):
+        raise OSError("simulated interruption")
+
+    monkeypatch.setattr("os.replace", interrupted_replace)
+    with pytest.raises(OSError, match="simulated interruption"):
+        install_codex("http://127.0.0.1:8100", "s1")
+
+    assert config.read_text(encoding="utf-8") == original
+    assert config.stat().st_mode & 0o777 == 0o640
+    assert list(tmp_path.glob(".config.toml.*.tmp")) == []
