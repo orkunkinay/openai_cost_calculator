@@ -6,7 +6,8 @@ from pathlib import Path
 
 import httpx
 import pytest
-from fastapi.testclient import TestClient
+
+from asgi_client import ASGITestClient
 
 from openai_cost_calculator.adapters.claude_code import (
     statusline_text as claude_statusline_text,
@@ -14,6 +15,7 @@ from openai_cost_calculator.adapters.claude_code import (
 )
 from openai_cost_calculator.adapters.codex import (
     checkpoint_text,
+    notifier_diagnostics,
     notify_main,
     statusline_text as codex_statusline_text,
 )
@@ -144,6 +146,33 @@ def test_codex_adapters_render_and_silently_handle_network_errors(monkeypatch):
     assert codex_statusline_text(session="s1") == "💰 cost offline"
 
 
+def test_codex_notifier_records_hidden_proxy_failure_without_failing_codex(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+):
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: (_ for _ in ()).throw(OSError("Bearer secret")),
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "occ-codex-notify",
+            json.dumps({"type": "agent-turn-complete"}),
+        ],
+    )
+
+    assert notify_main() == 0
+    assert capsys.readouterr().out == ""
+    diagnostics = notifier_diagnostics()
+    assert diagnostics[-1]["code"] == "checkpoint_unavailable"
+    assert "secret" not in diagnostics[-1]["message"]
+    log = tmp_path / "occ-notifier-diagnostics.jsonl"
+    assert log.stat().st_mode & 0o777 == 0o600
+
+
 def test_codex_notify_uses_installed_session_and_chains_previous_notifier(
     tmp_path: Path,
     monkeypatch,
@@ -227,7 +256,7 @@ def test_proxy_checkpoint_advances_cursor_and_costs_remain_cumulative():
         transport=httpx.MockTransport(handler),
         registry=TrackerRegistry(),
     )
-    client = TestClient(app)
+    client = ASGITestClient(app)
     for _ in range(2):
         client.post("/v1/responses", json={}, headers={"x-occ-session": "s1"})
 

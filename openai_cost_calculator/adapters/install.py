@@ -103,10 +103,8 @@ def install_codex(proxy_url: str, session: str) -> list[str]:
         _write_text(path, new_text)
         return [
             f"{path}: installed Codex cost adapter block",
-            f"API-key login proxy: openai-cost-calculator proxy --port {_proxy_port(proxy_url)}",
-            "ChatGPT login proxy: openai-cost-calculator proxy "
-            f"--port {_proxy_port(proxy_url)} "
-            "--upstream https://chatgpt.com/backend-api/codex",
+            "Start the matching proxy: openai-cost-calculator proxy "
+            f"--port {_proxy_port(proxy_url)} --auth-mode auto",
             "Ensure Codex is logged in with ChatGPT or an OpenAI API key.",
         ]
     return [f"{path}: already installed"]

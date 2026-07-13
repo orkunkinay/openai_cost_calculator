@@ -4,7 +4,8 @@ import json
 
 import httpx
 import pytest
-from fastapi.testclient import TestClient
+
+from asgi_client import ASGITestClient
 
 from openai_cost_calculator.parser import extract_usage_from_payload
 from openai_cost_calculator.pricing import (
@@ -48,7 +49,7 @@ def _client(handler):
         transport=transport,
         registry=TrackerRegistry(),
     )
-    return TestClient(app)
+    return ASGITestClient(app)
 
 
 def test_extract_usage_from_payload_supports_chat_and_responses_shapes():

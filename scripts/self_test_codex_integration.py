@@ -66,7 +66,6 @@ def main() -> int:
         codex_home.mkdir(mode=0o700)
         auth_method, auth_mode = _prepare_auth(codex_home, Path(args.codex))
         model = args.model or _source_codex_model()
-        upstream = args.upstream or _default_upstream(auth_mode)
         env = _isolated_env(codex_home)
         proxy_url = f"http://127.0.0.1:{port}"
 
@@ -107,9 +106,11 @@ def main() -> int:
             "127.0.0.1",
             "--port",
             str(port),
-            "--upstream",
-            upstream,
+            "--auth-mode",
+            "api-key" if auth_mode == "api" else auth_mode,
         ]
+        if args.upstream:
+            proxy_command.extend(["--upstream", args.upstream])
         proxy = subprocess.Popen(
             proxy_command,
             cwd=ROOT,
@@ -121,7 +122,7 @@ def main() -> int:
         _wait_ready(proxy_url, proxy)
 
         baseline = _get_json(f"{proxy_url}/_occ/costs?{_query(session)}")
-        if baseline != {"sessions": {}, "grand_total": "0.00000000"}:
+        if baseline.get("sessions") != {} or baseline.get("grand_total") != "0.00000000":
             raise SelfTestError(f"unique session did not have a clean baseline: {baseline}")
 
         output_file = temp_root / "last-message.txt"
@@ -310,12 +311,6 @@ def _source_codex_model() -> str | None:
     except (OSError, tomllib.TOMLDecodeError):
         return None
     return model if isinstance(model, str) and model else None
-
-
-def _default_upstream(auth_mode: str) -> str:
-    if auth_mode == "chatgpt":
-        return "https://chatgpt.com/backend-api/codex"
-    return "https://api.openai.com/v1"
 
 
 def _isolated_env(codex_home: Path) -> dict[str, str]:

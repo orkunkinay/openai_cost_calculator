@@ -19,6 +19,11 @@ except ImportError as exc:  # pragma: no cover - exercised when optional deps ar
 from openai_cost_calculator.parser import extract_usage_from_payload
 from openai_cost_calculator.proxy.ledger import LedgerError
 from openai_cost_calculator.proxy.registry import TrackerRegistry, default_registry
+from openai_cost_calculator.proxy.upstreams import (
+    PLATFORM_UPSTREAM,
+    UpstreamSelection,
+    classify_upstream,
+)
 
 
 _HOP_BY_HOP_HEADERS = {
@@ -36,15 +41,25 @@ _HOP_BY_HOP_HEADERS = {
 
 def create_app(
     *,
-    upstream: str = "https://api.openai.com/v1",
+    upstream: str = PLATFORM_UPSTREAM,
     registry: Optional[TrackerRegistry] = None,
     transport: Optional[httpx.AsyncBaseTransport] = None,
     ledger_path: Optional[str] = None,
+    upstream_selection: Optional[UpstreamSelection] = None,
 ) -> FastAPI:
     if registry is not None and ledger_path is not None:
         raise ValueError("pass either registry or ledger_path, not both")
     app = FastAPI()
+    if upstream_selection is not None:
+        upstream = upstream_selection.url
     app.state.occ_upstream = upstream.rstrip("/")
+    app.state.occ_upstream_selection = upstream_selection or UpstreamSelection(
+        auth_mode="unspecified",
+        category=classify_upstream(app.state.occ_upstream),
+        url=app.state.occ_upstream,
+        explicit_override=True,
+        detection_source="application configuration",
+    )
     app.state.occ_registry = (
         registry
         if registry is not None
@@ -56,7 +71,20 @@ def create_app(
     async def health() -> JSONResponse:
         persistence = app.state.occ_registry.persistence_status()
         status = 200 if persistence["healthy"] else 503
-        return JSONResponse({"ok": status == 200, "persistence": persistence}, status_code=status)
+        selection = app.state.occ_upstream_selection
+        return JSONResponse(
+            {
+                "ok": status == 200,
+                "persistence": persistence,
+                "routing": {
+                    "auth_mode": selection.auth_mode,
+                    "upstream_category": selection.category,
+                    "explicit_override": selection.explicit_override,
+                    "detection_source": selection.detection_source,
+                },
+            },
+            status_code=status,
+        )
 
     @app.get("/_occ/costs")
     async def costs(session: Optional[str] = None) -> JSONResponse:
