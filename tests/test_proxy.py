@@ -370,3 +370,29 @@ def test_diagnostics_are_sanitized_and_bounded():
     assert errors[0]["message"].startswith("line 5 ")
     assert "secret" not in errors[-1]["message"]
     assert "sk-exampletoken" not in errors[-1]["message"]
+
+
+def test_admin_endpoints_require_configured_bearer_token():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500)
+
+    app = create_app(
+        upstream="https://upstream.example/v1",
+        transport=httpx.MockTransport(handler),
+        registry=TrackerRegistry(),
+        admin_token="a" * 32,
+    )
+    client = ASGITestClient(app)
+
+    unauthorized = client.get("/_occ/costs")
+    assert unauthorized.status_code == 401
+    assert unauthorized.json()["error"]["code"] == "admin_auth_required"
+    assert unauthorized.headers["www-authenticate"] == "Bearer"
+    assert client.post("/_occ/reset", headers={"authorization": "Bearer wrong"}).status_code == 401
+
+    authorized = client.get(
+        "/_occ/costs",
+        headers={"authorization": f"Bearer {'a' * 32}"},
+    )
+    assert authorized.status_code == 200
+    assert authorized.json()["grand_total"] == "0.00000000"

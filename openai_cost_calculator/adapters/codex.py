@@ -148,7 +148,7 @@ def _url(
 
 
 def _get_json(url: str, *, timeout: float) -> Optional[dict[str, Any]]:
-    request = urllib.request.Request(url, method="GET")
+    request = urllib.request.Request(url, method="GET", headers=_admin_headers())
     return _read_json(request, timeout=timeout)
 
 
@@ -158,7 +158,7 @@ def _post_json(
     timeout: float,
     on_error=None,
 ) -> Optional[dict[str, Any]]:
-    request = urllib.request.Request(url, method="POST")
+    request = urllib.request.Request(url, method="POST", headers=_admin_headers())
     return _read_json(request, timeout=timeout, on_error=on_error)
 
 
@@ -376,3 +376,16 @@ def _safe_diagnostic_text(value: object, limit: int) -> str:
     text = str(value).replace("\r", " ").replace("\n", " ")
     text = "".join(character if character.isprintable() else "?" for character in text)
     return _SECRET_RE.sub("[REDACTED]", text)[:limit]
+
+
+def _admin_headers() -> dict[str, str]:
+    token = os.environ.get("OCC_ADMIN_TOKEN")
+    token_file = os.environ.get("OCC_ADMIN_TOKEN_FILE")
+    if token is None and token_file:
+        try:
+            token = Path(token_file).expanduser().read_text(encoding="utf-8").strip()
+        except OSError:
+            token = None
+    if not token:
+        return {}
+    return {"Authorization": f"Bearer {token}"}

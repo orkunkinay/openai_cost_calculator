@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 from pathlib import Path
+import stat
 import sys
 from typing import Optional, Sequence
 import urllib.error
@@ -32,6 +34,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     proxy_parser.add_argument(
         "--database",
         help="Persist accounting to a concurrent SQLite database (recommended)",
+    )
+    proxy_parser.add_argument(
+        "--allow-remote",
+        action="store_true",
+        help="Permit a non-loopback bind; requires an administrative token",
+    )
+    proxy_parser.add_argument(
+        "--admin-token-file",
+        help="Read the administrative bearer token from a protected file",
     )
 
     install_parser = subparsers.add_parser("install", help="Install agent UI adapters")
@@ -65,6 +76,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     reset_parser = subparsers.add_parser("reset", help="Reset proxy accounting state")
     reset_parser.add_argument("--proxy-url", default=_default_proxy_url())
+    reset_parser.add_argument("--admin-token-file")
     reset_parser.add_argument("--yes", action="store_true", help="Confirm destructive reset")
 
     ledger_parser = subparsers.add_parser(
@@ -108,6 +120,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             auth_mode=args.auth_mode,
             ledger=args.ledger,
             database=args.database,
+            allow_remote=args.allow_remote,
+            admin_token_file=args.admin_token_file,
         )
     if args.command == "install":
         return _install(args)
@@ -138,6 +152,8 @@ def _run_proxy(
     auth_mode: str,
     ledger: Optional[str],
     database: Optional[str],
+    allow_remote: bool,
+    admin_token_file: Optional[str],
 ) -> int:
     try:
         import uvicorn
@@ -156,11 +172,14 @@ def _run_proxy(
     try:
         if ledger and database:
             raise ValueError("pass either --ledger or --database, not both")
+        admin_token = _load_admin_token(admin_token_file)
+        _validate_proxy_exposure(host, allow_remote, admin_token)
         selection = resolve_upstream(auth_mode=auth_mode, upstream=upstream)
         app = create_app(
             upstream_selection=selection,
             ledger_path=ledger,
             database_path=database,
+            admin_token=admin_token,
         )
     except (UpstreamSelectionError, OSError, RuntimeError, ValueError) as exc:
         print(f"proxy configuration error: {exc}", file=sys.stderr)
@@ -173,6 +192,11 @@ def _run_proxy(
         f"auth={selection.auth_mode}, upstream={selection.category}, "
         f"override={'yes' if selection.explicit_override else 'no'}"
     )
+    if not _is_loopback_host(host):
+        print(
+            "WARNING: proxy is remotely reachable; protect it with TLS and trusted network controls",
+            file=sys.stderr,
+        )
     if ledger:
         print(f"Durable ledger: {Path(ledger).expanduser()}")
     if database:
@@ -219,6 +243,7 @@ def _uninstall(args: argparse.Namespace) -> int:
 def _add_proxy_client_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--proxy-url", default=_default_proxy_url())
     parser.add_argument("--session")
+    parser.add_argument("--admin-token-file")
 
 
 def _default_proxy_url() -> str:
@@ -231,9 +256,19 @@ def _status(args: argparse.Namespace) -> int:
     local_diagnostics = notifier_diagnostics()
     query = {"session": args.session} if args.session else None
     try:
-        costs = _request_json(args.proxy_url, "/_occ/costs", query=query)
-        health = _request_json(args.proxy_url, "/_occ/health")
-    except RuntimeError as exc:
+        admin_token = _load_admin_token(args.admin_token_file)
+        costs = _request_json(
+            args.proxy_url,
+            "/_occ/costs",
+            query=query,
+            admin_token=admin_token,
+        )
+        health = _request_json(
+            args.proxy_url,
+            "/_occ/health",
+            admin_token=admin_token,
+        )
+    except (RuntimeError, ValueError) as exc:
         print(f"status unavailable: {exc}", file=sys.stderr)
         if args.diagnostics and local_diagnostics:
             _print_notifier_diagnostics(local_diagnostics)
@@ -273,13 +308,15 @@ def _status(args: argparse.Namespace) -> int:
 def _checkpoint(args: argparse.Namespace) -> int:
     query = {"session": args.session} if args.session else None
     try:
+        admin_token = _load_admin_token(args.admin_token_file)
         payload = _request_json(
             args.proxy_url,
             "/_occ/checkpoint",
             method="POST",
             query=query,
+            admin_token=admin_token,
         )
-    except RuntimeError as exc:
+    except (RuntimeError, ValueError) as exc:
         print(f"checkpoint failed: {exc}", file=sys.stderr)
         return 1
     if args.json:
@@ -298,8 +335,14 @@ def _reset(args: argparse.Namespace) -> int:
         print("refusing to reset accounting without --yes", file=sys.stderr)
         return 2
     try:
-        _request_json(args.proxy_url, "/_occ/reset", method="POST")
-    except RuntimeError as exc:
+        admin_token = _load_admin_token(args.admin_token_file)
+        _request_json(
+            args.proxy_url,
+            "/_occ/reset",
+            method="POST",
+            admin_token=admin_token,
+        )
+    except (RuntimeError, ValueError) as exc:
         print(f"reset failed: {exc}", file=sys.stderr)
         return 1
     print("Proxy accounting reset.")
@@ -384,11 +427,17 @@ def _request_json(
     *,
     method: str = "GET",
     query: Optional[dict[str, str]] = None,
+    admin_token: Optional[str] = None,
 ) -> dict:
     url = f"{proxy_url.rstrip('/')}{path}"
     if query:
         url = f"{url}?{urllib.parse.urlencode(query)}"
-    request = urllib.request.Request(url, method=method)
+    headers = (
+        {"Authorization": f"Bearer {admin_token}"}
+        if admin_token is not None
+        else {}
+    )
+    request = urllib.request.Request(url, method=method, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=2) as response:
             payload = json.loads(response.read().decode("utf-8"))
@@ -403,6 +452,62 @@ def _request_json(
     if not isinstance(payload, dict):
         raise RuntimeError("proxy returned a non-object JSON response")
     return payload
+
+
+def _load_admin_token(path: Optional[str]) -> Optional[str]:
+    environment_token = os.environ.get("OCC_ADMIN_TOKEN")
+    environment_file = os.environ.get("OCC_ADMIN_TOKEN_FILE")
+    selected_path = path or environment_file
+    if path and environment_file and Path(path).expanduser() != Path(environment_file).expanduser():
+        raise ValueError(
+            "administrative token file is ambiguous between CLI and environment"
+        )
+    if selected_path and environment_token:
+        raise ValueError(
+            "set either OCC_ADMIN_TOKEN or an administrative token file, not both"
+        )
+    if selected_path:
+        token_path = Path(selected_path).expanduser()
+        try:
+            mode = stat.S_IMODE(token_path.stat().st_mode)
+            if mode & 0o077:
+                raise ValueError(
+                    "administrative token file must not be accessible by group or others"
+                )
+            token = token_path.read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            raise ValueError("cannot read administrative token file") from exc
+    else:
+        token = environment_token
+    if token is not None and len(token) < 32:
+        raise ValueError("administrative token must contain at least 32 characters")
+    return token
+
+
+def _validate_proxy_exposure(
+    host: str,
+    allow_remote: bool,
+    admin_token: Optional[str],
+) -> None:
+    if _is_loopback_host(host):
+        return
+    if not allow_remote:
+        raise ValueError(
+            "non-loopback proxy binding requires explicit --allow-remote"
+        )
+    if admin_token is None:
+        raise ValueError(
+            "non-loopback proxy binding requires OCC_ADMIN_TOKEN or --admin-token-file"
+        )
+
+
+def _is_loopback_host(host: str) -> bool:
+    if host.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 def _print_summary(payload: dict, *, include_diagnostics: bool) -> None:

@@ -352,6 +352,8 @@ def _source_codex_model() -> str | None:
 
 def _isolated_env(codex_home: Path) -> dict[str, str]:
     env = dict(os.environ)
+    env.pop("OCC_ADMIN_TOKEN", None)
+    env.pop("OCC_ADMIN_TOKEN_FILE", None)
     env["CODEX_HOME"] = str(codex_home)
     env["PATH"] = f"{Path(sys.executable).parent}{os.pathsep}{env.get('PATH', '')}"
     return env

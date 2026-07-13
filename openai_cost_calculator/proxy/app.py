@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import codecs
 import hashlib
+import hmac
 from typing import Any, AsyncIterator, Optional
 
 import httpx
@@ -47,6 +48,7 @@ def create_app(
     ledger_path: Optional[str] = None,
     database_path: Optional[str] = None,
     upstream_selection: Optional[UpstreamSelection] = None,
+    admin_token: Optional[str] = None,
 ) -> FastAPI:
     if registry is not None and (ledger_path is not None or database_path is not None):
         raise ValueError("pass either registry or a persistence path, not both")
@@ -71,9 +73,13 @@ def create_app(
         else default_registry
     )
     app.state.occ_transport = transport
+    app.state.occ_admin_token = admin_token
 
     @app.get("/_occ/health")
-    async def health() -> JSONResponse:
+    async def health(request: Request) -> JSONResponse:
+        unauthorized = _admin_auth_error(app, request)
+        if unauthorized is not None:
+            return unauthorized
         persistence = app.state.occ_registry.persistence_status()
         status = 200 if persistence["healthy"] else 503
         selection = app.state.occ_upstream_selection
@@ -92,11 +98,17 @@ def create_app(
         )
 
     @app.get("/_occ/costs")
-    async def costs(session: Optional[str] = None) -> JSONResponse:
+    async def costs(request: Request, session: Optional[str] = None) -> JSONResponse:
+        unauthorized = _admin_auth_error(app, request)
+        if unauthorized is not None:
+            return unauthorized
         return JSONResponse(app.state.occ_registry.summary(session))
 
     @app.post("/_occ/checkpoint")
-    async def checkpoint(session: Optional[str] = None) -> JSONResponse:
+    async def checkpoint(request: Request, session: Optional[str] = None) -> JSONResponse:
+        unauthorized = _admin_auth_error(app, request)
+        if unauthorized is not None:
+            return unauthorized
         try:
             payload = app.state.occ_registry.checkpoint(session)
         except LedgerError as exc:
@@ -107,7 +119,10 @@ def create_app(
         return JSONResponse(payload)
 
     @app.post("/_occ/reset")
-    async def reset() -> JSONResponse:
+    async def reset(request: Request) -> JSONResponse:
+        unauthorized = _admin_auth_error(app, request)
+        if unauthorized is not None:
+            return unauthorized
         try:
             app.state.occ_registry.reset()
         except LedgerError as exc:
@@ -118,7 +133,10 @@ def create_app(
         return JSONResponse({"ok": True})
 
     @app.get("/_occ/costs/stream")
-    async def cost_stream() -> StreamingResponse:
+    async def cost_stream(request: Request) -> Response:
+        unauthorized = _admin_auth_error(app, request)
+        if unauthorized is not None:
+            return unauthorized
         queue = app.state.occ_registry.subscribe()
 
         async def events() -> AsyncIterator[bytes]:
@@ -428,6 +446,30 @@ def _bounded_identifier(value: Optional[str], limit: int) -> Optional[str]:
         return cleaned
     digest = hashlib.sha256(cleaned.encode("utf-8")).hexdigest()[:12]
     return f"{cleaned[: limit - 13]}#{digest}"
+
+
+def _admin_auth_error(app: FastAPI, request: Request) -> Optional[JSONResponse]:
+    expected = app.state.occ_admin_token
+    if expected is None:
+        return None
+    authorization = request.headers.get("authorization", "")
+    scheme, separator, supplied = authorization.partition(" ")
+    if (
+        not separator
+        or scheme.lower() != "bearer"
+        or not hmac.compare_digest(supplied, expected)
+    ):
+        return JSONResponse(
+            {
+                "error": {
+                    "code": "admin_auth_required",
+                    "message": "valid administrative authentication is required",
+                }
+            },
+            status_code=401,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return None
 
 
 app = create_app()

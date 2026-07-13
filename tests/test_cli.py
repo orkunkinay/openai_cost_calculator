@@ -3,7 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from openai_cost_calculator.cli import main
+import pytest
+
+from openai_cost_calculator.cli import (
+    _load_admin_token,
+    _validate_proxy_exposure,
+    main,
+)
 
 
 class _Response:
@@ -96,3 +102,27 @@ def test_pricing_validate_cli_and_incompatible_proxy_config(capsys):
         ]
     ) == 2
     assert "incompatible" in capsys.readouterr().err
+
+
+def test_remote_binding_requires_explicit_permission_and_admin_token():
+    with pytest.raises(ValueError, match="--allow-remote"):
+        _validate_proxy_exposure("0.0.0.0", False, None)
+    with pytest.raises(ValueError, match="requires OCC_ADMIN_TOKEN"):
+        _validate_proxy_exposure("::", True, None)
+
+    _validate_proxy_exposure("0.0.0.0", True, "x" * 32)
+    _validate_proxy_exposure("127.0.0.1", False, None)
+    _validate_proxy_exposure("::1", False, None)
+
+
+def test_admin_token_file_must_be_protected(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("OCC_ADMIN_TOKEN", raising=False)
+    monkeypatch.delenv("OCC_ADMIN_TOKEN_FILE", raising=False)
+    token_file = tmp_path / "admin-token"
+    token_file.write_text("t" * 32 + "\n", encoding="utf-8")
+    token_file.chmod(0o600)
+    assert _load_admin_token(str(token_file)) == "t" * 32
+
+    token_file.chmod(0o644)
+    with pytest.raises(ValueError, match="group or others"):
+        _load_admin_token(str(token_file))
