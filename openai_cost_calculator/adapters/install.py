@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import tempfile
-import time
 from pathlib import Path
 from typing import Any, Optional, Tuple
 
@@ -40,7 +38,6 @@ def install_claude_code(scope: str = "user") -> list[str]:
         changed.append("Stop hook")
 
     if changed:
-        _backup(path)
         _write_json(path, settings)
     return [f"{path}: installed {', '.join(dict.fromkeys(changed))}"] if changed else [f"{path}: already installed"]
 
@@ -69,7 +66,6 @@ def uninstall_claude_code(scope: str = "user") -> list[str]:
             settings.pop("hooks", None)
 
     if changed:
-        _backup(path)
         _write_json(path, settings)
     return [f"{path}: removed {', '.join(changed)}"] if changed else [f"{path}: not installed"]
 
@@ -102,7 +98,6 @@ def install_codex(proxy_url: str, session: str) -> list[str]:
     )
     new_text = _insert_codex_blocks(base, top_block, provider_block)
     if new_text != text:
-        _backup(path)
         _write_text(path, new_text)
         return [
             f"{path}: installed Codex cost adapter block",
@@ -130,7 +125,6 @@ def uninstall_codex() -> list[str]:
             insert = f"{insert}\n"
         new_text = f"{insert}{new_text.lstrip()}"
     if new_text != text:
-        _backup(path)
         _write_text(path, new_text)
         return [f"{path}: removed openai-cost-calculator block"]
     return [f"{path}: not installed"]
@@ -194,6 +188,7 @@ def _atomic_write_text(path: Path, text: str) -> None:
             os.fsync(handle.fileno())
         temporary_path.chmod(previous_mode)
         os.replace(temporary_path, path)
+        _fsync_directory(path.parent)
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
@@ -257,15 +252,15 @@ def _refuse_symlink(path: Path) -> None:
         raise ValueError(f"Refusing to replace symlinked configuration at {path}")
 
 
-def _backup(path: Path) -> None:
-    if not path.exists():
-        return
-    stamp = time.strftime("%Y%m%d%H%M%S")
-    backup = path.with_name(f"{path.name}.occ-backup-{stamp}")
+def _fsync_directory(path: Path) -> None:
     try:
-        shutil.copy2(path, backup)
-    except Exception:
+        descriptor = os.open(path, os.O_RDONLY)
+    except OSError:
         return
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def _has_hook(entries: list[Any], command: str) -> bool:

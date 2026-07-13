@@ -286,6 +286,7 @@ def test_installers_are_idempotent_and_reversible(tmp_path: Path, monkeypatch):
     uninstall_claude_code()
     settings = json.loads(claude_settings.read_text(encoding="utf-8"))
     assert settings == {"unrelated": True}
+    assert list(claude_dir.glob("*.occ-backup-*")) == []
 
     codex_dir = tmp_path / ".codex"
     codex_dir.mkdir()
@@ -322,6 +323,7 @@ def test_installers_are_idempotent_and_reversible(tmp_path: Path, monkeypatch):
         'notify = ["existing-notifier"]\n'
         'model = "gpt-test"'
     )
+    assert list(codex_dir.glob("*.occ-backup-*")) == []
 
 
 def test_codex_installer_refuses_invalid_config_without_modifying_it(
