@@ -42,6 +42,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--port", type=int)
     parser.add_argument("--session")
     parser.add_argument(
+        "--auth-mode",
+        choices=["auto", "chatgpt", "api-key"],
+        default="auto",
+        help="Authentication path to exercise (default: auto-detect source login)",
+    )
+    parser.add_argument(
         "--upstream",
         help="Proxy upstream; defaults from the isolated Codex login mode.",
     )
@@ -64,7 +70,11 @@ def main() -> int:
     try:
         codex_home = temp_root / "codex-home"
         codex_home.mkdir(mode=0o700)
-        auth_method, auth_mode = _prepare_auth(codex_home, Path(args.codex))
+        auth_method, auth_mode = _prepare_auth(
+            codex_home,
+            Path(args.codex),
+            requested_mode=args.auth_mode,
+        )
         model = args.model or _source_codex_model()
         env = _isolated_env(codex_home)
         proxy_url = f"http://127.0.0.1:{port}"
@@ -107,7 +117,7 @@ def main() -> int:
             "--port",
             str(port),
             "--auth-mode",
-            "api-key" if auth_mode == "api" else auth_mode,
+            auth_mode,
         ]
         if args.upstream:
             proxy_command.extend(["--upstream", args.upstream])
@@ -270,22 +280,49 @@ def main() -> int:
             print(f"Temporary files retained at {temp_root}", file=sys.stderr)
 
 
-def _prepare_auth(codex_home: Path, codex: Path) -> tuple[str, str]:
+def _prepare_auth(
+    codex_home: Path,
+    codex: Path,
+    *,
+    requested_mode: str = "auto",
+) -> tuple[str, str]:
     source_auth = Path.home() / ".codex" / "auth.json"
+    source_mode = None
     if source_auth.is_file():
         try:
-            auth_mode = json.loads(source_auth.read_text(encoding="utf-8")).get("auth_mode")
+            source_mode = json.loads(
+                source_auth.read_text(encoding="utf-8")
+            ).get("auth_mode")
         except (OSError, ValueError):
-            auth_mode = None
-        if auth_mode not in {"chatgpt", "api"}:
+            source_mode = None
+        if source_mode not in {"chatgpt", "api"}:
             raise SelfTestError("existing Codex auth.json has an unsupported or missing auth_mode")
+
+    use_source = requested_mode == "chatgpt" or (
+        requested_mode == "auto" and source_mode is not None
+    )
+    if use_source:
+        if source_mode != "chatgpt" and requested_mode == "chatgpt":
+            raise SelfTestError(
+                "--auth-mode chatgpt requires an existing ChatGPT-backed Codex login"
+            )
+        if source_mode is None:
+            raise SelfTestError(
+                "--auth-mode chatgpt requires an existing ChatGPT-backed Codex login"
+            )
         destination = codex_home / "auth.json"
         shutil.copy2(source_auth, destination)
         destination.chmod(0o600)
-        return "isolated copy of existing Codex login", auth_mode
+        return "isolated copy of existing Codex login", (
+            "api-key" if source_mode == "api" else "chatgpt"
+        )
 
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
+        if requested_mode == "api-key":
+            raise SelfTestError(
+                "--auth-mode api-key requires OPENAI_API_KEY in the environment"
+            )
         raise SelfTestError(
             "no ~/.codex/auth.json or OPENAI_API_KEY is available for isolated Codex authentication"
         )
@@ -301,7 +338,7 @@ def _prepare_auth(codex_home: Path, codex: Path) -> tuple[str, str]:
     )
     if login.returncode != 0:
         raise SelfTestError("Codex API-key login failed in the isolated home")
-    return "OPENAI_API_KEY imported into isolated Codex login", "api"
+    return "OPENAI_API_KEY imported into isolated Codex login", "api-key"
 
 
 def _source_codex_model() -> str | None:
