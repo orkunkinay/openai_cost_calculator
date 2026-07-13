@@ -17,6 +17,7 @@ except ImportError as exc:  # pragma: no cover - exercised when optional deps ar
     ) from exc
 
 from openai_cost_calculator.parser import extract_usage_from_payload
+from openai_cost_calculator.proxy.ledger import LedgerError
 from openai_cost_calculator.proxy.registry import TrackerRegistry, default_registry
 
 
@@ -38,11 +39,24 @@ def create_app(
     upstream: str = "https://api.openai.com/v1",
     registry: Optional[TrackerRegistry] = None,
     transport: Optional[httpx.AsyncBaseTransport] = None,
+    ledger_path: Optional[str] = None,
 ) -> FastAPI:
+    if registry is not None and ledger_path is not None:
+        raise ValueError("pass either registry or ledger_path, not both")
     app = FastAPI()
     app.state.occ_upstream = upstream.rstrip("/")
-    app.state.occ_registry = registry or default_registry
+    app.state.occ_registry = (
+        registry
+        if registry is not None
+        else TrackerRegistry(ledger_path=ledger_path) if ledger_path is not None else default_registry
+    )
     app.state.occ_transport = transport
+
+    @app.get("/_occ/health")
+    async def health() -> JSONResponse:
+        persistence = app.state.occ_registry.persistence_status()
+        status = 200 if persistence["healthy"] else 503
+        return JSONResponse({"ok": status == 200, "persistence": persistence}, status_code=status)
 
     @app.get("/_occ/costs")
     async def costs(session: Optional[str] = None) -> JSONResponse:
@@ -50,11 +64,24 @@ def create_app(
 
     @app.post("/_occ/checkpoint")
     async def checkpoint(session: Optional[str] = None) -> JSONResponse:
-        return JSONResponse(app.state.occ_registry.checkpoint(session))
+        try:
+            payload = app.state.occ_registry.checkpoint(session)
+        except LedgerError as exc:
+            return JSONResponse(
+                {"error": {"code": "ledger_write_failed", "message": str(exc)}},
+                status_code=503,
+            )
+        return JSONResponse(payload)
 
     @app.post("/_occ/reset")
     async def reset() -> JSONResponse:
-        app.state.occ_registry.reset()
+        try:
+            app.state.occ_registry.reset()
+        except LedgerError as exc:
+            return JSONResponse(
+                {"error": {"code": "ledger_write_failed", "message": str(exc)}},
+                status_code=503,
+            )
         return JSONResponse({"ok": True})
 
     @app.get("/_occ/costs/stream")

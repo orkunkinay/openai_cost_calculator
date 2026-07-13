@@ -218,6 +218,14 @@ class CostTracker:
         self.session_total = Decimal("0")
         self._active_turn = None
 
+    def restore_turn(self, records: List[CallRecord], *, label: Optional[str]) -> None:
+        """Restore one previously costed turn without repricing its calls."""
+        turn = Turn(label)
+        for record in records:
+            turn.add(record)
+            self.session_total += record.cost.total_cost
+        self.turns.append(turn)
+
     def _find_or_create_turn(self, label: Optional[str]) -> Turn:
         for turn in self.turns:
             if turn.label == label:
