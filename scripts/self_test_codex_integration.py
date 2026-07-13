@@ -373,7 +373,7 @@ def _validate_install(path: Path, proxy_url: str, session: str) -> None:
         "base_url": f"{proxy_url}/v1",
         "requires_openai_auth": True,
         "wire_api": "responses",
-        "supports_websockets": False,
+        "supports_websockets": True,
         "http_headers": {"X-OCC-Session": session},
     }
     for key, value in expected.items():

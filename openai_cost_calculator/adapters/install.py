@@ -331,7 +331,7 @@ def _codex_blocks(
         f'base_url = "{escaped_api_base}"\n'
         "requires_openai_auth = true\n"
         'wire_api = "responses"\n'
-        "supports_websockets = false\n"
+        "supports_websockets = true\n"
         f'http_headers = {{ "X-OCC-Session" = "{escaped_session}" }}\n'
         f"{CODEX_END}\n"
     )
