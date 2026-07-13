@@ -134,3 +134,17 @@ def test_reset_is_durable_across_restart(tmp_path: Path):
     restored = TrackerRegistry(ledger_path=path)
     assert restored.summary()["sessions"] == {}
     restored.close()
+
+
+def test_registry_capacity_failure_is_explicit(monkeypatch):
+    import openai_cost_calculator.proxy.registry as registry_module
+
+    monkeypatch.setattr(registry_module, "_MAX_CALLS_PER_SESSION", 1)
+    registry = TrackerRegistry()
+    usage = {"prompt_tokens": 1000, "completion_tokens": 0, "cached_tokens": 0}
+    assert registry.record_call("bounded", "gpt-test-2025-01-01", usage) is not None
+    assert registry.record_call("bounded", "gpt-test-2025-01-01", usage) is None
+
+    session = registry.summary("bounded")["sessions"]["bounded"]
+    assert session["session_total"] == "0.00100000"
+    assert session["errors"][-1]["code"] == "accounting_capacity_reached"

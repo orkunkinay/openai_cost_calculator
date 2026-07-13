@@ -167,6 +167,8 @@ Status output separates `historical_total` loaded at startup from `process_total
 One ledger supports exactly one proxy process at a time.
 The proxy holds an exclusive file lock and refuses a second writer instead of claiming unsupported cross-process safety.
 Use a different ledger for each simultaneously running proxy.
+The lightweight snapshot design is intended for a local observer, not a high-throughput shared gateway.
+To keep memory and storage failure modes bounded, one proxy accepts up to 1,024 sessions and 50,000 calls per session, retains at most 100 diagnostics per session, and reports `accounting_capacity_reached` instead of silently dropping into a false zero-cost success.
 
 Inspect or reset an offline ledger with:
 

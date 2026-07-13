@@ -15,6 +15,8 @@ from openai_cost_calculator.proxy.ledger import DurableLedger, LedgerError
 
 _MAX_ERRORS_PER_SESSION = 100
 _MAX_DIAGNOSTIC_LENGTH = 500
+_MAX_SESSIONS = 1_024
+_MAX_CALLS_PER_SESSION = 50_000
 _SECRET_RE = re.compile(
     r"(?i)(?:bearer\s+)[^\s,;]+|(?:sk-[a-z0-9_-]{8,})"
 )
@@ -40,6 +42,8 @@ class TrackerRegistry:
         with self._lock:
             tracker = self._trackers.get(key)
             if tracker is None:
+                if len(set(self._trackers) | set(self._errors)) >= _MAX_SESSIONS:
+                    raise RegistryCapacityError("accounting session capacity reached")
                 tracker = CostTracker(
                     on_error=lambda exc: self.record_error(
                         key,
@@ -59,8 +63,23 @@ class TrackerRegistry:
         turn_label: Optional[str] = None,
     ) -> Optional[CallRecord]:
         key = session_id or "default"
-        tracker = self.get(key)
+        try:
+            tracker = self.get(key)
+        except RegistryCapacityError:
+            self.record_error(
+                "__registry__",
+                "accounting_capacity_reached",
+                "additional session was not recorded because the registry session limit was reached",
+            )
+            return None
         with self._lock:
+            if len(_tracker_records(tracker)) >= _MAX_CALLS_PER_SESSION:
+                self.record_error(
+                    key,
+                    "accounting_capacity_reached",
+                    "call was not recorded because the per-session call limit was reached",
+                )
+                return None
             record = tracker.record_call(
                 model,
                 usage,
@@ -78,6 +97,13 @@ class TrackerRegistry:
 
     def record_error(self, session_id: Optional[str], code: str, message: str) -> None:
         key = session_id or "default"
+        with self._lock:
+            if (
+                key not in self._trackers
+                and key not in self._errors
+                and len(set(self._trackers) | set(self._errors)) >= _MAX_SESSIONS
+            ):
+                key = "__registry__"
         error = {
             "code": _diagnostic_text(code, limit=64),
             "message": _diagnostic_text(message),
@@ -229,6 +255,8 @@ class TrackerRegistry:
     def _restore(self, payload: dict[str, Any]) -> None:
         try:
             sessions = payload["sessions"]
+            if len(sessions) > _MAX_SESSIONS + 1:
+                raise ValueError("ledger exceeds supported session capacity")
             for key, session in sessions.items():
                 if not isinstance(key, str) or not isinstance(session, dict):
                     raise ValueError("invalid session entry")
@@ -259,6 +287,8 @@ class TrackerRegistry:
                 if not isinstance(cursor, int) or isinstance(cursor, bool) or cursor < 0:
                     raise ValueError("invalid checkpoint cursor")
                 if tracker.turns:
+                    if len(_tracker_records(tracker)) > _MAX_CALLS_PER_SESSION:
+                        raise ValueError("session exceeds supported call capacity")
                     self._trackers[key] = tracker
                 self._errors[key] = list(errors[-_MAX_ERRORS_PER_SESSION:])
                 self._checkpoint_cursors[key] = min(
@@ -387,6 +417,10 @@ def _latest_call(tracker: Optional[CostTracker]) -> Optional[dict[str, Any]]:
 
 
 default_registry = TrackerRegistry()
+
+
+class RegistryCapacityError(RuntimeError):
+    """Raised internally when bounded accounting state reaches capacity."""
 
 
 def _diagnostic_text(value: object, *, limit: int = _MAX_DIAGNOSTIC_LENGTH) -> str:
