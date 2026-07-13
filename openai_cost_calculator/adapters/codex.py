@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import subprocess
@@ -232,6 +233,9 @@ def _codex_adapter_settings() -> dict[str, str]:
         return {}
 
     settings: dict[str, str] = {}
+    stashed_notify = _stashed_codex_assignment(text, "notify")
+    if stashed_notify:
+        settings["previous_notify"] = stashed_notify.strip()
     in_block = False
     for line in text.splitlines():
         stripped = line.strip()
@@ -251,6 +255,23 @@ def _codex_adapter_settings() -> dict[str, str]:
         elif stripped.startswith("occ_codex_session"):
             settings["session"] = _toml_string_value(stripped)
     return settings
+
+
+def _stashed_codex_assignment(text: str, key: str) -> Optional[str]:
+    marker = f"# occ-restore-{key} = "
+    for line in text.splitlines():
+        if not line.startswith(marker):
+            continue
+        encoded = line.removeprefix(marker).strip()
+        try:
+            return base64.b64decode(
+                encoded,
+                altchars=b"-_",
+                validate=True,
+            ).decode("utf-8")
+        except Exception:
+            return None
+    return None
 
 
 def _toml_string_value(line: str) -> str:

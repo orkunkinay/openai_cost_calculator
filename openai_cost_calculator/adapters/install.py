@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import tempfile
@@ -11,6 +12,8 @@ OCC_STATUSLINE = {"type": "command", "command": "occ-cc-statusline"}
 OCC_STOP_HOOK = {"type": "command", "command": "occ-cc-stop-hook", "timeout": 5}
 CODEX_BEGIN = "# >>> openai-cost-calculator"
 CODEX_END = "# <<< openai-cost-calculator"
+CODEX_RESTORE_PREFIX = "# occ-restore-"
+CODEX_TRIM_FINAL_NEWLINE = "# occ-trim-final-newline = true"
 
 
 def install_claude_code(scope: str = "user") -> list[str]:
@@ -86,15 +89,42 @@ def install_codex(proxy_url: str, session: str) -> list[str]:
         and _extract_top_level_key(base, "openai_base_url")[0] is None
     ):
         base = f"{previous_openai_base_url}\n{base.lstrip()}"
-    extracted_notify, base = _extract_top_level_key(base, "notify")
-    extracted_model_provider, base = _extract_top_level_key(base, "model_provider")
+    stashed_notify = _stashed_top_level_key(base, "notify")
+    stashed_model_provider = _stashed_top_level_key(base, "model_provider")
+    extracted_notify = None
+    extracted_model_provider = None
+    if stashed_notify is None:
+        extracted_notify, base = _stash_top_level_key(base, "notify")
+    if stashed_model_provider is None:
+        extracted_model_provider, base = _stash_top_level_key(base, "model_provider")
     previous_notify = previous_notify or extracted_notify
     previous_model_provider = previous_model_provider or extracted_model_provider
+    if stashed_notify is None and extracted_notify is None and previous_notify:
+        base = _prepend_stashed_key(base, "notify", previous_notify)
+        stashed_notify = previous_notify
+    if (
+        stashed_model_provider is None
+        and extracted_model_provider is None
+        and previous_model_provider
+    ):
+        base = _prepend_stashed_key(
+            base,
+            "model_provider",
+            previous_model_provider,
+        )
+        stashed_model_provider = previous_model_provider
+    _top_level, sections = _split_first_section(base)
+    trim_final_newline = bool(
+        base and not sections and not base.endswith(("\n", "\r"))
+    )
     top_block, provider_block = _codex_blocks(
         proxy_url,
         session,
-        previous_notify,
-        previous_model_provider,
+        None if stashed_notify or extracted_notify else previous_notify,
+        None
+        if stashed_model_provider or extracted_model_provider
+        else previous_model_provider,
+        trim_final_newline=trim_final_newline,
     )
     new_text = _insert_codex_blocks(base, top_block, provider_block)
     if new_text != text:
@@ -117,9 +147,22 @@ def uninstall_codex() -> list[str]:
     previous_notify = _managed_previous_key(text, "notify")
     previous_model_provider = _managed_previous_key(text, "model_provider")
     new_text = _remove_managed_block(text)
-    if previous_notify and _extract_top_level_key(new_text, "notify")[0] is None:
+    restored_notify, new_text = _restore_stashed_key(new_text, "notify")
+    restored_model_provider, new_text = _restore_stashed_key(
+        new_text,
+        "model_provider",
+    )
+    if (
+        not restored_notify
+        and previous_notify
+        and _extract_top_level_key(new_text, "notify")[0] is None
+    ):
         new_text = f"{previous_notify}\n{new_text.lstrip()}"
-    if previous_model_provider and _extract_top_level_key(new_text, "model_provider")[0] is None:
+    if (
+        not restored_model_provider
+        and previous_model_provider
+        and _extract_top_level_key(new_text, "model_provider")[0] is None
+    ):
         insert = previous_model_provider
         if not insert.endswith("\n"):
             insert = f"{insert}\n"
@@ -159,7 +202,8 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def _read_text(path: Path) -> str:
     try:
-        return path.read_text(encoding="utf-8")
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            return handle.read()
     except FileNotFoundError:
         return ""
 
@@ -177,6 +221,7 @@ def _atomic_write_text(path: Path, text: str) -> None:
         with tempfile.NamedTemporaryFile(
             mode="w",
             encoding="utf-8",
+            newline="",
             dir=path.parent,
             prefix=f".{path.name}.",
             suffix=".tmp",
@@ -302,6 +347,8 @@ def _codex_blocks(
     session: str,
     previous_notify: Optional[str] = None,
     previous_model_provider: Optional[str] = None,
+    *,
+    trim_final_newline: bool = False,
 ) -> tuple[str, str]:
     escaped_proxy = proxy_url.replace("\\", "\\\\").replace('"', '\\"')
     api_base = _proxy_api_base(proxy_url)
@@ -312,6 +359,8 @@ def _codex_blocks(
         previous += f"# previous_notify = {previous_notify}\n"
     if previous_model_provider:
         previous += f"# previous_model_provider = {previous_model_provider}\n"
+    if trim_final_newline:
+        previous += f"{CODEX_TRIM_FINAL_NEWLINE}\n"
     top_block = (
         f"{CODEX_BEGIN}\n"
         "# OpenAI Cost Calculator routes Codex through the local proxy\n"
@@ -346,25 +395,21 @@ def _prepend_managed_block(text: str, block: str) -> str:
 
 
 def _insert_codex_blocks(text: str, top_block: str, provider_block: str) -> str:
-    base = _remove_managed_block(text).strip()
+    base = _remove_managed_block(text)
     if not base:
-        return f"{top_block}\n{provider_block}"
+        return f"{top_block}{provider_block}"
     top_level, sections = _split_first_section(base)
-    top_level = top_level.strip()
-    sections = sections.strip()
-    parts = [top_block.rstrip()]
-    if top_level:
-        parts.append(top_level)
-    parts.append(provider_block.rstrip())
     if sections:
-        parts.append(sections)
-    return "\n\n".join(parts) + "\n"
+        return f"{top_block}{top_level}{provider_block}{sections}"
+    separator = "" if base.endswith(("\n", "\r")) else "\n"
+    return f"{top_block}{base}{separator}{provider_block}"
 
 
 def _remove_managed_block(text: str) -> str:
     lines = text.splitlines(keepends=True)
     output: list[str] = []
     in_block = False
+    trim_final_newline = False
     for line in lines:
         if line.strip() == CODEX_BEGIN:
             in_block = True
@@ -372,9 +417,14 @@ def _remove_managed_block(text: str) -> str:
         if line.strip() == CODEX_END:
             in_block = False
             continue
+        if in_block and line.strip() == CODEX_TRIM_FINAL_NEWLINE:
+            trim_final_newline = True
         if not in_block:
             output.append(line)
-    return "".join(output).rstrip() + ("\n" if output else "")
+    result = "".join(output)
+    if trim_final_newline and result.endswith("\n"):
+        result = result[:-1]
+    return result
 
 
 def _managed_previous_key(text: str, key: str) -> Optional[str]:
@@ -410,6 +460,77 @@ def _extract_top_level_key(text: str, key: str) -> Tuple[Optional[str], str]:
             continue
         output.append(line)
     return found, "".join(output)
+
+
+def _stash_top_level_key(text: str, key: str) -> Tuple[Optional[str], str]:
+    section: Optional[str] = None
+    found: Optional[str] = None
+    output: list[str] = []
+    prefix = f"{key} "
+    for line in text.splitlines(keepends=True):
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            section = stripped
+        if (
+            section is None
+            and found is None
+            and (stripped.startswith(f"{key}=") or stripped.startswith(prefix))
+        ):
+            found = stripped
+            output.append(_stashed_line(key, line))
+            continue
+        output.append(line)
+    return found, "".join(output)
+
+
+def _prepend_stashed_key(text: str, key: str, assignment: str) -> str:
+    raw_line = assignment if assignment.endswith(("\n", "\r")) else f"{assignment}\n"
+    return f"{_stashed_line(key, raw_line)}{text}"
+
+
+def _stashed_line(key: str, raw_line: str) -> str:
+    if raw_line.endswith("\r\n"):
+        ending = "\r\n"
+    elif raw_line.endswith(("\n", "\r")):
+        ending = raw_line[-1]
+    else:
+        ending = ""
+    encoded = base64.urlsafe_b64encode(raw_line.encode("utf-8")).decode("ascii")
+    return f"{CODEX_RESTORE_PREFIX}{key} = {encoded}{ending}"
+
+
+def _stashed_top_level_key(text: str, key: str) -> Optional[str]:
+    marker = f"{CODEX_RESTORE_PREFIX}{key} = "
+    matches = [line for line in text.splitlines() if line.startswith(marker)]
+    if len(matches) > 1:
+        raise ValueError(f"Refusing duplicate restoration placeholders for {key}")
+    if not matches:
+        return None
+    raw = _decode_stashed_line(matches[0], marker)
+    return raw.strip()
+
+
+def _restore_stashed_key(text: str, key: str) -> Tuple[bool, str]:
+    marker = f"{CODEX_RESTORE_PREFIX}{key} = "
+    restored = False
+    output: list[str] = []
+    for line in text.splitlines(keepends=True):
+        if line.startswith(marker):
+            if restored:
+                raise ValueError(f"Refusing duplicate restoration placeholders for {key}")
+            output.append(_decode_stashed_line(line.rstrip("\r\n"), marker))
+            restored = True
+        else:
+            output.append(line)
+    return restored, "".join(output)
+
+
+def _decode_stashed_line(line: str, marker: str) -> str:
+    encoded = line.removeprefix(marker).strip()
+    try:
+        return base64.b64decode(encoded, altchars=b"-_", validate=True).decode("utf-8")
+    except Exception as exc:
+        raise ValueError("Refusing malformed Codex restoration placeholder") from exc
 
 
 def _split_first_section(text: str) -> tuple[str, str]:
