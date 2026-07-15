@@ -14,7 +14,7 @@ setup(
     },
     install_requires=["requests", "tomli; python_version < '3.11'"],
     extras_require={
-        "proxy": ["fastapi", "httpx", "uvicorn"],
+        "proxy": ["fastapi", "httpx", "uvicorn", "websockets>=13"],
     },
     entry_points={
         "console_scripts": [

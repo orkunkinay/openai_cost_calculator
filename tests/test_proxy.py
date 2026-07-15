@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import json
 
 import httpx
 import pytest
-from fastapi.testclient import TestClient
+
+from asgi_client import ASGITestClient
 
 from openai_cost_calculator.parser import extract_usage_from_payload
 from openai_cost_calculator.pricing import (
@@ -13,7 +15,12 @@ from openai_cost_calculator.pricing import (
     set_offline_mode,
 )
 from openai_cost_calculator.proxy.app import create_app
+from openai_cost_calculator.proxy.app import (
+    _WebSocketAccountingObserver,
+    _forward_websocket,
+)
 from openai_cost_calculator.proxy.registry import TrackerRegistry
+from starlette.datastructures import Headers, URL
 
 
 class AsyncChunkStream(httpx.AsyncByteStream):
@@ -48,7 +55,7 @@ def _client(handler):
         transport=transport,
         registry=TrackerRegistry(),
     )
-    return TestClient(app)
+    return ASGITestClient(app)
 
 
 def test_extract_usage_from_payload_supports_chat_and_responses_shapes():
@@ -297,6 +304,8 @@ def test_request_hop_by_hop_headers_are_not_forwarded():
         assert request.headers["x-keep"] == "yes"
         assert "keep-alive" not in request.headers
         assert "x-remove" not in request.headers
+        assert "x-occ-session" not in request.headers
+        assert "x-occ-turn" not in request.headers
         return httpx.Response(500, json={"error": "expected"})
 
     client = _client(handler)
@@ -308,7 +317,257 @@ def test_request_hop_by_hop_headers_are_not_forwarded():
             "keep-alive": "timeout=5",
             "x-remove": "private",
             "x-keep": "yes",
+            "x-occ-session": "local-only",
+            "x-occ-turn": "local-turn",
         },
     )
 
     assert response.status_code == 500
+
+
+def test_stream_parser_handles_fragmented_utf8_crlf_comments_and_multiline_data():
+    payload = {
+        "model": "gpt-test-2025-01-01",
+        "usage": {"input_tokens": 1000, "output_tokens": 500},
+        "note": "£",
+    }
+    encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    pound = encoded.index("£".encode("utf-8"))
+    split_json = encoded[: pound + 1], encoded[pound + 1 :]
+    chunks = [
+        b": keep-alive\r",
+        b"\n\r\n",
+        b"data: " + split_json[0],
+        split_json[1] + b"\r\n",
+        b"data:\r\n\r\n",
+        b"data: [DONE]\r\n\r\n",
+    ]
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            stream=AsyncChunkStream(chunks),
+        )
+
+    client = _client(handler)
+    response = client.post(
+        "/v1/responses",
+        json={"model": "gpt-test-2025-01-01", "stream": True},
+        headers={"x-occ-session": "fragmented"},
+    )
+
+    assert response.content == b"".join(chunks)
+    session = client.get("/_occ/costs?session=fragmented").json()["sessions"]["fragmented"]
+    assert session["session_total"] == "0.00200000"
+
+
+def test_diagnostics_are_sanitized_and_bounded():
+    registry = TrackerRegistry()
+    for index in range(105):
+        registry.record_error(
+            "diagnostics",
+            "failure",
+            f"line {index}\nAuthorization: Bearer secret-{index} sk-exampletoken",
+        )
+
+    errors = registry.summary("diagnostics")["sessions"]["diagnostics"]["errors"]
+    assert len(errors) == 100
+    assert errors[0]["message"].startswith("line 5 ")
+    assert "secret" not in errors[-1]["message"]
+    assert "sk-exampletoken" not in errors[-1]["message"]
+
+
+def test_admin_endpoints_require_configured_bearer_token():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500)
+
+    app = create_app(
+        upstream="https://upstream.example/v1",
+        transport=httpx.MockTransport(handler),
+        registry=TrackerRegistry(),
+        admin_token="a" * 32,
+    )
+    client = ASGITestClient(app)
+
+    unauthorized = client.get("/_occ/costs")
+    assert unauthorized.status_code == 401
+    assert unauthorized.json()["error"]["code"] == "admin_auth_required"
+    assert unauthorized.headers["www-authenticate"] == "Bearer"
+    assert client.post("/_occ/reset", headers={"authorization": "Bearer wrong"}).status_code == 401
+
+    authorized = client.get(
+        "/_occ/costs",
+        headers={"authorization": f"Bearer {'a' * 32}"},
+    )
+    assert authorized.status_code == 200
+    assert authorized.json()["grand_total"] == "0.00000000"
+
+
+def test_websocket_observer_costs_terminal_usage_once_and_reports_failures():
+    registry = TrackerRegistry()
+    observer = _WebSocketAccountingObserver(
+        registry,
+        session_id="websocket",
+        turn_label="turn-1",
+    )
+    observer.observe_client(
+        json.dumps(
+            {
+                "type": "response.create",
+                "response": {"model": "gpt-test-2025-01-01"},
+            }
+        )
+    )
+    completed = json.dumps(
+        {
+            "type": "response.completed",
+            "response": {
+                "id": "response-1",
+                "usage": {"input_tokens": 1000, "output_tokens": 500},
+            },
+        }
+    )
+    observer.observe_upstream(completed)
+    observer.observe_upstream(completed.encode("utf-8"))
+    observer.observe_upstream(
+        json.dumps(
+            {
+                "type": "response.failed",
+                "response": {"id": "response-2"},
+            }
+        )
+    )
+
+    session = registry.summary("websocket")["sessions"]["websocket"]
+    assert session["session_total"] == "0.00200000"
+    assert session["turns"][0]["num_calls"] == 1
+    assert session["errors"][-1]["code"] == "websocket_response_failed"
+
+
+def test_websocket_relay_preserves_frames_headers_query_and_subprotocol():
+    client_frame = json.dumps(
+        {
+            "type": "response.create",
+            "response": {"model": "gpt-test-2025-01-01"},
+        },
+        separators=(",", ":"),
+    )
+    upstream_frame = json.dumps(
+        {
+            "type": "response.completed",
+            "response": {
+                "id": "response-relay",
+                "usage": {"input_tokens": 1000, "output_tokens": 500},
+            },
+        },
+        separators=(",", ":"),
+    )
+    sent_to_upstream = None
+
+    class FakeUpstream:
+        subprotocol = "realtime"
+
+        def __init__(self):
+            self.sent = []
+            self.closed = None
+            self._yielded = False
+
+        async def send(self, payload):
+            self.sent.append(payload)
+            assert sent_to_upstream is not None
+            sent_to_upstream.set()
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if self._yielded:
+                raise StopAsyncIteration
+            assert sent_to_upstream is not None
+            await sent_to_upstream.wait()
+            self._yielded = True
+            return upstream_frame
+
+        async def close(self, code=1000, reason=""):
+            self.closed = (code, reason)
+
+    upstream = FakeUpstream()
+    connection = {}
+
+    class ConnectionContext:
+        async def __aenter__(self):
+            return upstream
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+    def connector(url, **kwargs):
+        connection["url"] = url
+        connection["kwargs"] = kwargs
+        return ConnectionContext()
+
+    class FakeClientWebSocket:
+        headers = Headers(
+            raw=[
+                (b"authorization", b"Bearer upstream-token"),
+                (b"x-occ-session", b"websocket-relay"),
+                (b"x-occ-turn", b"relay-turn"),
+                (b"sec-websocket-protocol", b"realtime"),
+                (b"connection", b"upgrade"),
+                (b"upgrade", b"websocket"),
+            ]
+        )
+        url = URL("ws://proxy.example/v1/responses?beta=1")
+
+        def __init__(self):
+            self.accepted = None
+            self.sent = []
+            self.closed = None
+            self._received = False
+
+        async def accept(self, subprotocol=None):
+            self.accepted = subprotocol
+
+        async def receive(self):
+            if not self._received:
+                self._received = True
+                return {"type": "websocket.receive", "text": client_frame}
+            await asyncio.Future()
+
+        async def send_text(self, payload):
+            self.sent.append(payload)
+
+        async def send_bytes(self, payload):
+            self.sent.append(payload)
+
+        async def close(self, code=1000, reason=""):
+            self.closed = (code, reason)
+
+    registry = TrackerRegistry()
+    app = create_app(
+        upstream="https://upstream.example/v1",
+        registry=registry,
+        websocket_connector=connector,
+    )
+    websocket = FakeClientWebSocket()
+
+    async def exercise_relay():
+        nonlocal sent_to_upstream
+        sent_to_upstream = asyncio.Event()
+        await _forward_websocket(app, "responses", websocket)
+
+    asyncio.run(exercise_relay())
+
+    assert connection["url"] == "wss://upstream.example/v1/responses?beta=1"
+    headers = dict(connection["kwargs"]["additional_headers"])
+    assert headers["authorization"] == "Bearer upstream-token"
+    assert "x-occ-session" not in headers
+    assert "connection" not in headers
+    assert connection["kwargs"]["subprotocols"] == ["realtime"]
+    assert upstream.sent == [client_frame]
+    assert websocket.sent == [upstream_frame]
+    assert websocket.accepted == "realtime"
+    assert websocket.closed == (1000, "")
+    session = registry.summary("websocket-relay")["sessions"]["websocket-relay"]
+    assert session["session_total"] == "0.00200000"

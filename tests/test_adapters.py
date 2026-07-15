@@ -6,14 +6,17 @@ from pathlib import Path
 
 import httpx
 import pytest
-from fastapi.testclient import TestClient
+
+from asgi_client import ASGITestClient
 
 from openai_cost_calculator.adapters.claude_code import (
     statusline_text as claude_statusline_text,
     stop_hook_output,
 )
 from openai_cost_calculator.adapters.codex import (
+    _codex_adapter_settings,
     checkpoint_text,
+    notifier_diagnostics,
     notify_main,
     statusline_text as codex_statusline_text,
 )
@@ -144,6 +147,33 @@ def test_codex_adapters_render_and_silently_handle_network_errors(monkeypatch):
     assert codex_statusline_text(session="s1") == "💰 cost offline"
 
 
+def test_codex_notifier_records_hidden_proxy_failure_without_failing_codex(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+):
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: (_ for _ in ()).throw(OSError("Bearer secret")),
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "occ-codex-notify",
+            json.dumps({"type": "agent-turn-complete"}),
+        ],
+    )
+
+    assert notify_main() == 0
+    assert capsys.readouterr().out == ""
+    diagnostics = notifier_diagnostics()
+    assert diagnostics[-1]["code"] == "checkpoint_unavailable"
+    assert "secret" not in diagnostics[-1]["message"]
+    log = tmp_path / "occ-notifier-diagnostics.jsonl"
+    assert log.stat().st_mode & 0o777 == 0o600
+
+
 def test_codex_notify_uses_installed_session_and_chains_previous_notifier(
     tmp_path: Path,
     monkeypatch,
@@ -227,7 +257,7 @@ def test_proxy_checkpoint_advances_cursor_and_costs_remain_cumulative():
         transport=httpx.MockTransport(handler),
         registry=TrackerRegistry(),
     )
-    client = TestClient(app)
+    client = ASGITestClient(app)
     for _ in range(2):
         client.post("/v1/responses", json={}, headers={"x-occ-session": "s1"})
 
@@ -257,6 +287,7 @@ def test_installers_are_idempotent_and_reversible(tmp_path: Path, monkeypatch):
     uninstall_claude_code()
     settings = json.loads(claude_settings.read_text(encoding="utf-8"))
     assert settings == {"unrelated": True}
+    assert list(claude_dir.glob("*.occ-backup-*")) == []
 
     codex_dir = tmp_path / ".codex"
     codex_dir.mkdir()
@@ -284,15 +315,29 @@ def test_installers_are_idempotent_and_reversible(tmp_path: Path, monkeypatch):
         line for line in text.splitlines() if line.startswith('notify = ["')
     ]
     assert active_notify_lines == ['notify = ["occ-codex-notify"]']
-    assert "# previous_notify = notify = [\"existing-notifier\"]" in text
-    assert '# previous_model_provider = model_provider = "existing-provider"' in text
+    assert "# occ-restore-notify = " in text
+    assert "# occ-restore-model_provider = " in text
     assert 'model = "gpt-test"' in text
     uninstall_codex()
-    assert codex_config.read_text(encoding="utf-8").strip() == (
-        'model_provider = "existing-provider"\n'
+    assert codex_config.read_text(encoding="utf-8") == (
         'notify = ["existing-notifier"]\n'
-        'model = "gpt-test"'
+        'model_provider = "existing-provider"\n'
+        'model = "gpt-test"\n'
     )
+    assert list(codex_dir.glob("*.occ-backup-*")) == []
+
+
+def test_codex_installer_can_enable_websockets_explicitly(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+
+    install_codex(
+        "http://127.0.0.1:8100",
+        "s1",
+        supports_websockets=True,
+    )
+
+    text = (tmp_path / "config.toml").read_text(encoding="utf-8")
+    assert "supports_websockets = true" in text
 
 
 def test_codex_installer_refuses_invalid_config_without_modifying_it(
@@ -310,3 +355,151 @@ def test_codex_installer_refuses_invalid_config_without_modifying_it(
     assert config.read_text(encoding="utf-8") == original
     assert list(tmp_path.glob("config.toml.occ-backup-*")) == []
     assert list(tmp_path.glob(".config.toml.*.tmp")) == []
+
+
+def test_codex_installer_refuses_conflicting_provider_and_malformed_markers(
+    tmp_path: Path,
+    monkeypatch,
+):
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    config = tmp_path / "config.toml"
+    conflicting = (
+        "[model_providers.openai_cost_calculator]\n"
+        'name = "user-owned"\n'
+    )
+    config.write_text(conflicting, encoding="utf-8")
+    with pytest.raises(ValueError, match="Refusing to overwrite existing Codex provider"):
+        install_codex("http://127.0.0.1:8100", "s1")
+    assert config.read_text(encoding="utf-8") == conflicting
+
+    malformed = "# >>> openai-cost-calculator\nmodel = \"gpt-test\"\n"
+    config.write_text(malformed, encoding="utf-8")
+    with pytest.raises(ValueError, match="unmatched start marker"):
+        uninstall_codex()
+    assert config.read_text(encoding="utf-8") == malformed
+
+
+def test_codex_installer_refuses_symlink_and_preserves_target(
+    tmp_path: Path,
+    monkeypatch,
+):
+    codex_home = tmp_path / "Codex üser"
+    codex_home.mkdir()
+    target = tmp_path / "actual-config.toml"
+    target.write_text('model = "gpt-test"\n', encoding="utf-8")
+    (codex_home / "config.toml").symlink_to(target)
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+
+    with pytest.raises(ValueError, match="symlinked configuration"):
+        install_codex("http://127.0.0.1:8100", "session ü")
+
+    assert target.read_text(encoding="utf-8") == 'model = "gpt-test"\n'
+
+
+def test_codex_atomic_write_failure_preserves_original_and_cleans_temp(
+    tmp_path: Path,
+    monkeypatch,
+):
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    config = tmp_path / "config.toml"
+    original = 'model = "gpt-test"\n'
+    config.write_text(original, encoding="utf-8")
+    config.chmod(0o640)
+
+    def interrupted_replace(source, destination):
+        raise OSError("simulated interruption")
+
+    monkeypatch.setattr("os.replace", interrupted_replace)
+    with pytest.raises(OSError, match="simulated interruption"):
+        install_codex("http://127.0.0.1:8100", "s1")
+
+    assert config.read_text(encoding="utf-8") == original
+    assert config.stat().st_mode & 0o777 == 0o640
+    assert list(tmp_path.glob(".config.toml.*.tmp")) == []
+
+
+@pytest.mark.parametrize("final_newline", [True, False])
+def test_codex_install_uninstall_preserves_unrelated_toml_bytes_exactly(
+    tmp_path: Path,
+    monkeypatch,
+    final_newline: bool,
+):
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    config = tmp_path / "config.toml"
+    original = (
+        "# Leading user comment\r\n"
+        'notify  = [ "previous-notifier", "--flag" ] # keep inline comment\r\n'
+        'model_provider= "custom-provider"   # preserve spacing\r\n'
+        'model = "gpt-test"\r\n'
+        "\r\n"
+        '[profiles."développement"]\r\n'
+        'approval_policy = "never"'
+    )
+    if final_newline:
+        original += "\r\n"
+    config.write_bytes(original.encode("utf-8"))
+
+    install_codex("http://127.0.0.1:8100", "session ü")
+    installed = config.read_bytes()
+    install_codex("http://127.0.0.1:8100", "session ü")
+    assert config.read_bytes() == installed
+    installed_text = installed.decode("utf-8")
+    assert "# Leading user comment\r\n" in installed_text
+    assert '[profiles."développement"]\r\n' in installed_text
+    assert 'approval_policy = "never"' in installed_text
+
+    uninstall_codex()
+    assert config.read_bytes() == original.encode("utf-8")
+
+
+def test_codex_uninstall_restores_legacy_managed_values(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    config = tmp_path / "config.toml"
+    config.write_text(
+        "# >>> openai-cost-calculator\n"
+        '# previous_notify = notify = ["legacy"]\n'
+        '# previous_model_provider = model_provider = "legacy-provider"\n'
+        'notify = ["occ-codex-notify"]\n'
+        'model_provider = "openai_cost_calculator"\n'
+        "# <<< openai-cost-calculator\n\n"
+        "# >>> openai-cost-calculator\n"
+        "[model_providers.openai_cost_calculator]\n"
+        'name = "managed"\n'
+        "# <<< openai-cost-calculator\n\n"
+        'model = "gpt-test"\n',
+        encoding="utf-8",
+    )
+
+    uninstall_codex()
+    restored = config.read_text(encoding="utf-8")
+    assert 'notify = ["legacy"]' in restored
+    assert 'model_provider = "legacy-provider"' in restored
+    assert 'model = "gpt-test"' in restored
+
+
+def test_codex_stashed_notifier_remains_chainable_and_user_edits_survive(
+    tmp_path: Path,
+    monkeypatch,
+):
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    config = tmp_path / "config.toml"
+    original = (
+        'notify = ["previous-notifier", "--flag"] # retained\n'
+        'model_provider = "custom"\n'
+        "[features]\n"
+        "web_search = true\n"
+    )
+    config.write_text(original, encoding="utf-8")
+    install_codex("http://127.0.0.1:8100", "s1")
+
+    settings = _codex_adapter_settings()
+    assert settings["previous_notify"] == (
+        'notify = ["previous-notifier", "--flag"] # retained'
+    )
+    with config.open("a", encoding="utf-8") as handle:
+        handle.write("# user edit after installation\n")
+
+    uninstall_codex()
+    assert config.read_text(encoding="utf-8") == (
+        original + "# user edit after installation\n"
+    )

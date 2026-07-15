@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import json
+import codecs
+from collections import deque
+import hashlib
+import hmac
+import asyncio
 from typing import Any, AsyncIterator, Optional
 
 import httpx
 
 try:
-    from fastapi import FastAPI, Request
+    from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
     from fastapi.responses import JSONResponse, Response, StreamingResponse
 except ImportError as exc:  # pragma: no cover - exercised when optional deps are absent
     raise ImportError(
@@ -15,7 +20,13 @@ except ImportError as exc:  # pragma: no cover - exercised when optional deps ar
     ) from exc
 
 from openai_cost_calculator.parser import extract_usage_from_payload
+from openai_cost_calculator.proxy.ledger import LedgerError
 from openai_cost_calculator.proxy.registry import TrackerRegistry, default_registry
+from openai_cost_calculator.proxy.upstreams import (
+    PLATFORM_UPSTREAM,
+    UpstreamSelection,
+    classify_upstream,
+)
 
 
 _HOP_BY_HOP_HEADERS = {
@@ -33,30 +44,103 @@ _HOP_BY_HOP_HEADERS = {
 
 def create_app(
     *,
-    upstream: str = "https://api.openai.com/v1",
+    upstream: str = PLATFORM_UPSTREAM,
     registry: Optional[TrackerRegistry] = None,
     transport: Optional[httpx.AsyncBaseTransport] = None,
+    ledger_path: Optional[str] = None,
+    database_path: Optional[str] = None,
+    upstream_selection: Optional[UpstreamSelection] = None,
+    admin_token: Optional[str] = None,
+    websocket_connector=None,
 ) -> FastAPI:
+    if registry is not None and (ledger_path is not None or database_path is not None):
+        raise ValueError("pass either registry or a persistence path, not both")
+    if ledger_path is not None and database_path is not None:
+        raise ValueError("pass either ledger_path or database_path, not both")
     app = FastAPI()
+    if upstream_selection is not None:
+        upstream = upstream_selection.url
     app.state.occ_upstream = upstream.rstrip("/")
-    app.state.occ_registry = registry or default_registry
+    app.state.occ_upstream_selection = upstream_selection or UpstreamSelection(
+        auth_mode="unspecified",
+        category=classify_upstream(app.state.occ_upstream),
+        url=app.state.occ_upstream,
+        explicit_override=True,
+        detection_source="application configuration",
+    )
+    app.state.occ_registry = (
+        registry
+        if registry is not None
+        else TrackerRegistry(ledger_path=ledger_path, database_path=database_path)
+        if ledger_path is not None or database_path is not None
+        else default_registry
+    )
     app.state.occ_transport = transport
+    app.state.occ_admin_token = admin_token
+    app.state.occ_websocket_connector = websocket_connector
+
+    @app.get("/_occ/health")
+    async def health(request: Request) -> JSONResponse:
+        unauthorized = _admin_auth_error(app, request)
+        if unauthorized is not None:
+            return unauthorized
+        persistence = app.state.occ_registry.persistence_status()
+        status = 200 if persistence["healthy"] else 503
+        selection = app.state.occ_upstream_selection
+        return JSONResponse(
+            {
+                "ok": status == 200,
+                "persistence": persistence,
+                "routing": {
+                    "auth_mode": selection.auth_mode,
+                    "upstream_category": selection.category,
+                    "explicit_override": selection.explicit_override,
+                    "detection_source": selection.detection_source,
+                },
+            },
+            status_code=status,
+        )
 
     @app.get("/_occ/costs")
-    async def costs(session: Optional[str] = None) -> JSONResponse:
+    async def costs(request: Request, session: Optional[str] = None) -> JSONResponse:
+        unauthorized = _admin_auth_error(app, request)
+        if unauthorized is not None:
+            return unauthorized
         return JSONResponse(app.state.occ_registry.summary(session))
 
     @app.post("/_occ/checkpoint")
-    async def checkpoint(session: Optional[str] = None) -> JSONResponse:
-        return JSONResponse(app.state.occ_registry.checkpoint(session))
+    async def checkpoint(request: Request, session: Optional[str] = None) -> JSONResponse:
+        unauthorized = _admin_auth_error(app, request)
+        if unauthorized is not None:
+            return unauthorized
+        try:
+            payload = app.state.occ_registry.checkpoint(session)
+        except LedgerError as exc:
+            return JSONResponse(
+                {"error": {"code": "ledger_write_failed", "message": str(exc)}},
+                status_code=503,
+            )
+        return JSONResponse(payload)
 
     @app.post("/_occ/reset")
-    async def reset() -> JSONResponse:
-        app.state.occ_registry.reset()
+    async def reset(request: Request) -> JSONResponse:
+        unauthorized = _admin_auth_error(app, request)
+        if unauthorized is not None:
+            return unauthorized
+        try:
+            app.state.occ_registry.reset()
+        except LedgerError as exc:
+            return JSONResponse(
+                {"error": {"code": "ledger_write_failed", "message": str(exc)}},
+                status_code=503,
+            )
         return JSONResponse({"ok": True})
 
     @app.get("/_occ/costs/stream")
-    async def cost_stream() -> StreamingResponse:
+    async def cost_stream(request: Request) -> Response:
+        unauthorized = _admin_auth_error(app, request)
+        if unauthorized is not None:
+            return unauthorized
         queue = app.state.occ_registry.subscribe()
 
         async def events() -> AsyncIterator[bytes]:
@@ -73,8 +157,8 @@ def create_app(
     @app.api_route("/v1/{path:path}", methods=["GET", "POST"])
     async def forward(path: str, request: Request) -> Response:
         body = await request.body()
-        session_id = request.headers.get("x-occ-session")
-        turn_label = request.headers.get("x-occ-turn")
+        session_id = _bounded_identifier(request.headers.get("x-occ-session"), 128)
+        turn_label = _bounded_identifier(request.headers.get("x-occ-turn"), 256)
         request_payload = _json_from_bytes(body)
 
         if request.method == "POST" and request_payload.get("stream") is True:
@@ -96,6 +180,10 @@ def create_app(
             session_id=session_id,
             turn_label=turn_label,
         )
+
+    @app.websocket("/v1/{path:path}")
+    async def forward_websocket(websocket: WebSocket, path: str) -> None:
+        await _forward_websocket(app, path, websocket)
 
     return app
 
@@ -160,6 +248,13 @@ async def _forward_streaming(
                 parser.feed(chunk)
                 yield chunk
             completed = True
+        except Exception as exc:
+            app.state.occ_registry.record_error(
+                session_id,
+                "stream_interrupted",
+                f"upstream stream ended unexpectedly: {type(exc).__name__}",
+            )
+            raise
         finally:
             parser.close()
             if completed and upstream_response.status_code < 400:
@@ -187,11 +282,169 @@ async def _forward_streaming(
     )
 
 
+async def _forward_websocket(app: FastAPI, path: str, websocket: WebSocket) -> None:
+    session_id = _bounded_identifier(websocket.headers.get("x-occ-session"), 128)
+    turn_label = _bounded_identifier(websocket.headers.get("x-occ-turn"), 256)
+    observer = _WebSocketAccountingObserver(
+        app.state.occ_registry,
+        session_id=session_id,
+        turn_label=turn_label,
+    )
+    connector = app.state.occ_websocket_connector
+    if connector is None:
+        try:
+            from websockets.asyncio.client import connect as connector
+        except ImportError as exc:  # pragma: no cover - optional dependency guard
+            app.state.occ_registry.record_error(
+                session_id,
+                "websocket_dependency_missing",
+                "WebSocket forwarding requires the proxy optional dependencies",
+            )
+            await websocket.close(code=1011)
+            return
+
+    subprotocols = _websocket_subprotocols(websocket)
+    try:
+        async with connector(
+            _websocket_upstream_url(app, path, websocket),
+            additional_headers=_websocket_forward_headers(websocket),
+            subprotocols=subprotocols or None,
+            origin=websocket.headers.get("origin"),
+            max_size=None,
+        ) as upstream:
+            selected_subprotocol = getattr(upstream, "subprotocol", None)
+            await websocket.accept(subprotocol=selected_subprotocol)
+            client_task = asyncio.create_task(
+                _relay_client_websocket(websocket, upstream, observer)
+            )
+            upstream_task = asyncio.create_task(
+                _relay_upstream_websocket(websocket, upstream, observer)
+            )
+            done, pending = await asyncio.wait(
+                {client_task, upstream_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+            result = next(iter(done)).result()
+            if result["source"] == "upstream":
+                observer.upstream_closed()
+                await websocket.close(
+                    code=_websocket_close_code(result.get("code")),
+                    reason=_websocket_close_reason(result.get("reason")),
+                )
+            else:
+                await upstream.close(
+                    code=_websocket_close_code(result.get("code")),
+                    reason=_websocket_close_reason(result.get("reason")),
+                )
+    except Exception as exc:
+        app.state.occ_registry.record_error(
+            session_id,
+            "websocket_upstream_failed",
+            f"WebSocket upstream connection failed: {type(exc).__name__}",
+        )
+        try:
+            await websocket.close(code=1011)
+        except Exception:
+            pass
+
+
+async def _relay_client_websocket(
+    websocket: WebSocket,
+    upstream: Any,
+    observer: "_WebSocketAccountingObserver",
+) -> dict[str, Any]:
+    try:
+        while True:
+            message = await websocket.receive()
+            if message["type"] == "websocket.disconnect":
+                return {
+                    "source": "client",
+                    "code": message.get("code", 1000),
+                    "reason": message.get("reason", ""),
+                }
+            if message.get("text") is not None:
+                payload: str | bytes = message["text"]
+            elif message.get("bytes") is not None:
+                payload = message["bytes"]
+            else:
+                continue
+            observer.observe_client(payload)
+            await upstream.send(payload)
+    except WebSocketDisconnect as exc:
+        return {"source": "client", "code": exc.code, "reason": ""}
+
+
+async def _relay_upstream_websocket(
+    websocket: WebSocket,
+    upstream: Any,
+    observer: "_WebSocketAccountingObserver",
+) -> dict[str, Any]:
+    try:
+        async for payload in upstream:
+            observer.observe_upstream(payload)
+            if isinstance(payload, bytes):
+                await websocket.send_bytes(payload)
+            else:
+                await websocket.send_text(payload)
+        return {"source": "upstream", "code": 1000, "reason": ""}
+    except Exception as exc:
+        return {
+            "source": "upstream",
+            "code": getattr(exc, "code", 1011),
+            "reason": getattr(exc, "reason", ""),
+        }
+
+
 def _client(app: FastAPI) -> httpx.AsyncClient:
     return httpx.AsyncClient(
         timeout=None,
         transport=app.state.occ_transport,
     )
+
+
+def _websocket_upstream_url(app: FastAPI, path: str, websocket: WebSocket) -> str:
+    base = app.state.occ_upstream
+    if base.startswith("https://"):
+        base = f"wss://{base.removeprefix('https://')}"
+    elif base.startswith("http://"):
+        base = f"ws://{base.removeprefix('http://')}"
+    url = f"{base}/{path}"
+    if websocket.url.query:
+        url = f"{url}?{websocket.url.query}"
+    return url
+
+
+def _websocket_forward_headers(websocket: WebSocket) -> list[tuple[str, str]]:
+    excluded = set(_HOP_BY_HOP_HEADERS)
+    excluded.update(
+        {
+            "host",
+            "content-length",
+            "origin",
+            "x-occ-session",
+            "x-occ-turn",
+        }
+    )
+    for name in websocket.headers:
+        if name.lower().startswith("sec-websocket-"):
+            excluded.add(name.lower())
+    for value in websocket.headers.getlist("connection"):
+        excluded.update(token.strip().lower() for token in value.split(","))
+    return [
+        (name.decode("latin-1"), value.decode("latin-1"))
+        for name, value in websocket.headers.raw
+        if name.decode("latin-1").lower() not in excluded
+    ]
+
+
+def _websocket_subprotocols(websocket: WebSocket) -> list[str]:
+    protocols = []
+    for value in websocket.headers.getlist("sec-websocket-protocol"):
+        protocols.extend(item.strip() for item in value.split(",") if item.strip())
+    return protocols
 
 
 def _upstream_url(app: FastAPI, path: str, request: Request) -> str:
@@ -203,7 +456,7 @@ def _upstream_url(app: FastAPI, path: str, request: Request) -> str:
 
 def _forward_headers(request: Request) -> list[tuple[bytes, bytes]]:
     excluded = {name.encode("ascii") for name in _HOP_BY_HOP_HEADERS}
-    excluded.update({b"host", b"content-length"})
+    excluded.update({b"host", b"content-length", b"x-occ-session", b"x-occ-turn"})
     for value in request.headers.getlist("connection"):
         excluded.update(token.strip().lower().encode("ascii") for token in value.split(","))
     return [
@@ -288,40 +541,43 @@ def _sse_data(payload: dict) -> bytes:
 class _SSEUsageParser:
     def __init__(self, *, default_model: Any = None) -> None:
         self._buffer = ""
+        self._decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        self._pending_cr = False
         self._default_model = default_model
         self.usage_payload: Optional[dict] = None
 
     def feed(self, chunk: bytes) -> None:
         if not chunk:
             return
-        self._buffer += chunk.decode("utf-8", errors="ignore")
+        self._append_text(self._decoder.decode(chunk))
         while True:
-            event, separator = self._pop_event()
-            if separator is None:
+            event = self._pop_event()
+            if event is None:
                 return
             self._handle_event(event)
 
     def close(self) -> None:
+        self._append_text(self._decoder.decode(b"", final=True), final=True)
         if self._buffer.strip():
             self._handle_event(self._buffer)
         self._buffer = ""
 
-    def _pop_event(self) -> tuple[str, Optional[str]]:
-        indexes = [
-            index
-            for index in (
-                self._buffer.find("\n\n"),
-                self._buffer.find("\r\n\r\n"),
-            )
-            if index != -1
-        ]
-        if not indexes:
-            return "", None
-        index = min(indexes)
-        separator = "\r\n\r\n" if self._buffer.startswith("\r\n\r\n", index) else "\n\n"
+    def _append_text(self, text: str, *, final: bool = False) -> None:
+        if self._pending_cr:
+            text = "\r" + text
+            self._pending_cr = False
+        if text.endswith("\r") and not final:
+            text = text[:-1]
+            self._pending_cr = True
+        self._buffer += text.replace("\r\n", "\n").replace("\r", "\n")
+
+    def _pop_event(self) -> Optional[str]:
+        index = self._buffer.find("\n\n")
+        if index == -1:
+            return None
         event = self._buffer[:index]
-        self._buffer = self._buffer[index + len(separator) :]
-        return event, separator
+        self._buffer = self._buffer[index + 2 :]
+        return event
 
     def _handle_event(self, event: str) -> None:
         data_lines = []
@@ -346,6 +602,145 @@ class _SSEUsageParser:
         if "model" not in usage_payload and isinstance(self._default_model, str):
             usage_payload = {**usage_payload, "model": self._default_model}
         self.usage_payload = usage_payload
+
+
+class _WebSocketAccountingObserver:
+    def __init__(
+        self,
+        registry: TrackerRegistry,
+        *,
+        session_id: Optional[str],
+        turn_label: Optional[str],
+    ) -> None:
+        self._registry = registry
+        self._session_id = session_id
+        self._turn_label = turn_label
+        self._pending_models: deque[Optional[str]] = deque()
+        self._terminal_ids: deque[str] = deque()
+        self._terminal_id_set: set[str] = set()
+
+    def observe_client(self, message: str | bytes) -> None:
+        payload = _websocket_json(message)
+        if payload is None or payload.get("type") != "response.create":
+            return
+        response = payload.get("response")
+        model = response.get("model") if isinstance(response, dict) else None
+        if not isinstance(model, str):
+            model = payload.get("model")
+        self._pending_models.append(model if isinstance(model, str) else None)
+
+    def observe_upstream(self, message: str | bytes) -> None:
+        payload = _websocket_json(message)
+        if payload is None:
+            return
+        event_type = payload.get("type")
+        if event_type not in {
+            "response.completed",
+            "response.failed",
+            "response.incomplete",
+        }:
+            return
+        response = payload.get("response")
+        response_payload = response if isinstance(response, dict) else payload
+        terminal_id = response_payload.get("id")
+        if not isinstance(terminal_id, str):
+            terminal_id = hashlib.sha256(
+                json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
+            ).hexdigest()
+        if terminal_id in self._terminal_id_set:
+            return
+        self._remember_terminal(terminal_id)
+        model = self._pending_models.popleft() if self._pending_models else None
+
+        if event_type == "response.completed":
+            if "model" not in response_payload and model is not None:
+                response_payload = {**response_payload, "model": model}
+            _record_json_payload(
+                self._registry,
+                self._session_id,
+                self._turn_label,
+                response_payload,
+            )
+            return
+        self._registry.record_error(
+            self._session_id,
+            "websocket_response_failed",
+            f"WebSocket response ended with terminal event {event_type}",
+        )
+
+    def upstream_closed(self) -> None:
+        if self._pending_models:
+            self._registry.record_error(
+                self._session_id,
+                "websocket_missing_terminal",
+                "WebSocket upstream closed with unfinished response requests",
+            )
+            self._pending_models.clear()
+
+    def _remember_terminal(self, terminal_id: str) -> None:
+        self._terminal_ids.append(terminal_id)
+        self._terminal_id_set.add(terminal_id)
+        if len(self._terminal_ids) > 1_024:
+            removed = self._terminal_ids.popleft()
+            self._terminal_id_set.discard(removed)
+
+
+def _websocket_json(message: str | bytes) -> Optional[dict]:
+    if isinstance(message, bytes):
+        try:
+            message = message.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+    try:
+        payload = json.loads(message)
+    except (TypeError, ValueError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _websocket_close_code(value: Any) -> int:
+    return value if isinstance(value, int) and 1000 <= value <= 4999 else 1011
+
+
+def _websocket_close_reason(value: Any) -> str:
+    if not isinstance(value, str):
+        return ""
+    encoded = value.encode("utf-8")[:123]
+    return encoded.decode("utf-8", errors="ignore")
+
+
+def _bounded_identifier(value: Optional[str], limit: int) -> Optional[str]:
+    if value is None:
+        return None
+    cleaned = "".join(character if character.isprintable() else "?" for character in value)
+    if len(cleaned) <= limit:
+        return cleaned
+    digest = hashlib.sha256(cleaned.encode("utf-8")).hexdigest()[:12]
+    return f"{cleaned[: limit - 13]}#{digest}"
+
+
+def _admin_auth_error(app: FastAPI, request: Request) -> Optional[JSONResponse]:
+    expected = app.state.occ_admin_token
+    if expected is None:
+        return None
+    authorization = request.headers.get("authorization", "")
+    scheme, separator, supplied = authorization.partition(" ")
+    if (
+        not separator
+        or scheme.lower() != "bearer"
+        or not hmac.compare_digest(supplied, expected)
+    ):
+        return JSONResponse(
+            {
+                "error": {
+                    "code": "admin_auth_required",
+                    "message": "valid administrative authentication is required",
+                }
+            },
+            status_code=401,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return None
 
 
 app = create_app()

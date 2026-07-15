@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Optional
+import re
 
 from openai_cost_calculator.adapters.common import (
     MONEY,
@@ -25,11 +28,13 @@ def checkpoint_text(
     *,
     proxy_url: Optional[str] = None,
     session: Optional[str] = None,
+    on_error=None,
 ) -> Optional[str]:
     session_id = session or os.environ.get("OCC_SESSION") or "default"
     data = _post_json(
         _url(proxy_url, "/_occ/checkpoint", {"session": session_id}),
         timeout=1.0,
+        on_error=on_error,
     )
     if not data:
         return None
@@ -52,7 +57,10 @@ def notify_main() -> int:
         if not isinstance(notification, dict):
             return 0
         if notification.get("type") != "agent-turn-complete":
-            _run_previous_notify(raw_notification)
+            _run_previous_notify(
+                raw_notification,
+                on_error=_record_notifier_diagnostic,
+            )
             return 0
         settings = _codex_adapter_settings()
         session = (
@@ -64,14 +72,20 @@ def notify_main() -> int:
             notification,
             proxy_url=settings.get("proxy_url"),
             session=session,
+            on_error=_record_notifier_diagnostic,
         )
         if line:
             print(line)
         _run_previous_notify(
             raw_notification,
             previous_notify=settings.get("previous_notify"),
+            on_error=_record_notifier_diagnostic,
         )
-    except Exception:
+    except Exception as exc:
+        _record_notifier_diagnostic(
+            "notifier_failed",
+            f"notification handling failed: {type(exc).__name__}",
+        )
         return 0
     return 0
 
@@ -135,24 +149,35 @@ def _url(
 
 
 def _get_json(url: str, *, timeout: float) -> Optional[dict[str, Any]]:
-    request = urllib.request.Request(url, method="GET")
+    request = urllib.request.Request(url, method="GET", headers=_admin_headers())
     return _read_json(request, timeout=timeout)
 
 
-def _post_json(url: str, *, timeout: float) -> Optional[dict[str, Any]]:
-    request = urllib.request.Request(url, method="POST")
-    return _read_json(request, timeout=timeout)
+def _post_json(
+    url: str,
+    *,
+    timeout: float,
+    on_error=None,
+) -> Optional[dict[str, Any]]:
+    request = urllib.request.Request(url, method="POST", headers=_admin_headers())
+    return _read_json(request, timeout=timeout, on_error=on_error)
 
 
 def _read_json(
     request: urllib.request.Request,
     *,
     timeout: float,
+    on_error=None,
 ) -> Optional[dict[str, Any]]:
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             payload = json.loads(response.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+        if on_error is not None:
+            on_error(
+                "checkpoint_unavailable",
+                f"proxy checkpoint request failed: {type(exc).__name__}",
+            )
         return None
     return payload if isinstance(payload, dict) else None
 
@@ -208,6 +233,9 @@ def _codex_adapter_settings() -> dict[str, str]:
         return {}
 
     settings: dict[str, str] = {}
+    stashed_notify = _stashed_codex_assignment(text, "notify")
+    if stashed_notify:
+        settings["previous_notify"] = stashed_notify.strip()
     in_block = False
     for line in text.splitlines():
         stripped = line.strip()
@@ -229,6 +257,23 @@ def _codex_adapter_settings() -> dict[str, str]:
     return settings
 
 
+def _stashed_codex_assignment(text: str, key: str) -> Optional[str]:
+    marker = f"# occ-restore-{key} = "
+    for line in text.splitlines():
+        if not line.startswith(marker):
+            continue
+        encoded = line.removeprefix(marker).strip()
+        try:
+            return base64.b64decode(
+                encoded,
+                altchars=b"-_",
+                validate=True,
+            ).decode("utf-8")
+        except Exception:
+            return None
+    return None
+
+
 def _toml_string_value(line: str) -> str:
     _, _, value = line.partition("=")
     value = value.strip()
@@ -241,6 +286,7 @@ def _run_previous_notify(
     notification: Optional[str],
     *,
     previous_notify: Optional[str] = None,
+    on_error=None,
 ) -> None:
     if not notification:
         return
@@ -251,13 +297,23 @@ def _run_previous_notify(
     if not command or _is_self_notify(command[0]):
         return
     try:
-        subprocess.run(
+        completed = subprocess.run(
             [*command, notification],
             check=False,
             timeout=5,
             stdin=subprocess.DEVNULL,
         )
-    except Exception:
+        if completed.returncode != 0 and on_error is not None:
+            on_error(
+                "previous_notifier_failed",
+                f"previous notifier exited with status {completed.returncode}",
+            )
+    except Exception as exc:
+        if on_error is not None:
+            on_error(
+                "previous_notifier_failed",
+                f"previous notifier could not run: {type(exc).__name__}",
+            )
         return
 
 
@@ -287,3 +343,70 @@ def _parse_notify_command(value: Optional[str]) -> Optional[list[str]]:
 
 def _is_self_notify(command: str) -> bool:
     return Path(command).name in {"occ-codex-notify", "occ-codex-statusline"}
+
+
+def notifier_diagnostics() -> list[dict[str, Any]]:
+    path = _notifier_diagnostic_path()
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    diagnostics = []
+    for line in lines[-100:]:
+        try:
+            payload = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(payload, dict):
+            diagnostics.append(payload)
+    return diagnostics
+
+
+def _record_notifier_diagnostic(code: str, message: str) -> None:
+    path = _notifier_diagnostic_path()
+    diagnostic = {
+        "code": _safe_diagnostic_text(code, 64),
+        "message": _safe_diagnostic_text(message, 500),
+        "timestamp": time.time(),
+    }
+    diagnostics = notifier_diagnostics()
+    diagnostics.append(diagnostic)
+    diagnostics = diagnostics[-100:]
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "".join(json.dumps(item, separators=(",", ":")) + "\n" for item in diagnostics),
+            encoding="utf-8",
+        )
+        path.chmod(0o600)
+    except OSError:
+        return
+
+
+def _notifier_diagnostic_path() -> Path:
+    return (
+        Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
+        / "occ-notifier-diagnostics.jsonl"
+    )
+
+
+_SECRET_RE = re.compile(r"(?i)(?:bearer\s+)[^\s,;]+|(?:sk-[a-z0-9_-]{8,})")
+
+
+def _safe_diagnostic_text(value: object, limit: int) -> str:
+    text = str(value).replace("\r", " ").replace("\n", " ")
+    text = "".join(character if character.isprintable() else "?" for character in text)
+    return _SECRET_RE.sub("[REDACTED]", text)[:limit]
+
+
+def _admin_headers() -> dict[str, str]:
+    token = os.environ.get("OCC_ADMIN_TOKEN")
+    token_file = os.environ.get("OCC_ADMIN_TOKEN_FILE")
+    if token is None and token_file:
+        try:
+            token = Path(token_file).expanduser().read_text(encoding="utf-8").strip()
+        except OSError:
+            token = None
+    if not token:
+        return {}
+    return {"Authorization": f"Bearer {token}"}

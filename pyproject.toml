@@ -22,6 +22,7 @@ proxy = [
     "fastapi",
     "httpx",
     "uvicorn",
+    "websockets>=13",
 ]
 
 [project.scripts]
