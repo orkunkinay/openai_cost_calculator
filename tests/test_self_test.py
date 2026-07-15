@@ -15,6 +15,10 @@ self_test = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(self_test)
 
 
+def test_self_test_has_toml_parser_on_all_supported_python_versions():
+    assert self_test.tomllib.loads('model = "gpt-test"') == {"model": "gpt-test"}
+
+
 def test_explicit_api_key_mode_uses_stdin_and_ignores_source_chatgpt_login(
     tmp_path: Path,
     monkeypatch,

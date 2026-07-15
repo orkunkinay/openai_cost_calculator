@@ -463,7 +463,7 @@ def test_websocket_relay_preserves_frames_headers_query_and_subprotocol():
         },
         separators=(",", ":"),
     )
-    sent_to_upstream = asyncio.Event()
+    sent_to_upstream = None
 
     class FakeUpstream:
         subprotocol = "realtime"
@@ -475,6 +475,7 @@ def test_websocket_relay_preserves_frames_headers_query_and_subprotocol():
 
         async def send(self, payload):
             self.sent.append(payload)
+            assert sent_to_upstream is not None
             sent_to_upstream.set()
 
         def __aiter__(self):
@@ -483,6 +484,7 @@ def test_websocket_relay_preserves_frames_headers_query_and_subprotocol():
         async def __anext__(self):
             if self._yielded:
                 raise StopAsyncIteration
+            assert sent_to_upstream is not None
             await sent_to_upstream.wait()
             self._yielded = True
             return upstream_frame
@@ -549,7 +551,13 @@ def test_websocket_relay_preserves_frames_headers_query_and_subprotocol():
         websocket_connector=connector,
     )
     websocket = FakeClientWebSocket()
-    asyncio.run(_forward_websocket(app, "responses", websocket))
+
+    async def exercise_relay():
+        nonlocal sent_to_upstream
+        sent_to_upstream = asyncio.Event()
+        await _forward_websocket(app, "responses", websocket)
+
+    asyncio.run(exercise_relay())
 
     assert connection["url"] == "wss://upstream.example/v1/responses?beta=1"
     headers = dict(connection["kwargs"]["additional_headers"])
