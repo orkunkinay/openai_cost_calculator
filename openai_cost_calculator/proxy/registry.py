@@ -212,7 +212,10 @@ class TrackerRegistry:
             self._turn_keys[label] = idem_key
             self._turn_states.setdefault(key, {})[label] = "active"
             self._turn_order.setdefault(key, []).append(label)
-            self._persist_locked()
+            # The SQLite ledger derives turns from recorded calls, so an empty
+            # opened turn needs no snapshot there; the JSON ledger persists it.
+            if not isinstance(self._ledger, SQLiteLedger):
+                self._persist_locked()
         self.notify()
         return label
 
