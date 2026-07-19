@@ -85,6 +85,7 @@ class AnthropicStreamAccountant:
         self.malformed = False
         self.error_code: Optional[str] = None
         self.error_message: Optional[str] = None
+        self.last_usage_dict: Optional[dict] = None
 
     def feed(self, chunk: bytes) -> None:
         for event in self._reader.feed(chunk):
@@ -158,6 +159,7 @@ class AnthropicStreamAccountant:
     def _absorb_usage(self, usage: Any) -> None:
         if not isinstance(usage, dict):
             return
+        self.last_usage_dict = usage
         self._input = _merge_int(self._input, usage.get("input_tokens"))
         self._cache_read = _merge_int(
             self._cache_read, usage.get("cache_read_input_tokens")

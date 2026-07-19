@@ -19,7 +19,13 @@ except ImportError as exc:  # pragma: no cover - exercised when optional deps ar
         "`pip install openai-cost-calculator[proxy]`."
     ) from exc
 
+from openai_cost_calculator.anthropic.stream import AnthropicStreamAccountant
 from openai_cost_calculator.parser import extract_usage_from_payload
+from openai_cost_calculator.proxy.anthropic_accounting import (
+    UNATTRIBUTED_TURN,
+    record_anthropic_response,
+    usage_from_response_payload,
+)
 from openai_cost_calculator.proxy.ledger import LedgerError
 from openai_cost_calculator.proxy.registry import TrackerRegistry, default_registry
 from openai_cost_calculator.proxy.upstreams import (
@@ -27,6 +33,10 @@ from openai_cost_calculator.proxy.upstreams import (
     UpstreamSelection,
     classify_upstream,
 )
+
+
+ANTHROPIC_PROTOCOL = "anthropic-messages"
+OPENAI_PROTOCOL = "openai-responses"
 
 
 _HOP_BY_HOP_HEADERS = {
@@ -52,6 +62,8 @@ def create_app(
     upstream_selection: Optional[UpstreamSelection] = None,
     admin_token: Optional[str] = None,
     websocket_connector=None,
+    protocol: str = OPENAI_PROTOCOL,
+    pricing_semantics: Optional[str] = None,
 ) -> FastAPI:
     if registry is not None and (ledger_path is not None or database_path is not None):
         raise ValueError("pass either registry or a persistence path, not both")
@@ -78,6 +90,12 @@ def create_app(
     app.state.occ_transport = transport
     app.state.occ_admin_token = admin_token
     app.state.occ_websocket_connector = websocket_connector
+    if protocol not in {OPENAI_PROTOCOL, ANTHROPIC_PROTOCOL}:
+        raise ValueError(f"unsupported proxy protocol: {protocol!r}")
+    app.state.occ_protocol = protocol
+    app.state.occ_pricing_semantics = pricing_semantics or (
+        "api-equivalent" if protocol == ANTHROPIC_PROTOCOL else "billed-estimate"
+    )
 
     @app.get("/_occ/health")
     async def health(request: Request) -> JSONResponse:
@@ -136,6 +154,41 @@ def create_app(
             )
         return JSONResponse({"ok": True})
 
+    @app.get("/_occ/claude/status")
+    async def claude_status(request: Request, session: Optional[str] = None) -> JSONResponse:
+        unauthorized = _admin_auth_error(app, request)
+        if unauthorized is not None:
+            return unauthorized
+        session_id = _bounded_identifier(session, 128) or "unscoped-claude"
+        payload = app.state.occ_registry.claude_status(session_id)
+        payload["pricing_semantics"] = app.state.occ_pricing_semantics
+        return JSONResponse(payload)
+
+    @app.post("/_occ/claude/turn")
+    async def claude_turn(request: Request) -> JSONResponse:
+        unauthorized = _admin_auth_error(app, request)
+        if unauthorized is not None:
+            return unauthorized
+        try:
+            body = _json_from_bytes(await request.body())
+        except Exception:
+            body = {}
+        session_id = _bounded_identifier(body.get("session_id"), 128) or "unscoped-claude"
+        event = body.get("event")
+        idem_key = _bounded_identifier(body.get("idempotency_key"), 128) or "default"
+        registry = app.state.occ_registry
+        if event == "open":
+            label = registry.open_turn(session_id, idem_key)
+            return JSONResponse({"ok": True, "turn": label, "event": event})
+        if event in {"complete", "fail", "interrupt"}:
+            state = {"complete": "completed", "fail": "failed", "interrupt": "interrupted"}[event]
+            label = registry.finalize_turn(session_id, state)
+            return JSONResponse({"ok": True, "turn": label, "state": state, "event": event})
+        return JSONResponse(
+            {"error": {"code": "turn_lifecycle_conflict", "message": "unknown turn event"}},
+            status_code=400,
+        )
+
     @app.get("/_occ/costs/stream")
     async def cost_stream(request: Request) -> Response:
         unauthorized = _admin_auth_error(app, request)
@@ -154,12 +207,26 @@ def create_app(
 
         return StreamingResponse(events(), media_type="text/event-stream")
 
-    @app.api_route("/v1/{path:path}", methods=["GET", "POST"])
+    @app.api_route("/", methods=["GET", "HEAD"])
+    async def root_probe(request: Request) -> Response:
+        # Claude Code issues a connectivity probe against the root; forward it
+        # faithfully without recording it as a model request.
+        if app.state.occ_protocol != ANTHROPIC_PROTOCOL:
+            return Response(status_code=404)
+        return await _forward_passthrough(
+            app, f"{app.state.occ_upstream}/", request, await request.body()
+        )
+
+    @app.api_route("/v1/{path:path}", methods=["GET", "POST", "HEAD"])
     async def forward(path: str, request: Request) -> Response:
         body = await request.body()
+        request_payload = _json_from_bytes(body)
+
+        if app.state.occ_protocol == ANTHROPIC_PROTOCOL:
+            return await _forward_anthropic(app, path, request, body, request_payload)
+
         session_id = _bounded_identifier(request.headers.get("x-occ-session"), 128)
         turn_label = _bounded_identifier(request.headers.get("x-occ-turn"), 256)
-        request_payload = _json_from_bytes(body)
 
         if request.method == "POST" and request_payload.get("stream") is True:
             return await _forward_streaming(
@@ -271,6 +338,172 @@ async def _forward_streaming(
                         session_id,
                         "missing_usage",
                         "successful streaming response ended without final usage data",
+                    )
+            await upstream_response.aclose()
+            await client.aclose()
+
+    return StreamingResponse(
+        chunks(),
+        status_code=upstream_response.status_code,
+        headers=_response_headers(upstream_response.headers, streaming=True),
+    )
+
+
+async def _forward_passthrough(
+    app: FastAPI,
+    url: str,
+    request: Request,
+    body: bytes,
+) -> Response:
+    """Forward a request verbatim without any accounting (probes, discovery)."""
+    async with _client(app) as client:
+        upstream_response = await client.request(
+            request.method,
+            url,
+            headers=_forward_headers(request),
+            content=body,
+        )
+    return Response(
+        content=upstream_response.content,
+        status_code=upstream_response.status_code,
+        headers=_response_headers(upstream_response.headers),
+    )
+
+
+def _anthropic_upstream_url(app: FastAPI, path: str, request: Request) -> str:
+    # Claude Code targets ``<base>/v1/<path>``; the route captures only the
+    # portion after ``/v1/``, so re-add the ``/v1`` segment when forwarding.
+    url = f"{app.state.occ_upstream}/v1/{path}"
+    if request.url.query:
+        url = f"{url}?{request.url.query}"
+    return url
+
+
+def _anthropic_session(request: Request) -> str:
+    session = _bounded_identifier(request.headers.get("x-claude-code-session-id"), 128)
+    if session:
+        return session
+    session = _bounded_identifier(request.headers.get("x-occ-session"), 128)
+    return session or "unscoped-claude"
+
+
+async def _forward_anthropic(
+    app: FastAPI,
+    path: str,
+    request: Request,
+    body: bytes,
+    request_payload: dict,
+) -> Response:
+    normalized = path.strip("/")
+    accountable = request.method == "POST" and normalized == "messages"
+    if not accountable:
+        # count_tokens, model discovery, and probes are forwarded without cost.
+        return await _forward_passthrough(
+            app, _anthropic_upstream_url(app, path, request), request, body
+        )
+
+    registry = app.state.occ_registry
+    session_id = _anthropic_session(request)
+    turn_label = registry.active_turn_label(session_id) or UNATTRIBUTED_TURN
+
+    if request_payload.get("stream") is True:
+        return await _forward_anthropic_streaming(
+            app, path, request, body, session_id, turn_label, request_payload
+        )
+    return await _forward_anthropic_buffered(
+        app, path, request, body, session_id, turn_label, request_payload
+    )
+
+
+async def _forward_anthropic_buffered(
+    app: FastAPI,
+    path: str,
+    request: Request,
+    body: bytes,
+    session_id: str,
+    turn_label: str,
+    request_payload: dict,
+) -> Response:
+    async with _client(app) as client:
+        upstream_response = await client.request(
+            request.method,
+            _anthropic_upstream_url(app, path, request),
+            headers=_forward_headers(request),
+            content=body,
+        )
+
+    if upstream_response.status_code < 400:
+        content_type = upstream_response.headers.get("content-type") or ""
+        if "json" in content_type.lower():
+            payload = _json_from_bytes(upstream_response.content)
+            record_anthropic_response(
+                app.state.occ_registry,
+                session_id,
+                turn_label,
+                usage=usage_from_response_payload(payload),
+                raw_usage=payload.get("usage") if isinstance(payload, dict) else None,
+                response_model=payload.get("model") if isinstance(payload, dict) else None,
+                request_model=request_payload.get("model"),
+            )
+
+    return Response(
+        content=upstream_response.content,
+        status_code=upstream_response.status_code,
+        headers=_response_headers(upstream_response.headers),
+    )
+
+
+async def _forward_anthropic_streaming(
+    app: FastAPI,
+    path: str,
+    request: Request,
+    body: bytes,
+    session_id: str,
+    turn_label: str,
+    request_payload: dict,
+) -> StreamingResponse:
+    client = _client(app)
+    upstream_request = client.build_request(
+        request.method,
+        _anthropic_upstream_url(app, path, request),
+        headers=_forward_headers(request),
+        content=body,
+    )
+    upstream_response = await client.send(upstream_request, stream=True)
+    accountant = AnthropicStreamAccountant(default_model=request_payload.get("model"))
+
+    async def chunks() -> AsyncIterator[bytes]:
+        completed = False
+        try:
+            async for chunk in upstream_response.aiter_raw():
+                accountant.feed(chunk)
+                yield chunk
+            completed = True
+        except Exception as exc:
+            app.state.occ_registry.record_error(
+                session_id,
+                "stream_interrupted",
+                f"Anthropic stream ended unexpectedly: {type(exc).__name__}",
+            )
+            raise
+        finally:
+            accountant.close()
+            if completed and upstream_response.status_code < 400:
+                if accountant.error_code is not None:
+                    app.state.occ_registry.record_error(
+                        session_id,
+                        "stream_malformed_event",
+                        f"Anthropic stream reported an error event: {accountant.error_code}",
+                    )
+                else:
+                    record_anthropic_response(
+                        app.state.occ_registry,
+                        session_id,
+                        turn_label,
+                        usage=accountant.usage,
+                        raw_usage=accountant.last_usage_dict,
+                        response_model=accountant.model,
+                        request_model=request_payload.get("model"),
                     )
             await upstream_response.aclose()
             await client.aclose()

@@ -17,6 +17,22 @@ _MAX_ERRORS_PER_SESSION = 100
 _MAX_DIAGNOSTIC_LENGTH = 500
 _MAX_SESSIONS = 1_024
 _MAX_CALLS_PER_SESSION = 50_000
+_TURN_STATES = {"active", "completed", "failed", "interrupted", "unknown"}
+# Diagnostic codes that mark a session's monetary total as possibly incomplete.
+_ACCOUNTING_INCOMPLETE_CODES = {
+    "missing_usage",
+    "usage_missing",
+    "usage_malformed",
+    "missing_model",
+    "model_missing",
+    "model_unknown",
+    "pricing_unavailable",
+    "pricing_ambiguous",
+    "server_tool_unpriced",
+    "stream_incomplete",
+    "stream_interrupted",
+    "cost_estimation_failed",
+}
 _SECRET_RE = re.compile(
     r"(?i)(?:bearer\s+)[^\s,;]+|(?:sk-[a-z0-9_-]{8,})"
 )
@@ -36,6 +52,12 @@ class TrackerRegistry:
         self._checkpoint_cursors: Dict[str, int] = {}
         self._errors: Dict[str, list[dict]] = {}
         self._initial_totals: Dict[str, Decimal] = {}
+        # Claude turn lifecycle state (in-memory; scoped to this proxy process).
+        self._active_turns: Dict[str, str] = {}
+        self._turn_states: Dict[str, Dict[str, str]] = {}
+        self._turn_keys: Dict[str, str] = {}
+        self._turn_order: Dict[str, list[str]] = {}
+        self._turn_counters: Dict[str, int] = {}
         self._subscribers: list[asyncio.Queue] = []
         self._lock = RLock()
         self._on_error = on_error
@@ -114,6 +136,177 @@ class TrackerRegistry:
                     del self._trackers[key]
         return record
 
+    def record_costed_call(
+        self,
+        session_id: Optional[str],
+        model: str,
+        tokens: dict,
+        cost: CostBreakdown,
+        *,
+        turn_label: Optional[str] = None,
+    ) -> Optional[CallRecord]:
+        """Record an already-priced call (for example Anthropic Messages).
+
+        The cost breakdown is stored verbatim; it is not recomputed with the
+        OpenAI estimator.  Attribution, aggregation, persistence, and capacity
+        limits are identical to :meth:`record_call`.
+        """
+        key = session_id or "default"
+        try:
+            tracker = self.get(key)
+        except RegistryCapacityError:
+            self.record_error(
+                "__registry__",
+                "accounting_capacity_reached",
+                "additional session was not recorded because the registry session limit was reached",
+            )
+            return None
+        with self._lock:
+            if (
+                not isinstance(self._ledger, SQLiteLedger)
+                and len(_tracker_records(tracker)) >= _MAX_CALLS_PER_SESSION
+            ):
+                self.record_error(
+                    key,
+                    "accounting_capacity_reached",
+                    "call was not recorded because the per-session call limit was reached",
+                )
+                return None
+            try:
+                record = tracker.add_costed_call(
+                    model, tokens, cost, turn_label=turn_label
+                )
+            except Exception as exc:  # pragma: no cover - defensive
+                self.record_error(key, "ledger_write_failed", str(exc))
+                return None
+            self._persist_call_locked(key, turn_label, record)
+        self.notify()
+        return record
+
+    def open_turn(self, session_id: Optional[str], idem_key: str) -> Optional[str]:
+        """Open (or re-confirm) the active turn for a Claude session.
+
+        Idempotent: a repeated call with the same key while the turn is still
+        active returns the same label without creating a second turn.  A key
+        that matches an already-finalized turn opens a genuinely new turn.
+        """
+        key = session_id or "default"
+        with self._lock:
+            active = self._active_turns.get(key)
+            if active is not None and self._turn_keys.get(active) == idem_key:
+                return active
+            try:
+                tracker = self.get(key)
+            except RegistryCapacityError:
+                self.record_error(
+                    "__registry__",
+                    "accounting_capacity_reached",
+                    "turn was not opened because the registry session limit was reached",
+                )
+                return None
+            counter = self._turn_counters.get(key, 0) + 1
+            self._turn_counters[key] = counter
+            label = f"turn-{counter}"
+            tracker.ensure_turn(label)
+            self._active_turns[key] = label
+            self._turn_keys[label] = idem_key
+            self._turn_states.setdefault(key, {})[label] = "active"
+            self._turn_order.setdefault(key, []).append(label)
+            self._persist_locked()
+        self.notify()
+        return label
+
+    def finalize_turn(
+        self,
+        session_id: Optional[str],
+        state: str,
+        *,
+        idem_key: Optional[str] = None,
+    ) -> Optional[str]:
+        """Finalize the active turn for a session with ``state``.
+
+        Idempotent: finalizing when no turn is active is a no-op and never
+        mutates cost.
+        """
+        key = session_id or "default"
+        normalized = state if state in _TURN_STATES else "unknown"
+        with self._lock:
+            active = self._active_turns.get(key)
+            if active is None:
+                return None
+            if idem_key is not None and self._turn_keys.get(active) != idem_key:
+                return None
+            self._turn_states.setdefault(key, {})[active] = normalized
+            del self._active_turns[key]
+        self.notify()
+        return active
+
+    def active_turn_label(self, session_id: Optional[str]) -> Optional[str]:
+        key = session_id or "default"
+        with self._lock:
+            return self._active_turns.get(key)
+
+    def claude_status(self, session_id: Optional[str]) -> dict:
+        """A Claude-oriented, non-mutating view of turn and session totals."""
+        key = session_id or "default"
+        summary = self.summary(key)
+        session = summary.get("sessions", {}).get(key, {})
+        turn_dicts = {
+            turn.get("label"): turn
+            for turn in session.get("turns", [])
+            if isinstance(turn, dict)
+        }
+        with self._lock:
+            active_label = self._active_turns.get(key)
+            order = list(self._turn_order.get(key, []))
+            states = dict(self._turn_states.get(key, {}))
+        # Include record-derived turns (for example synthetic "unattributed"
+        # turns) that were never opened through the lifecycle hooks.
+        for label in turn_dicts:
+            if label is not None and label not in order:
+                order.append(label)
+
+        def _view(label: Optional[str]) -> Optional[dict]:
+            if label is None:
+                return None
+            turn = turn_dicts.get(label, {})
+            return {
+                "label": label,
+                "state": states.get(label, "unknown"),
+                "total_cost": turn.get("total_cost", "0.00000000"),
+                "num_calls": turn.get("num_calls", 0),
+            }
+
+        latest_label = order[-1] if order else None
+        errors = session.get("errors", [])
+        accounting = "complete"
+        if any(
+            isinstance(error, dict) and error.get("code") in _ACCOUNTING_INCOMPLETE_CODES
+            for error in errors
+        ):
+            accounting = "partial"
+        persistence = summary.get("persistence", {})
+        if isinstance(persistence, dict) and persistence.get("enabled") and not persistence.get("healthy"):
+            accounting = "unavailable"
+        session_requests = sum(
+            int(turn.get("num_calls", 0)) for turn in turn_dicts.values()
+        )
+        return {
+            "session": key,
+            "session_total": session.get("session_total", "0.00000000"),
+            "historical_total": session.get("historical_total", "0.00000000"),
+            "process_total": session.get("process_total", "0.00000000"),
+            "active_turn": active_label,
+            "turn": _view(active_label) if active_label is not None else _view(latest_label),
+            "turn_is_active": active_label is not None,
+            "latest_turn": _view(latest_label),
+            "num_turns": len(order),
+            "session_requests": session_requests,
+            "accounting": accounting,
+            "errors": errors,
+            "persistence": persistence,
+        }
+
     def record_error(self, session_id: Optional[str], code: str, message: str) -> None:
         key = session_id or "default"
         with self._lock:
@@ -165,6 +358,11 @@ class TrackerRegistry:
             self._checkpoint_cursors.clear()
             self._errors.clear()
             self._initial_totals.clear()
+            self._active_turns.clear()
+            self._turn_states.clear()
+            self._turn_keys.clear()
+            self._turn_order.clear()
+            self._turn_counters.clear()
             if isinstance(self._ledger, SQLiteLedger):
                 self._sqlite_generation = self._ledger.generation()
             self._ledger_healthy = True
