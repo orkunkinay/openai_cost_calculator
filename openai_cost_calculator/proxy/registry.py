@@ -58,6 +58,7 @@ class TrackerRegistry:
         self._turn_keys: Dict[str, str] = {}
         self._turn_order: Dict[str, list[str]] = {}
         self._turn_counters: Dict[str, int] = {}
+        self._turn_ordinals: Dict[str, Dict[str, int]] = {}
         self._subscribers: list[asyncio.Queue] = []
         self._lock = RLock()
         self._on_error = on_error
@@ -72,6 +73,7 @@ class TrackerRegistry:
         if isinstance(self._ledger, SQLiteLedger):
             self._initial_totals = self._ledger.totals()
             self._sqlite_generation = self._ledger.generation()
+            self._restore_turns(self._ledger.load_turns())
         elif self._ledger is not None:
             self._restore(self._ledger.load())
 
@@ -212,10 +214,8 @@ class TrackerRegistry:
             self._turn_keys[label] = idem_key
             self._turn_states.setdefault(key, {})[label] = "active"
             self._turn_order.setdefault(key, []).append(label)
-            # The SQLite ledger derives turns from recorded calls, so an empty
-            # opened turn needs no snapshot there; the JSON ledger persists it.
-            if not isinstance(self._ledger, SQLiteLedger):
-                self._persist_locked()
+            self._turn_ordinals.setdefault(key, {})[label] = counter
+            self._persist_turn_locked(key, label, "active", idem_key, counter)
         self.notify()
         return label
 
@@ -241,6 +241,10 @@ class TrackerRegistry:
                 return None
             self._turn_states.setdefault(key, {})[active] = normalized
             del self._active_turns[key]
+            ordinal = self._turn_ordinals.get(key, {}).get(active, 0)
+            self._persist_turn_locked(
+                key, active, normalized, self._turn_keys.get(active), ordinal
+            )
         self.notify()
         return active
 
@@ -366,6 +370,7 @@ class TrackerRegistry:
             self._turn_keys.clear()
             self._turn_order.clear()
             self._turn_counters.clear()
+            self._turn_ordinals.clear()
             if isinstance(self._ledger, SQLiteLedger):
                 self._sqlite_generation = self._ledger.generation()
             self._ledger_healthy = True
@@ -517,6 +522,53 @@ class TrackerRegistry:
         self._mark_ledger_healthy()
         return True
 
+    def _persist_turn_locked(
+        self,
+        session: str,
+        label: str,
+        state: str,
+        idem_key: Optional[str],
+        ordinal: int,
+    ) -> None:
+        if isinstance(self._ledger, SQLiteLedger):
+            try:
+                self._ledger.record_turn(session, label, state, idem_key, ordinal)
+            except LedgerError as exc:
+                self._mark_ledger_error(exc)
+            else:
+                self._mark_ledger_healthy()
+        elif self._ledger is not None:
+            # The JSON snapshot captures the full lifecycle for this session.
+            self._persist_locked()
+
+    def _restore_turns(self, sessions: dict[str, Any]) -> None:
+        for key, payload in sessions.items():
+            if not isinstance(payload, dict):
+                continue
+            order = [str(label) for label in payload.get("order", [])]
+            states = {
+                str(label): str(state)
+                for label, state in payload.get("states", {}).items()
+                if str(state) in _TURN_STATES
+            }
+            keys = {
+                str(label): str(idem)
+                for label, idem in payload.get("keys", {}).items()
+            }
+            counter = payload.get("counter", len(order))
+            if not isinstance(counter, int) or isinstance(counter, bool) or counter < 0:
+                counter = len(order)
+            active = payload.get("active")
+            self._turn_order[key] = order
+            self._turn_states[key] = states
+            self._turn_keys.update(keys)
+            self._turn_counters[key] = max(counter, len(order))
+            self._turn_ordinals[key] = {
+                label: index + 1 for index, label in enumerate(order)
+            }
+            if isinstance(active, str) and states.get(active) == "active":
+                self._active_turns[key] = active
+
     def _mark_ledger_error(self, exc: Exception) -> None:
         self._ledger_healthy = False
         self._ledger_error = _diagnostic_text(exc)
@@ -542,6 +594,17 @@ class TrackerRegistry:
                 "turns": turns,
                 "errors": list(self._errors.get(key, [])),
                 "checkpoint_cursor": self._checkpoint_cursors.get(key, 0),
+                "lifecycle": {
+                    "active": self._active_turns.get(key),
+                    "states": dict(self._turn_states.get(key, {})),
+                    "keys": {
+                        label: self._turn_keys[label]
+                        for label in self._turn_order.get(key, [])
+                        if label in self._turn_keys
+                    },
+                    "order": list(self._turn_order.get(key, [])),
+                    "counter": self._turn_counters.get(key, 0),
+                },
             }
         return {"schema_version": 1, "sessions": sessions}
 
@@ -589,6 +652,9 @@ class TrackerRegistry:
                 )
                 if set_initial:
                     self._initial_totals[key] = tracker.session_total
+                lifecycle = session.get("lifecycle")
+                if isinstance(lifecycle, dict):
+                    self._restore_turns({key: lifecycle})
         except (KeyError, TypeError, ValueError) as exc:
             raise LedgerError(f"durable ledger has invalid accounting data: {exc}") from exc
 

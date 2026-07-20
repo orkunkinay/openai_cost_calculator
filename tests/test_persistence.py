@@ -293,3 +293,33 @@ def test_anthropic_costed_calls_survive_restart_and_mark_history(tmp_path: Path,
     assert session["historical_total"] == expected
     assert session["process_total"] == "0.00000000"
     restored.close()
+
+
+@pytest.mark.parametrize("backend", ["json", "database"])
+def test_turn_lifecycle_survives_restart(tmp_path: Path, backend: str):
+    tokens, breakdown, expected = _anthropic_record()
+    path = tmp_path / ("led.json" if backend == "json" else "led.db")
+    kwargs = {"ledger_path": path} if backend == "json" else {"database_path": path}
+
+    first = TrackerRegistry(**kwargs)
+    first.open_turn("sess-1", "k1")
+    first.record_costed_call(
+        "sess-1", "claude-opus-4-8", tokens, breakdown, turn_label="turn-1"
+    )
+    first.finalize_turn("sess-1", "completed")
+    first.open_turn("sess-1", "k2")  # empty, still active at shutdown
+    first.close()
+
+    restored = TrackerRegistry(**kwargs)
+    status = restored.claude_status("sess-1")
+    # The empty active turn is restored as active with a legitimate zero.
+    assert status["active_turn"] == "turn-2"
+    assert status["turn"]["state"] == "active"
+    assert status["turn"]["total_cost"] == "0.00000000"
+    assert status["session_total"] == expected
+    assert status["num_turns"] == 2
+    # The counter continues so a new turn does not collide with a restored one.
+    assert restored.open_turn("sess-1", "k3") == "turn-3"
+    # A finalized turn keeps its state after restart.
+    assert restored._turn_states["sess-1"]["turn-1"] == "completed"
+    restored.close()
