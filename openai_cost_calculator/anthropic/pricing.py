@@ -138,8 +138,8 @@ for _model in ("claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-
 for _model in ("claude-opus-4-1", "claude-opus-4"):
     _register(_model, _EFFECTIVE, _base_family("15", "75", "1.5"))
 
-# Sonnet 4.x: base tier plus a long-context tier above 200K input tokens.
-for _model in ("claude-sonnet-4-6", "claude-sonnet-4-5", "claude-sonnet-4"):
+# Sonnet 5 and Sonnet 4.x: base tier plus a long-context tier above 200K input.
+for _model in ("claude-sonnet-5", "claude-sonnet-4-6", "claude-sonnet-4-5", "claude-sonnet-4"):
     _register(
         _model,
         _EFFECTIVE,
@@ -226,17 +226,19 @@ def resolve_anthropic_rate(model: str, total_input_tokens: int) -> AnthropicRate
     if total_input_tokens < 0:
         raise AnthropicPricingError("total_input_tokens must be non-negative")
 
-    name, request_date = split_anthropic_model(model)
+    name, _snapshot_date = split_anthropic_model(model)
     rows = _RATES.get(name)
     if not rows:
         raise AnthropicPricingError(f"no Anthropic pricing for model {name!r}")
 
-    applicable_dates = [row.date for row in rows if row.date <= request_date]
-    if not applicable_dates:
-        raise AnthropicPricingError(
-            f"no Anthropic pricing for model {name!r} on or before {request_date}"
-        )
-    newest = max(applicable_dates)
+    # Pricing is selected by the pricing row's effective date relative to today,
+    # not by the model id's release-date suffix (a dated model id such as
+    # ``claude-sonnet-4-5-20250929`` is still billed at the current rate).  If no
+    # row is effective yet (rows dated in the future relative to the clock), fall
+    # back to the model's rows so a known model always resolves.
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    applicable_dates = [row.date for row in rows if row.date <= today]
+    newest = max(applicable_dates) if applicable_dates else min(row.date for row in rows)
     tiers = sorted(
         (row.rate for row in rows if row.date == newest),
         key=lambda rate: rate.min_input_tokens,

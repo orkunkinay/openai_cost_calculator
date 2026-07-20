@@ -213,7 +213,8 @@ def test_turn_lifecycle_admin_endpoints_open_aggregate_and_finalize():
     assert Decimal(status["session_total"]) == single * 2
     assert status["turn"]["state"] == "completed"
     assert status["turn_is_active"] is False
-    assert status["pricing_semantics"] == "api-equivalent"
+    # No credential header was sent, so semantics fall back to the default.
+    assert status["pricing_semantics"] == "billed-estimate"
 
     # A new empty turn does not reset the session total.
     client.post("/_occ/claude/turn", json={"session_id": "sess-1", "event": "open", "idempotency_key": "k2"})
@@ -314,3 +315,60 @@ def test_two_request_turn_with_cache_aggregates(monkeypatch):
     assert Decimal(status["session_total"]) == total
     assert status["turn"]["num_calls"] == 2
     assert status["turn"]["state"] == "completed"
+
+
+def test_pricing_semantics_inferred_from_credential_header():
+    usage = {"input_tokens": 100, "output_tokens": 50}
+    body = _messages_body(usage)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, headers={"content-type": "application/json"}, content=body)
+
+    # OAuth bearer -> subscription -> API-equivalent.
+    client, registry = _app(handler)
+    registry.open_turn("sess-1", "k1")
+    client.post("/v1/messages", content=json.dumps({"model": "claude-opus-4-8"}),
+                headers=_headers(**{"authorization": "Bearer sk-ant-oat-xxx"}))
+    assert client.get("/_occ/claude/status?session=sess-1").json()["pricing_semantics"] == "api-equivalent"
+
+    # x-api-key -> direct API key -> billed estimate.
+    client2, registry2 = _app(handler)
+    registry2.open_turn("sess-2", "k1")
+    client2.post("/v1/messages", content=json.dumps({"model": "claude-opus-4-8"}),
+                 headers={"x-claude-code-session-id": "sess-2", "x-api-key": "sk-ant-api-xxx"})
+    assert client2.get("/_occ/claude/status?session=sess-2").json()["pricing_semantics"] == "billed-estimate"
+
+
+def test_gzip_encoded_stream_is_decoded_for_accounting():
+    import gzip
+
+    sse = (
+        b'event: message_start\n'
+        b'data: {"type":"message_start","message":{"model":"claude-opus-4-8",'
+        b'"usage":{"input_tokens":1000,"output_tokens":1}}}\n\n'
+        b'event: message_delta\ndata: {"type":"message_delta","usage":{"output_tokens":500}}\n\n'
+        b'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+    )
+    compressed = gzip.compress(sse)
+    # Split the gzip bytes across chunks to exercise incremental decoding.
+    chunks = [compressed[: len(compressed) // 2], compressed[len(compressed) // 2 :]]
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream", "content-encoding": "gzip"},
+            stream=AsyncChunkStream(chunks),
+        )
+
+    client, registry = _app(handler)
+    registry.open_turn("sess-1", "k1")
+    response = client.post(
+        "/v1/messages",
+        content=json.dumps({"model": "claude-opus-4-8", "stream": True}),
+        headers=_headers(),
+    )
+    # The proxy forwards the raw gzip bytes; the httpx test client decompresses
+    # them back to the original SSE, proving passthrough integrity.
+    assert response.content == sse
+    usage = {"input_tokens": 1_000, "output_tokens": 500}
+    assert registry.claude_status("sess-1")["session_total"] == _expected_total(usage)

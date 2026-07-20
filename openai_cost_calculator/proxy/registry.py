@@ -59,6 +59,7 @@ class TrackerRegistry:
         self._turn_order: Dict[str, list[str]] = {}
         self._turn_counters: Dict[str, int] = {}
         self._turn_ordinals: Dict[str, Dict[str, int]] = {}
+        self._session_semantics: Dict[str, str] = {}
         self._subscribers: list[asyncio.Queue] = []
         self._lock = RLock()
         self._on_error = on_error
@@ -253,6 +254,21 @@ class TrackerRegistry:
         with self._lock:
             return self._active_turns.get(key)
 
+    def note_session_semantics(self, session_id: Optional[str], semantics: str) -> None:
+        """Record the pricing semantics inferred for a session (bounded)."""
+        if semantics not in {"api-equivalent", "billed-estimate", "unavailable"}:
+            return
+        key = session_id or "default"
+        with self._lock:
+            if key not in self._session_semantics and len(self._session_semantics) >= _MAX_SESSIONS:
+                return
+            self._session_semantics[key] = semantics
+
+    def session_semantics(self, session_id: Optional[str]) -> Optional[str]:
+        key = session_id or "default"
+        with self._lock:
+            return self._session_semantics.get(key)
+
     def claude_status(self, session_id: Optional[str]) -> dict:
         """A Claude-oriented, non-mutating view of turn and session totals."""
         key = session_id or "default"
@@ -267,6 +283,7 @@ class TrackerRegistry:
             active_label = self._active_turns.get(key)
             order = list(self._turn_order.get(key, []))
             states = dict(self._turn_states.get(key, {}))
+            inferred_semantics = self._session_semantics.get(key)
         # Include record-derived turns (for example synthetic "unattributed"
         # turns) that were never opened through the lifecycle hooks.
         for label in turn_dicts:
@@ -309,6 +326,7 @@ class TrackerRegistry:
             "latest_turn": _view(latest_label),
             "num_turns": len(order),
             "session_requests": session_requests,
+            "pricing_semantics": inferred_semantics,
             "accounting": accounting,
             "errors": errors,
             "persistence": persistence,
@@ -371,6 +389,7 @@ class TrackerRegistry:
             self._turn_order.clear()
             self._turn_counters.clear()
             self._turn_ordinals.clear()
+            self._session_semantics.clear()
             if isinstance(self._ledger, SQLiteLedger):
                 self._sqlite_generation = self._ledger.generation()
             self._ledger_healthy = True

@@ -64,11 +64,11 @@ def record_anthropic_response(
 
     try:
         cost = price_anthropic_usage(resolved_model, usage)
-    except (AnthropicPricingError, AnthropicUsageError) as exc:
+    except (AnthropicPricingError, AnthropicUsageError):
         registry.record_error(
             session_id,
             "pricing_unavailable",
-            f"Anthropic pricing unavailable for observed model: {type(exc).__name__}",
+            f"no Anthropic pricing for observed model {_safe_model(resolved_model)!r}",
         )
         return
 
@@ -115,3 +115,10 @@ def usage_from_response_payload(payload: Any) -> Optional[AnthropicUsage]:
 
 def _clean_model(model: Any) -> Optional[str]:
     return model if isinstance(model, str) and model else None
+
+
+def _safe_model(model: Any) -> str:
+    """A bounded, printable model identifier safe to store in a diagnostic."""
+    text = str(model)
+    text = "".join(character if character.isprintable() else "?" for character in text)
+    return text[:100]

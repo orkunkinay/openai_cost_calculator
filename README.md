@@ -295,6 +295,7 @@ openai-cost-calculator claude pricing validate # validate the Anthropic pricing 
 Cost semantics and supported providers.
 A direct Anthropic API key yields a close *billed estimate* (still not an invoice: credits, tiers, and beta pricing may differ).
 Subscription OAuth yields an *API-equivalent* estimate.
+The proxy infers which of these applies from the credential *header kind* — an API key is sent as `x-api-key`, subscription OAuth as `authorization: Bearer` — so a subscription login stored in the OS keychain is still labelled `API-eq` even though the resolver cannot read it.
 Direct Anthropic API keys, subscription OAuth via a local `ANTHROPIC_BASE_URL`, bearer-token Anthropic-format gateways, and chainable custom Anthropic-format base URLs are supported; a custom gateway's cost is reported as unavailable unless a pricing profile is known.
 Amazon Bedrock, Google Vertex, and Microsoft Foundry are detected and refused rather than mispriced, because their payloads are not the Anthropic Messages protocol; unsupported providers never produce a false zero-cost result.
 
@@ -302,10 +303,13 @@ Session attribution uses the `x-claude-code-session-id` request header by defaul
 If your Claude Code build sends a different header, set `OCC_CLAUDE_SESSION_HEADER` on the proxy to that name — no code change needed.
 To confirm which headers Claude Code actually sends when routed through the proxy, start it with `OCC_CLAUDE_DEBUG_HEADERS=1` and run one session; the proxy records the inbound header *names* (never their values) once per session as a `claude_headers_seen` diagnostic visible via `claude status --diagnostics`.
 
+Streaming responses are commonly `gzip`-encoded; the proxy forwards the raw bytes unchanged and decodes a private copy only for accounting.
+
 Persistence and limitations.
 Add `--database <path>` to the proxy for a concurrent SQLite ledger; turn and session totals *and the turn lifecycle* (open/finalized turn states) survive proxy restarts, and restored history is reported separately from current-process cost.
 The JSON ledger persists the same lifecycle in its snapshot.
-No real Claude Code request has been validated by this project's automated suite; the deterministic paths are covered by unit and integration tests, and a live path is exercised only by the opt-in self-test below.
+The integration has been validated with one real Claude Code (2.1.x) subscription request end to end: the request routed through the proxy, `x-claude-code-session-id` attributed it to the active turn, two Messages requests aggregated into one turn, the gzip stream was priced, and the status line showed matching API-equivalent turn and session totals with an idempotent checkpoint.
+A subscription (Keychain) login is used read-only against the real config directory, because it is not visible inside an isolated empty home; file-backed or `ANTHROPIC_API_KEY` credentials run fully isolated.
 
 ### Maintainer Claude self-test
 

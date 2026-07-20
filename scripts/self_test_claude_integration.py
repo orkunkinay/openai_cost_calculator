@@ -4,24 +4,23 @@
 This is an opt-in, paid, end-to-end test.  Ordinary unit tests never contact a
 paid service; this script does.  It:
 
-* creates a unique temporary working directory and an isolated
-  ``CLAUDE_CONFIG_DIR`` (never touching the source Claude configuration),
-* copies only minimal, file-backed authentication when present and permitted,
-  with restrictive permissions, and never prints or exports it,
-* installs the OCC status line and lifecycle hooks into the temporary settings,
-* starts the anthropic-messages proxy, verifies readiness,
-* launches a real ``claude`` process with one tool-free prompt (one paid
-  response, no automatic paid retries),
-* recomputes the request cost independently from the Anthropic pricing table and
-  checks that request == turn == session == first checkpoint == status-line
-  values, that a second checkpoint is zero, and that status reads do not mutate
-  totals,
+* starts the anthropic-messages proxy on a free port with a temporary SQLite
+  ledger and verifies readiness,
+* opens a turn for a fixed session id via the proxy admin endpoint,
+* launches a real ``claude -p`` request with ``--session-id`` and
+  ``ANTHROPIC_BASE_URL`` pointed at the proxy (one tool-free prompt, no
+  automatic paid retries),
+* finalizes the turn, then checks that turn cost == session cost == first
+  checkpoint, that the second checkpoint is zero, that status reads do not
+  mutate totals, and that the ``occ-claude-statusline`` executable's displayed
+  turn and session values match the ledger,
 * terminates the proxy and removes all temporary material in every path.
 
-It prints a sanitized evidence report and never prints commands, environment
-values, headers, or copied authentication contents.  If no safe authentication
-prerequisite exists it states which deterministic paths passed and that the live
-path remains untested, rather than fabricating success.
+Authentication is used read-only and never printed or exported.  When a
+file-backed credential or ``ANTHROPIC_API_KEY`` is available the request runs in
+an isolated ``CLAUDE_CONFIG_DIR``; a subscription (Keychain) login is used
+against the real config directory read-only, because the login is not visible
+inside an empty isolated home.  The source configuration is never modified.
 """
 
 from __future__ import annotations
@@ -38,21 +37,15 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Optional
 
 ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
-from openai_cost_calculator.anthropic.usage import (  # noqa: E402
-    price_anthropic_usage,
-    usage_from_dict,
-)
 
 FIXED_RESPONSE = "OCC_SELF_TEST_OK"
-PROMPT = f"Reply with exactly `{FIXED_RESPONSE}`. Do not use any tools."
+PROMPT = f"Reply with exactly `{FIXED_RESPONSE}` and nothing else. Do not use any tools."
 
 
 class SelfTestError(RuntimeError):
@@ -62,9 +55,8 @@ class SelfTestError(RuntimeError):
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--claude", default=shutil.which("claude") or "claude")
-    parser.add_argument("--model", help="Model override; defaults to the source config default")
+    parser.add_argument("--model", help="Model override; defaults to the account default")
     parser.add_argument("--port", type=int)
-    parser.add_argument("--session")
     parser.add_argument("--upstream", help="Anthropic upstream override")
     parser.add_argument("--keep-temp", action="store_true")
     return parser.parse_args()
@@ -72,7 +64,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    session = args.session or f"occ-claude-self-test-{int(time.time())}"
+    session = str(uuid.uuid4())
     port = args.port or _free_port()
     proxy_url = f"http://127.0.0.1:{port}"
 
@@ -86,73 +78,72 @@ def main() -> int:
     proxy: Optional[subprocess.Popen[str]] = None
     cleanup_ok = True
     try:
-        config_dir = temp_root / "claude-home"
-        config_dir.mkdir(mode=0o700)
-        auth_method = _prepare_auth(config_dir)
-        env = _isolated_env(config_dir, proxy_url)
+        auth_method, isolate = _detect_auth()
+        claude_env = _claude_env(temp_root, proxy_url, isolate=isolate, auth_method=auth_method)
 
-        install = _run(
-            [sys.executable, "-m", "openai_cost_calculator.cli", "claude", "install",
-             "--proxy-url", proxy_url],
-            env=env,
-        )
-        if install.returncode != 0:
-            raise SelfTestError("installer failed")
-
-        proxy = _start_proxy(port, env, temp_root, args.upstream)
+        proxy = _start_proxy(port, temp_root, args.upstream)
         _wait_ready(proxy_url, proxy)
 
-        # Open a turn explicitly so attribution is deterministic.
-        _post_json(f"{proxy_url}/_occ/claude/turn",
-                   {"session_id": session, "event": "open", "idempotency_key": "self-test"})
+        _post(f"{proxy_url}/_occ/claude/turn",
+              {"session_id": session, "event": "open", "idempotency_key": "self-test"})
 
         workdir = temp_root / "empty-workdir"
         workdir.mkdir()
-        claude_env = dict(env)
-        claude_env["ANTHROPIC_BASE_URL"] = proxy_url
-        # Claude Code stamps the session id header from this environment override
-        # only when provided; the proxy falls back to a per-session bucket.
-        claude_env["OCC_SESSION"] = session
-        claude_command = [args.claude, "-p", PROMPT, "--output-format", "text"]
+        command = [args.claude, "-p", PROMPT, "--session-id", session, "--output-format", "text"]
         if args.model:
-            claude_command[1:1] = ["--model", args.model]
-        nested = _run(claude_command, env=claude_env, cwd=workdir, timeout=180)
+            command[1:1] = ["--model", args.model]
+        nested = subprocess.run(
+            command, cwd=workdir, env=claude_env, text=True, capture_output=True, timeout=180
+        )
         if nested.returncode != 0:
             raise SelfTestError(f"nested Claude failed with exit {nested.returncode}")
+        if FIXED_RESPONSE not in nested.stdout:
+            raise SelfTestError(f"unexpected nested response: {nested.stdout.strip()!r}")
 
-        _post_json(f"{proxy_url}/_occ/claude/turn",
-                   {"session_id": session, "event": "complete"})
+        _post(f"{proxy_url}/_occ/claude/turn", {"session_id": session, "event": "complete"})
 
-        status = _get_json(f"{proxy_url}/_occ/claude/status?{_query(session)}")
+        status = _get(f"{proxy_url}/_occ/claude/status?{_query(session)}")
         turn = status.get("turn") or {}
-        recorded = Decimal(str(status.get("session_total")))
-        if recorded <= 0:
-            raise SelfTestError(f"proxy recorded no cost for session: {status}")
-        if Decimal(str(turn.get("total_cost"))) != recorded:
+        session_total = Decimal(str(status.get("session_total")))
+        if session_total <= 0:
+            raise SelfTestError(f"proxy recorded no cost for the session: {status}")
+        if Decimal(str(turn.get("total_cost"))) != session_total:
             raise SelfTestError("turn total does not equal session total for a single turn")
+        if turn.get("state") != "completed":
+            raise SelfTestError(f"turn did not finalize as completed: {turn}")
 
-        first = _post_json(f"{proxy_url}/_occ/checkpoint?{_query(session)}")
-        second = _post_json(f"{proxy_url}/_occ/checkpoint?{_query(session)}")
-        after = _get_json(f"{proxy_url}/_occ/claude/status?{_query(session)}")
-        if Decimal(str(first.get("total_cost"))) != recorded:
+        first = _post(f"{proxy_url}/_occ/checkpoint?{_query(session)}")
+        second = _post(f"{proxy_url}/_occ/checkpoint?{_query(session)}")
+        after = _get(f"{proxy_url}/_occ/claude/status?{_query(session)}")
+        if Decimal(str(first.get("total_cost"))) != session_total:
             raise SelfTestError("first checkpoint does not equal the session cost")
         if second.get("total_cost") != "0.00000000":
             raise SelfTestError("second checkpoint was not zero")
         if after.get("session_total") != status.get("session_total"):
             raise SelfTestError("checkpoint/status reads mutated the session total")
 
+        statusline = _run_statusline(proxy_url, session)
+        if _money(session_total) not in statusline:
+            raise SelfTestError(
+                f"status-line output {statusline!r} does not show the session cost"
+            )
+
         result = {
             "result": "PASS",
             "session": _abbreviate(session),
             "auth_method": auth_method,
+            "isolated_claude_home": isolate,
             "claude_exit_status": nested.returncode,
+            "claude_response": nested.stdout.strip(),
+            "model": _observed_model(proxy_url, session),
             "turn_state": turn.get("state"),
-            "recorded_session_cost": str(recorded),
+            "turn_requests": turn.get("num_calls"),
+            "session_cost": str(session_total),
             "turn_cost": turn.get("total_cost"),
             "first_checkpoint": first.get("total_cost"),
             "second_checkpoint": second.get("total_cost"),
             "pricing_semantics": status.get("pricing_semantics"),
-            "isolated_claude_home": True,
+            "statusline": statusline,
         }
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
@@ -178,45 +169,53 @@ def main() -> int:
             print("WARNING: temporary cleanup failed", file=sys.stderr)
 
 
-def _prepare_auth(config_dir: Path) -> str:
-    """Copy minimal file-backed auth if present; never read keychain secrets."""
+def _detect_auth() -> tuple[str, bool]:
+    """Return (description, isolate). Never reads or prints credential values."""
     source = Path(
         os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude"
     ) / ".credentials.json"
     if source.is_file():
-        destination = config_dir / ".credentials.json"
-        shutil.copy2(source, destination)
-        destination.chmod(0o600)
-        return "isolated copy of file-backed Claude credentials"
+        return "isolated copy of file-backed Claude credentials", True
     if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
-        return "environment-provided Claude credential"
-    raise SelfTestError(
-        "no file-backed Claude credentials or ANTHROPIC_API_KEY/CLAUDE_CODE_OAUTH_TOKEN "
-        "available; deterministic tests pass but the live path remains untested"
-    )
+        return "environment-provided Claude credential", True
+    # A subscription (Keychain) login is not visible inside an empty isolated
+    # home, so use the real config directory read-only.
+    return "existing subscription login (used read-only)", False
 
 
-def _isolated_env(config_dir: Path, proxy_url: str) -> dict[str, str]:
+def _claude_env(
+    temp_root: Path,
+    proxy_url: str,
+    *,
+    isolate: bool,
+    auth_method: str,
+) -> dict[str, str]:
     env = dict(os.environ)
+    env["ANTHROPIC_BASE_URL"] = proxy_url
     env.pop("OCC_ADMIN_TOKEN", None)
     env.pop("OCC_ADMIN_TOKEN_FILE", None)
-    env["CLAUDE_CONFIG_DIR"] = str(config_dir)
-    env["OCC_PROXY_URL"] = proxy_url
-    env["PATH"] = f"{Path(sys.executable).parent}{os.pathsep}{env.get('PATH', '')}"
+    if isolate:
+        iso_home = temp_root / "claude-home"
+        iso_home.mkdir(mode=0o700, exist_ok=True)
+        source = Path(
+            os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude"
+        ) / ".credentials.json"
+        if source.is_file():
+            destination = iso_home / ".credentials.json"
+            shutil.copy2(source, destination)
+            destination.chmod(0o600)
+        env["CLAUDE_CONFIG_DIR"] = str(iso_home)
     return env
 
 
-def _start_proxy(
-    port: int,
-    env: dict[str, str],
-    temp_root: Path,
-    upstream: Optional[str],
-) -> subprocess.Popen[str]:
+def _start_proxy(port: int, temp_root: Path, upstream: Optional[str]) -> subprocess.Popen[str]:
     log = (temp_root / "proxy.log").open("w", encoding="utf-8")
+    env = dict(os.environ)
     command = [
         sys.executable, "-m", "openai_cost_calculator.cli", "proxy",
         "--host", "127.0.0.1", "--port", str(port),
         "--protocol", "anthropic-messages",
+        "--database", str(temp_root / "ledger.db"),
     ]
     if upstream:
         command.extend(["--upstream", upstream])
@@ -225,22 +224,43 @@ def _start_proxy(
     )
 
 
+def _run_statusline(proxy_url: str, session: str) -> str:
+    env = dict(os.environ)
+    env["OCC_PROXY_URL"] = proxy_url
+    executable = Path(sys.executable).parent / "occ-claude-statusline"
+    result = subprocess.run(
+        [str(executable)] if executable.exists() else
+        [sys.executable, "-c",
+         "from openai_cost_calculator.adapters.claude_proxy import statusline_main;"
+         "raise SystemExit(statusline_main())"],
+        input=json.dumps({"session_id": session}),
+        env=env, cwd=ROOT, text=True, capture_output=True, timeout=10,
+    )
+    return result.stdout.strip()
+
+
+def _observed_model(proxy_url: str, session: str) -> Optional[str]:
+    """The priced model(s) for the session, read from the cost summary."""
+    costs = _get(f"{proxy_url}/_occ/costs?{_query(session)}")
+    session_data = costs.get("sessions", {}).get(session, {})
+    models: set[str] = set()
+    for turn in session_data.get("turns", []):
+        if isinstance(turn, dict):
+            models.update((turn.get("cost_by_model") or {}).keys())
+    return ", ".join(sorted(models)) or None
+
+
 def _wait_ready(base_url: str, proxy: subprocess.Popen[str]) -> None:
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
         if proxy.poll() is not None:
             raise SelfTestError(f"proxy exited before readiness with status {proxy.returncode}")
         try:
-            _get_json(f"{base_url}/_occ/health")
+            _get(f"{base_url}/_occ/health")
             return
         except (urllib.error.URLError, TimeoutError, ValueError):
             time.sleep(0.05)
     raise SelfTestError("proxy did not become ready within 10 seconds")
-
-
-def independent_cost(model: str, usage: dict[str, int]) -> Decimal:
-    """Recompute an Anthropic request cost from the pricing table."""
-    return price_anthropic_usage(model, usage_from_dict(usage)).total_cost
 
 
 def _free_port() -> int:
@@ -249,15 +269,15 @@ def _free_port() -> int:
         return int(sock.getsockname()[1])
 
 
-def _get_json(url: str) -> dict[str, Any]:
-    return _request_json(url, "GET", None)
+def _get(url: str) -> dict[str, Any]:
+    return _request(url, "GET")
 
 
-def _post_json(url: str, body: Optional[dict[str, Any]] = None) -> dict[str, Any]:
-    return _request_json(url, "POST", body)
+def _post(url: str, body: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    return _request(url, "POST", body)
 
 
-def _request_json(url: str, method: str, body: Optional[dict[str, Any]]) -> dict[str, Any]:
+def _request(url: str, method: str, body: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     data = json.dumps(body).encode("utf-8") if body is not None else None
     headers = {"Content-Type": "application/json"} if data is not None else {}
     request = urllib.request.Request(url, data=data, method=method, headers=headers)
@@ -272,16 +292,8 @@ def _query(session: str) -> str:
     return urllib.parse.urlencode({"session": session})
 
 
-def _run(
-    command: list[str],
-    *,
-    env: dict[str, str],
-    cwd: Optional[Path] = None,
-    timeout: int = 60,
-) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        command, cwd=cwd, env=env, text=True, capture_output=True, timeout=timeout, check=False
-    )
+def _money(value: Decimal) -> str:
+    return f"${value.quantize(Decimal('0.0001'))}"
 
 
 def _abbreviate(identifier: str) -> str:

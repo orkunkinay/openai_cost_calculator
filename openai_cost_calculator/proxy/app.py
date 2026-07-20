@@ -29,6 +29,7 @@ from openai_cost_calculator.proxy.anthropic_accounting import (
 )
 from openai_cost_calculator.proxy.ledger import LedgerError
 from openai_cost_calculator.proxy.registry import TrackerRegistry, default_registry
+from openai_cost_calculator.proxy.streaming import IncrementalDecoder
 from openai_cost_calculator.proxy.upstreams import (
     PLATFORM_UPSTREAM,
     UpstreamSelection,
@@ -94,8 +95,12 @@ def create_app(
     if protocol not in {OPENAI_PROTOCOL, ANTHROPIC_PROTOCOL}:
         raise ValueError(f"unsupported proxy protocol: {protocol!r}")
     app.state.occ_protocol = protocol
-    app.state.occ_pricing_semantics = pricing_semantics or (
-        "api-equivalent" if protocol == ANTHROPIC_PROTOCOL else "billed-estimate"
+    app.state.occ_pricing_semantics = pricing_semantics or "billed-estimate"
+    # A custom gateway / unsupported provider genuinely cannot be priced, so its
+    # "unavailable" semantics override per-request header inference; otherwise the
+    # credential header kind (api key vs OAuth bearer) determines the label.
+    app.state.occ_pricing_semantics_override = (
+        "unavailable" if pricing_semantics == "unavailable" else None
     )
     app.state.occ_seen_header_sessions = set()
 
@@ -163,7 +168,11 @@ def create_app(
             return unauthorized
         session_id = _bounded_identifier(session, 128) or "unscoped-claude"
         payload = app.state.occ_registry.claude_status(session_id)
-        payload["pricing_semantics"] = app.state.occ_pricing_semantics
+        payload["pricing_semantics"] = (
+            app.state.occ_pricing_semantics_override
+            or payload.get("pricing_semantics")
+            or app.state.occ_pricing_semantics
+        )
         return JSONResponse(payload)
 
     @app.post("/_occ/claude/turn")
@@ -419,6 +428,25 @@ def _truthy(value: Optional[str]) -> bool:
     return value is not None and value.strip().lower() not in {"", "0", "false", "no", "off"}
 
 
+def _infer_pricing_semantics(app: FastAPI, request: Request) -> Optional[str]:
+    """Infer pricing semantics from the credential header kind (never the value).
+
+    Anthropic API keys are sent as ``x-api-key`` (a close billed estimate);
+    subscription OAuth is sent as ``authorization: Bearer`` (an API-equivalent
+    estimate, not an amount billed).  A configured startup override wins so a
+    known custom-gateway or subscription context is not second-guessed.
+    """
+    override = app.state.occ_pricing_semantics_override
+    if override is not None:
+        return override
+    if request.headers.get("x-api-key"):
+        return "billed-estimate"
+    authorization = request.headers.get("authorization", "")
+    if authorization.lower().startswith("bearer "):
+        return "api-equivalent"
+    return None
+
+
 async def _forward_anthropic(
     app: FastAPI,
     path: str,
@@ -437,6 +465,9 @@ async def _forward_anthropic(
     registry = app.state.occ_registry
     session_id = _anthropic_session(request)
     _maybe_capture_headers(app, request, session_id)
+    semantics = _infer_pricing_semantics(app, request)
+    if semantics is not None:
+        registry.note_session_semantics(session_id, semantics)
     turn_label = registry.active_turn_label(session_id) or UNATTRIBUTED_TURN
 
     if request_payload.get("stream") is True:
@@ -504,13 +535,15 @@ async def _forward_anthropic_streaming(
     )
     upstream_response = await client.send(upstream_request, stream=True)
     accountant = AnthropicStreamAccountant(default_model=request_payload.get("model"))
+    decoder = IncrementalDecoder(upstream_response.headers.get("content-encoding"))
 
     async def chunks() -> AsyncIterator[bytes]:
         completed = False
         try:
             async for chunk in upstream_response.aiter_raw():
-                accountant.feed(chunk)
-                yield chunk
+                if decoder.supported:
+                    accountant.feed(decoder.decompress(chunk))
+                yield chunk  # forward the original bytes unchanged
             completed = True
         except Exception as exc:
             app.state.occ_registry.record_error(
@@ -520,8 +553,27 @@ async def _forward_anthropic_streaming(
             )
             raise
         finally:
+            if decoder.supported:
+                accountant.feed(decoder.flush())
             accountant.close()
-            if completed and upstream_response.status_code < 400:
+            if _truthy(os.environ.get("OCC_CLAUDE_DEBUG_HEADERS")):
+                app.state.occ_registry.record_error(
+                    session_id,
+                    "claude_stream_debug",
+                    "status={} content-encoding={} model={} usage={}".format(
+                        upstream_response.status_code,
+                        decoder.encoding,
+                        accountant.model,
+                        "present" if accountant.usage is not None else "absent",
+                    ),
+                )
+            if completed and upstream_response.status_code < 400 and not decoder.supported:
+                app.state.occ_registry.record_error(
+                    session_id,
+                    "stream_malformed_event",
+                    f"cannot account a stream with unsupported content-encoding: {decoder.encoding}",
+                )
+            elif completed and upstream_response.status_code < 400:
                 if accountant.error_code is not None:
                     app.state.occ_registry.record_error(
                         session_id,

@@ -52,6 +52,16 @@ def test_unknown_model_and_negative_tokens_raise():
         resolve_anthropic_rate("claude-opus-4-8", -1)
 
 
-def test_dated_request_before_effective_date_has_no_pricing():
-    with pytest.raises(AnthropicPricingError):
-        resolve_anthropic_rate("claude-opus-4-8-20200101", 10)
+def test_dated_model_id_resolves_at_current_rate():
+    # A model id's release-date suffix must not gate pricing: a dated id is
+    # billed at the current rate for that model (regression for a live bug where
+    # claude-sonnet-5-<date> failed to price).
+    dated = resolve_anthropic_rate("claude-sonnet-4-5-20250929", 10)
+    undated = resolve_anthropic_rate("claude-sonnet-4-5", 10)
+    assert dated.input == undated.input == Decimal("3")
+
+
+def test_sonnet_5_is_priced():
+    rate = resolve_anthropic_rate("claude-sonnet-5", 10)
+    assert rate.input == Decimal("3")
+    assert rate.output == Decimal("15")
