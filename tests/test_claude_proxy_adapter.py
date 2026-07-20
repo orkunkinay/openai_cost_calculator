@@ -126,6 +126,36 @@ def test_hook_ignores_unrelated_events():
     assert result == {"handled": False, "event": "PreToolUse"}
 
 
+def test_hook_debug_records_invocation(monkeypatch):
+    diagnostics = []
+    monkeypatch.setenv("OCC_CLAUDE_HOOK_DEBUG", "1")
+    monkeypatch.setattr(
+        claude_proxy,
+        "_record_diagnostic",
+        lambda code, message: diagnostics.append((code, message)),
+    )
+
+    claude_proxy.hook_output(
+        {"hook_event_name": "PreToolUse", "session_id": "session-sensitive"}
+    )
+
+    assert diagnostics == [("hook_invoked", "event=PreToolUse session=session-…")]
+
+
+def test_hook_debug_is_disabled_by_default(monkeypatch):
+    diagnostics = []
+    monkeypatch.delenv("OCC_CLAUDE_HOOK_DEBUG", raising=False)
+    monkeypatch.setattr(
+        claude_proxy,
+        "_record_diagnostic",
+        lambda code, message: diagnostics.append((code, message)),
+    )
+
+    claude_proxy.hook_output({"hook_event_name": "PreToolUse", "session_id": "s1"})
+
+    assert diagnostics == []
+
+
 def test_hook_records_bounded_diagnostic_on_failure(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path))
     monkeypatch.setattr(

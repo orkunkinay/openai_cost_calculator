@@ -164,6 +164,10 @@ def hook_output(payload: dict[str, Any], *, proxy_url: Optional[str] = None) -> 
     """
     event_name = payload.get("hook_event_name")
     session_id = _session_id(payload)
+    if _truthy(os.environ.get("OCC_CLAUDE_HOOK_DEBUG")):
+        _record_diagnostic(
+            "hook_invoked", f"event={event_name} session={session_id[:8]}…"
+        )
     if event_name not in _TURN_EVENTS:
         return {"handled": False, "event": event_name}
     action, _ = _TURN_EVENTS[event_name]
@@ -198,6 +202,10 @@ def _session_id(payload: dict[str, Any]) -> str:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return "unscoped-claude"
+
+
+def _truthy(value: Optional[str]) -> bool:
+    return value is not None and value.strip().lower() not in {"", "0", "false", "no", "off"}
 
 
 def _prompt_key(session_id: str, prompt: Any) -> str:
