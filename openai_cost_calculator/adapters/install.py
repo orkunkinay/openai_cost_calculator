@@ -93,10 +93,28 @@ def _claude_manifest_file() -> Path:
     return _claude_config_dir() / OCC_CLAUDE_MANIFEST
 
 
+def _is_occ_statusline(value: Any) -> bool:
+    return (
+        isinstance(value, dict)
+        and isinstance(value.get("command"), str)
+        and "occ-claude-statusline" in value["command"]
+    )
+
+
+def _is_command_statusline(value: Any) -> bool:
+    return (
+        isinstance(value, dict)
+        and value.get("type", "command") == "command"
+        and isinstance(value.get("command"), str)
+        and bool(value["command"])
+    )
+
+
 def install_claude(
     proxy_url: str = "http://127.0.0.1:8100",
     *,
     replace_statusline: bool = False,
+    compose_statusline: bool = False,
     upstream: Optional[str] = None,
 ) -> list[str]:
     """Install the proxy-backed Claude integration into settings.json.
@@ -135,12 +153,24 @@ def install_claude(
 
     previous_statusline = settings.get("statusLine")
     statusline_managed = False
-    if previous_statusline == OCC_CLAUDE_STATUSLINE:
+    if _is_occ_statusline(previous_statusline):
         statusline_managed = True
     elif previous_statusline is None:
         settings["statusLine"] = dict(OCC_CLAUDE_STATUSLINE)
         statusline_managed = True
         changed.append("statusLine")
+    elif compose_statusline and _is_command_statusline(previous_statusline):
+        from openai_cost_calculator.adapters.claude_proxy import (
+            encode_previous_statusline,
+        )
+
+        encoded = encode_previous_statusline(previous_statusline["command"])
+        settings["statusLine"] = {
+            "type": "command",
+            "command": f"occ-claude-statusline --compose {encoded}",
+        }
+        statusline_managed = True
+        changed.append("statusLine (composed with existing)")
     elif replace_statusline:
         settings["statusLine"] = dict(OCC_CLAUDE_STATUSLINE)
         statusline_managed = True
@@ -148,7 +178,8 @@ def install_claude(
     else:
         raise ValueError(
             "Refusing to overwrite an existing Claude status line; re-run with "
-            "replace_statusline=True to replace it"
+            "replace_statusline=True to replace it, or compose_statusline=True to "
+            "keep it alongside the OCC status line"
         )
 
     hooks = settings.get("hooks")
@@ -181,9 +212,9 @@ def install_claude(
         },
         "previous": {
             "env": previous_env,
-            "statusLine": previous_statusline
-            if previous_statusline != OCC_CLAUDE_STATUSLINE
-            else None,
+            "statusLine": None
+            if _is_occ_statusline(previous_statusline)
+            else previous_statusline,
         },
         "hash": _managed_hash(base),
     }
@@ -229,7 +260,7 @@ def uninstall_claude() -> list[str]:
         else:
             settings.pop("env", None)
 
-    if settings.get("statusLine") == OCC_CLAUDE_STATUSLINE:
+    if _is_occ_statusline(settings.get("statusLine")):
         restore = previous.get("statusLine")
         if restore is not None:
             settings["statusLine"] = restore
@@ -290,7 +321,7 @@ def check_claude() -> dict[str, Any]:
         "settings_exists": path.exists(),
         "anthropic_base_url": env.get("ANTHROPIC_BASE_URL"),
         "occ_proxy_url": env.get("OCC_PROXY_URL"),
-        "statusline_installed": settings.get("statusLine") == OCC_CLAUDE_STATUSLINE,
+        "statusline_installed": _is_occ_statusline(settings.get("statusLine")),
         "hook_events_installed": installed_events,
         "manifest_present": _claude_manifest_file().exists(),
         "conflicts": conflicts,

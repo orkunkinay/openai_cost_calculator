@@ -663,6 +663,11 @@ def _add_claude_parser(subparsers) -> None:
         action="store_true",
         help="Replace an existing status line instead of refusing",
     )
+    install.add_argument(
+        "--compose-statusline",
+        action="store_true",
+        help="Keep an existing status line and append the OCC status line",
+    )
     claude_sub.add_parser("uninstall", help="Remove the Claude settings.json integration")
     claude_sub.add_parser("check", help="Report effective configuration and conflicts")
 
@@ -696,6 +701,7 @@ def _claude(args: argparse.Namespace) -> int:
             messages = install_claude(
                 args.proxy_url,
                 replace_statusline=args.replace_statusline,
+                compose_statusline=args.compose_statusline,
                 upstream=args.upstream,
             )
         except ValueError as exc:

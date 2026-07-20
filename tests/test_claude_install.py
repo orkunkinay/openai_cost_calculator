@@ -114,3 +114,23 @@ def test_check_reports_state_and_project_conflict(config_dir: Path, tmp_path: Pa
     assert set(report["hook_events_installed"]) == {"UserPromptSubmit", "Stop", "SessionEnd"}
     assert report["anthropic_base_url"] == "http://127.0.0.1:8100"
     assert any("project" in conflict for conflict in report["conflicts"])
+
+
+def test_compose_statusline_wraps_existing_and_restores(config_dir: Path):
+    original = {"statusLine": {"type": "command", "command": "my-status --flag"}}
+    (config_dir / "settings.json").write_text(json.dumps(original), encoding="utf-8")
+
+    install_claude("http://127.0.0.1:8100", compose_statusline=True)
+    command = _settings(config_dir)["statusLine"]["command"]
+    assert command.startswith("occ-claude-statusline --compose ")
+
+    from openai_cost_calculator.adapters.claude_proxy import encode_previous_statusline
+
+    assert encode_previous_statusline("my-status --flag") in command
+
+    # Reinstall is idempotent (does not double-wrap).
+    install_claude("http://127.0.0.1:8100", compose_statusline=True)
+    assert _settings(config_dir)["statusLine"]["command"] == command
+
+    uninstall_claude()
+    assert _settings(config_dir)["statusLine"] == {"type": "command", "command": "my-status --flag"}

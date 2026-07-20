@@ -138,3 +138,50 @@ def test_hook_records_bounded_diagnostic_on_failure(monkeypatch, tmp_path: Path)
     assert "secret" not in diagnostics[-1]["message"]
     log = tmp_path / "occ-claude-hook-diagnostics.jsonl"
     assert log.stat().st_mode & 0o777 == 0o600
+
+
+def test_compose_runs_previous_and_appends_occ(monkeypatch):
+    from openai_cost_calculator.adapters import claude_proxy as cp
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return None
+
+        def read(self):
+            return json.dumps(_status()).encode("utf-8")
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout: Response())
+    line = cp.compose_statusline_text('{"session_id":"sess-1"}', "printf 'CTX 42%%'")
+    assert line == "CTX 42% · 💰 OCC Turn $0.0124 · Session $0.0837"
+
+
+def test_compose_survives_previous_command_failure(monkeypatch):
+    from openai_cost_calculator.adapters import claude_proxy as cp
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return None
+
+        def read(self):
+            return json.dumps(_status()).encode("utf-8")
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout: Response())
+    line = cp.compose_statusline_text('{"session_id":"sess-1"}', "false")
+    assert line == "💰 OCC Turn $0.0124 · Session $0.0837"
+
+
+def test_compose_survives_occ_failure(monkeypatch):
+    from openai_cost_calculator.adapters import claude_proxy as cp
+
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: (_ for _ in ()).throw(OSError("offline")),
+    )
+    line = cp.compose_statusline_text('{"session_id":"sess-1"}', "printf 'CTX 42%%'")
+    assert line == f"CTX 42% · {cp.UNAVAILABLE}"

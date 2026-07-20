@@ -12,9 +12,12 @@ sensitive paths, and a failure in either must never break Claude Code.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import json
 import os
+import subprocess
 import sys
 import urllib.error
 import urllib.parse
@@ -70,7 +73,52 @@ def _render_status(data: dict[str, Any]) -> str:
     return line
 
 
+def compose_statusline_text(
+    raw_stdin: str,
+    previous_command: str,
+    *,
+    proxy_url: Optional[str] = None,
+) -> str:
+    """Render an existing status line composed with the OCC status line.
+
+    The previous command is run the same way Claude Code runs it (through the
+    shell, with the identical stdin), so no new unsafe evaluation is introduced.
+    The two segments fail independently: a failure in one never suppresses the
+    other, and the OCC segment is always appended after the existing output.
+    """
+    previous_output = _run_previous_statusline(previous_command, raw_stdin)
+    try:
+        payload = json.loads(raw_stdin or "{}")
+        if not isinstance(payload, dict):
+            payload = {}
+        occ_output = statusline_text(payload, proxy_url=proxy_url)
+    except Exception:
+        occ_output = UNAVAILABLE
+    segments = [segment for segment in (previous_output, occ_output) if segment]
+    return f" {SEP} ".join(segments) if segments else UNAVAILABLE
+
+
+def _run_previous_statusline(previous_command: str, raw_stdin: str) -> str:
+    if not previous_command:
+        return ""
+    try:
+        completed = subprocess.run(
+            previous_command,
+            shell=True,
+            input=raw_stdin,
+            text=True,
+            capture_output=True,
+            timeout=5,
+        )
+    except Exception:
+        return ""
+    return completed.stdout.strip()
+
+
 def statusline_main() -> int:
+    argv = sys.argv[1:]
+    if len(argv) >= 2 and argv[0] == "--compose":
+        return _compose_statusline_main(argv[1])
     try:
         payload = _read_stdin_json()
         print(statusline_text(payload))
@@ -78,6 +126,24 @@ def statusline_main() -> int:
         # Never surface a traceback into the Claude status bar.
         print(UNAVAILABLE)
     return 0
+
+
+def _compose_statusline_main(encoded_previous: str) -> int:
+    raw = sys.stdin.read() if not sys.stdin.isatty() else ""
+    try:
+        previous_command = base64.urlsafe_b64decode(encoded_previous.encode("ascii")).decode("utf-8")
+    except (binascii.Error, ValueError, UnicodeDecodeError):
+        previous_command = ""
+    try:
+        print(compose_statusline_text(raw, previous_command))
+    except Exception:
+        print(UNAVAILABLE)
+    return 0
+
+
+def encode_previous_statusline(previous_command: str) -> str:
+    """Encode a previous status-line command for the ``--compose`` argument."""
+    return base64.urlsafe_b64encode(previous_command.encode("utf-8")).decode("ascii")
 
 
 # --------------------------------------------------------------------------- #
