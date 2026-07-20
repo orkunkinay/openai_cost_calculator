@@ -22,6 +22,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     proxy_parser.add_argument("--port", default=8100, type=int)
     proxy_parser.add_argument("--upstream")
     proxy_parser.add_argument(
+        "--protocol",
+        choices=["openai-responses", "anthropic-messages"],
+        default="openai-responses",
+        help="Wire protocol to account (default: openai-responses for Codex)",
+    )
+    proxy_parser.add_argument(
         "--auth-mode",
         choices=["auto", "api-key", "chatgpt"],
         default="auto",
@@ -116,13 +122,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         default=str(Path(__file__).resolve().parents[1] / "data" / "gpt_pricing_data.csv"),
     )
 
+    _add_claude_parser(subparsers)
+
     args = parser.parse_args(argv)
+    if args.command == "claude":
+        return _claude(args)
     if args.command == "proxy":
         return _run_proxy(
             args.host,
             args.port,
             args.upstream,
             auth_mode=args.auth_mode,
+            protocol=args.protocol,
             ledger=args.ledger,
             database=args.database,
             allow_remote=args.allow_remote,
@@ -155,6 +166,7 @@ def _run_proxy(
     upstream: Optional[str],
     *,
     auth_mode: str,
+    protocol: str = "openai-responses",
     ledger: Optional[str],
     database: Optional[str],
     allow_remote: bool,
@@ -169,6 +181,20 @@ def _run_proxy(
         ) from exc
 
     from openai_cost_calculator.proxy.app import create_app
+
+    if protocol == "anthropic-messages":
+        return _run_anthropic_proxy(
+            host,
+            port,
+            upstream,
+            ledger=ledger,
+            database=database,
+            allow_remote=allow_remote,
+            admin_token_file=admin_token_file,
+            uvicorn=uvicorn,
+            create_app=create_app,
+        )
+
     from openai_cost_calculator.proxy.upstreams import (
         UpstreamSelectionError,
         resolve_upstream,
@@ -196,6 +222,76 @@ def _run_proxy(
         "Routing: "
         f"auth={selection.auth_mode}, upstream={selection.category}, "
         f"override={'yes' if selection.explicit_override else 'no'}"
+    )
+    if not _is_loopback_host(host):
+        print(
+            "WARNING: proxy is remotely reachable; protect it with TLS and trusted network controls",
+            file=sys.stderr,
+        )
+    if ledger:
+        print(f"Durable ledger: {Path(ledger).expanduser()}")
+    if database:
+        print(f"SQLite database: {Path(database).expanduser()}")
+    uvicorn.run(app, host=host, port=port)
+    return 0
+
+
+def _run_anthropic_proxy(
+    host: str,
+    port: int,
+    upstream: Optional[str],
+    *,
+    ledger: Optional[str],
+    database: Optional[str],
+    allow_remote: bool,
+    admin_token_file: Optional[str],
+    uvicorn,
+    create_app,
+) -> int:
+    from openai_cost_calculator.anthropic.resolve import (
+        ClaudeResolutionError,
+        resolve_claude,
+    )
+
+    base = f"http://{host}:{port}"
+    try:
+        if ledger and database:
+            raise ValueError("pass either --ledger or --database, not both")
+        admin_token = _load_admin_token(admin_token_file)
+        _validate_proxy_exposure(host, allow_remote, admin_token)
+        resolution = resolve_claude(
+            env=os.environ,
+            upstream=upstream,
+            proxy_self_urls={base, f"{base}/", f"{base}/v1"},
+        )
+        if resolution.support_level == "unsupported":
+            raise ValueError(
+                f"unsupported Claude provider '{resolution.provider_category}': "
+                "cost cannot be observed through the Anthropic Messages proxy"
+            )
+        semantics = {
+            "api-equivalent": "api-equivalent",
+            "billed-estimate": "billed-estimate",
+            "unavailable": "unavailable",
+        }.get(resolution.pricing_semantics, "billed-estimate")
+        app = create_app(
+            upstream=resolution.resolved_upstream,
+            protocol="anthropic-messages",
+            pricing_semantics=semantics,
+            ledger_path=ledger,
+            database_path=database,
+            admin_token=admin_token,
+        )
+    except (ClaudeResolutionError, OSError, RuntimeError, ValueError) as exc:
+        print(f"proxy configuration error: {exc}", file=sys.stderr)
+        return 2
+    print(f"Anthropic Messages base_url: {base}")
+    print(f"Claude status: {base}/_occ/claude/status")
+    print(
+        "Routing: "
+        f"auth={resolution.auth_mode}, provider={resolution.provider_category}, "
+        f"upstream={resolution.upstream_category}, "
+        f"pricing={resolution.pricing_semantics}, support={resolution.support_level}"
     )
     if not _is_loopback_host(host):
         print(
@@ -551,6 +647,152 @@ def _print_notifier_diagnostics(diagnostics: list[dict]) -> None:
             "Notifier diagnostic "
             f"{diagnostic.get('code')}: {diagnostic.get('message')}"
         )
+
+
+def _add_claude_parser(subparsers) -> None:
+    claude = subparsers.add_parser(
+        "claude", help="Proxy-backed Claude Code cost observation"
+    )
+    claude_sub = claude.add_subparsers(dest="claude_command", required=True)
+
+    install = claude_sub.add_parser("install", help="Install the Claude settings.json integration")
+    install.add_argument("--proxy-url", default="http://127.0.0.1:8100")
+    install.add_argument("--upstream")
+    install.add_argument(
+        "--replace-statusline",
+        action="store_true",
+        help="Replace an existing status line instead of refusing",
+    )
+    claude_sub.add_parser("uninstall", help="Remove the Claude settings.json integration")
+    claude_sub.add_parser("check", help="Report effective configuration and conflicts")
+
+    status = claude_sub.add_parser("status", help="Show current-turn and session cost")
+    _add_proxy_client_arguments(status)
+    status.add_argument("--json", action="store_true")
+    status.add_argument("--diagnostics", action="store_true")
+
+    checkpoint = claude_sub.add_parser("checkpoint", help="Consume the next session checkpoint")
+    _add_proxy_client_arguments(checkpoint)
+    checkpoint.add_argument("--json", action="store_true")
+
+    reset_session = claude_sub.add_parser("reset-session", help="Reset all proxy accounting")
+    reset_session.add_argument("--proxy-url", default=_default_proxy_url())
+    reset_session.add_argument("--admin-token-file")
+    reset_session.add_argument("--yes", action="store_true")
+
+    pricing = claude_sub.add_parser("pricing", help="Anthropic pricing operations")
+    pricing_sub = pricing.add_subparsers(dest="claude_pricing_command", required=True)
+    pricing_sub.add_parser("validate")
+
+    self_test = claude_sub.add_parser("self-test", help="Run the opt-in real Claude self-test")
+    self_test.add_argument("passthrough", nargs=argparse.REMAINDER)
+
+
+def _claude(args: argparse.Namespace) -> int:
+    if args.claude_command == "install":
+        from openai_cost_calculator.adapters.install import install_claude
+
+        try:
+            messages = install_claude(
+                args.proxy_url,
+                replace_statusline=args.replace_statusline,
+                upstream=args.upstream,
+            )
+        except ValueError as exc:
+            print(f"install failed: {exc}", file=sys.stderr)
+            return 2
+        for message in messages:
+            print(message)
+        print("Undo with: openai-cost-calculator claude uninstall")
+        return 0
+    if args.claude_command == "uninstall":
+        from openai_cost_calculator.adapters.install import uninstall_claude
+
+        for message in uninstall_claude():
+            print(message)
+        return 0
+    if args.claude_command == "check":
+        from openai_cost_calculator.adapters.install import check_claude
+
+        _print_claude_check(check_claude())
+        return 0
+    if args.claude_command == "status":
+        return _claude_status(args)
+    if args.claude_command == "checkpoint":
+        return _checkpoint(args)
+    if args.claude_command == "reset-session":
+        return _reset(args)
+    if args.claude_command == "pricing":
+        from openai_cost_calculator.anthropic.pricing import (
+            AnthropicPricingError,
+            validate_anthropic_pricing,
+        )
+
+        try:
+            count = validate_anthropic_pricing()
+        except AnthropicPricingError as exc:
+            print(f"pricing validation failed: {exc}", file=sys.stderr)
+            return 1
+        print(f"Anthropic pricing valid: {count} model/date tiers")
+        return 0
+    if args.claude_command == "self-test":
+        import subprocess
+
+        script = Path(__file__).resolve().parents[1] / "scripts" / "self_test_claude_integration.py"
+        return subprocess.call([sys.executable, str(script), *args.passthrough])
+    return 2
+
+
+def _claude_status(args: argparse.Namespace) -> int:
+    query = {"session": args.session} if args.session else None
+    try:
+        admin_token = _load_admin_token(args.admin_token_file)
+        status = _request_json(
+            args.proxy_url, "/_occ/claude/status", query=query, admin_token=admin_token
+        )
+    except (RuntimeError, ValueError) as exc:
+        print(f"status unavailable: {exc}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(status, indent=2, sort_keys=True))
+        return 0
+    turn = status.get("turn") or {}
+    session_id = str(status.get("session", "default"))
+    print(f"Session: {_abbreviate(session_id)}")
+    print(f"Turn: {turn.get('state', 'none') if turn else 'none'}")
+    print()
+    print(f"Turn cost:              ${turn.get('total_cost', '0.00000000')}")
+    print(f"Session cost:           ${status.get('session_total', '0.00000000')}")
+    print(f"Turn requests:          {turn.get('num_calls', 0)}")
+    print(f"Session requests:       {status.get('session_requests', 0)}")
+    print(f"Accounting:             {status.get('accounting', 'unknown')}")
+    print(f"Pricing semantics:      {status.get('pricing_semantics', 'unknown')}")
+    persistence = status.get("persistence", {})
+    enabled = isinstance(persistence, dict) and persistence.get("enabled")
+    print(f"Persistence:            {'enabled' if enabled else 'disabled'}")
+    if args.diagnostics:
+        for error in status.get("errors", []):
+            if isinstance(error, dict):
+                print(f"  diagnostic {error.get('code')}: {error.get('message')}")
+    return 0
+
+
+def _print_claude_check(report: dict) -> None:
+    print(f"Config path:          {report.get('config_path')}")
+    print(f"Settings present:     {report.get('settings_exists')}")
+    print(f"ANTHROPIC_BASE_URL:   {report.get('anthropic_base_url')}")
+    print(f"OCC_PROXY_URL:        {report.get('occ_proxy_url')}")
+    print(f"Status line:          {'installed' if report.get('statusline_installed') else 'absent'}")
+    print(f"Hook events:          {', '.join(report.get('hook_events_installed', [])) or 'none'}")
+    print(f"Manifest present:     {report.get('manifest_present')}")
+    for conflict in report.get("conflicts", []):
+        print(f"  conflict: {conflict}")
+
+
+def _abbreviate(identifier: str) -> str:
+    if len(identifier) <= 12:
+        return identifier
+    return f"{identifier[:4]}…{identifier[-4:]}"
 
 
 if __name__ == "__main__":  # pragma: no cover
