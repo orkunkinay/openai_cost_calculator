@@ -298,9 +298,13 @@ Subscription OAuth yields an *API-equivalent* estimate.
 Direct Anthropic API keys, subscription OAuth via a local `ANTHROPIC_BASE_URL`, bearer-token Anthropic-format gateways, and chainable custom Anthropic-format base URLs are supported; a custom gateway's cost is reported as unavailable unless a pricing profile is known.
 Amazon Bedrock, Google Vertex, and Microsoft Foundry are detected and refused rather than mispriced, because their payloads are not the Anthropic Messages protocol; unsupported providers never produce a false zero-cost result.
 
+Session attribution uses the `x-claude-code-session-id` request header by default.
+If your Claude Code build sends a different header, set `OCC_CLAUDE_SESSION_HEADER` on the proxy to that name — no code change needed.
+To confirm which headers Claude Code actually sends when routed through the proxy, start it with `OCC_CLAUDE_DEBUG_HEADERS=1` and run one session; the proxy records the inbound header *names* (never their values) once per session as a `claude_headers_seen` diagnostic visible via `claude status --diagnostics`.
+
 Persistence and limitations.
-Add `--database <path>` to the proxy for a concurrent SQLite ledger so turn and session totals survive proxy restarts; restored history is reported separately from current-process cost.
-Turn *state* is held in the proxy process, so the status line reads it through the proxy rather than from disk.
+Add `--database <path>` to the proxy for a concurrent SQLite ledger; turn and session totals *and the turn lifecycle* (open/finalized turn states) survive proxy restarts, and restored history is reported separately from current-process cost.
+The JSON ledger persists the same lifecycle in its snapshot.
 No real Claude Code request has been validated by this project's automated suite; the deterministic paths are covered by unit and integration tests, and a live path is exercised only by the opt-in self-test below.
 
 ### Maintainer Claude self-test

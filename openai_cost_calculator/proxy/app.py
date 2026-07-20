@@ -5,6 +5,7 @@ import codecs
 from collections import deque
 import hashlib
 import hmac
+import os
 import asyncio
 from typing import Any, AsyncIterator, Optional
 
@@ -96,6 +97,7 @@ def create_app(
     app.state.occ_pricing_semantics = pricing_semantics or (
         "api-equivalent" if protocol == ANTHROPIC_PROTOCOL else "billed-estimate"
     )
+    app.state.occ_seen_header_sessions = set()
 
     @app.get("/_occ/health")
     async def health(request: Request) -> JSONResponse:
@@ -380,11 +382,41 @@ def _anthropic_upstream_url(app: FastAPI, path: str, request: Request) -> str:
 
 
 def _anthropic_session(request: Request) -> str:
-    session = _bounded_identifier(request.headers.get("x-claude-code-session-id"), 128)
+    # The session header name defaults to Claude Code's documented header but is
+    # configurable so the integration can adapt to a different spelling observed
+    # in the field without a code change (confirm it via OCC_CLAUDE_DEBUG_HEADERS).
+    header_name = os.environ.get(
+        "OCC_CLAUDE_SESSION_HEADER", "x-claude-code-session-id"
+    )
+    session = _bounded_identifier(request.headers.get(header_name), 128)
     if session:
         return session
     session = _bounded_identifier(request.headers.get("x-occ-session"), 128)
     return session or "unscoped-claude"
+
+
+def _maybe_capture_headers(app: FastAPI, request: Request, session_id: str) -> None:
+    """Record inbound header *names* (never values) once per session, opt-in.
+
+    Enabled with OCC_CLAUDE_DEBUG_HEADERS to confirm which session/agent headers
+    Claude Code actually sends when routed through the proxy.
+    """
+    if not _truthy(os.environ.get("OCC_CLAUDE_DEBUG_HEADERS")):
+        return
+    seen = app.state.occ_seen_header_sessions
+    if session_id in seen:
+        return
+    seen.add(session_id)
+    names = sorted({name.lower() for name in request.headers.keys()})
+    app.state.occ_registry.record_error(
+        session_id,
+        "claude_headers_seen",
+        "inbound header names: " + ", ".join(names),
+    )
+
+
+def _truthy(value: Optional[str]) -> bool:
+    return value is not None and value.strip().lower() not in {"", "0", "false", "no", "off"}
 
 
 async def _forward_anthropic(
@@ -404,6 +436,7 @@ async def _forward_anthropic(
 
     registry = app.state.occ_registry
     session_id = _anthropic_session(request)
+    _maybe_capture_headers(app, request, session_id)
     turn_label = registry.active_turn_label(session_id) or UNATTRIBUTED_TURN
 
     if request_payload.get("stream") is True:

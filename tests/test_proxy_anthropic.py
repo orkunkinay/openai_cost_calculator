@@ -243,3 +243,74 @@ def test_status_reads_do_not_mutate_and_checkpoint_is_idempotent():
     assert cp2["total_cost"] == "0.00000000"
     # Cumulative totals unchanged by checkpoint reads.
     assert client.get("/_occ/claude/status?session=sess-1").json()["session_total"] == _expected_total(usage)
+
+
+def test_configurable_session_header(monkeypatch):
+    usage = {"input_tokens": 100, "output_tokens": 50}
+    body = _messages_body(usage)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, headers={"content-type": "application/json"}, content=body)
+
+    monkeypatch.setenv("OCC_CLAUDE_SESSION_HEADER", "x-my-session")
+    client, registry = _app(handler)
+    registry.open_turn("custom-1", "k1")
+    client.post(
+        "/v1/messages",
+        content=json.dumps({"model": "claude-opus-4-8"}),
+        headers={"x-my-session": "custom-1"},
+    )
+    assert registry.claude_status("custom-1")["session_total"] == _expected_total(usage)
+
+
+def test_debug_header_capture_records_names_not_values(monkeypatch):
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, headers={"content-type": "application/json"}, content=_messages_body({"input_tokens": 1, "output_tokens": 1}))
+
+    monkeypatch.setenv("OCC_CLAUDE_DEBUG_HEADERS", "1")
+    client, registry = _app(handler)
+    registry.open_turn("sess-1", "k1")
+    client.post(
+        "/v1/messages",
+        content=json.dumps({"model": "claude-opus-4-8"}),
+        headers=_headers(**{"x-claude-code-agent-id": "main", "authorization": "Bearer sk-secret"}),
+    )
+    errors = registry.claude_status("sess-1")["errors"]
+    captured = [e for e in errors if e["code"] == "claude_headers_seen"]
+    assert len(captured) == 1
+    message = captured[0]["message"]
+    assert "x-claude-code-session-id" in message
+    assert "x-claude-code-agent-id" in message
+    assert "sk-secret" not in message  # values are never captured
+
+
+def test_two_request_turn_with_cache_aggregates(monkeypatch):
+    # A realistic turn: an initial request that writes a prompt cache, then a
+    # tool-use continuation that reads it. Both aggregate into one turn.
+    first_usage = {
+        "input_tokens": 2_000,
+        "output_tokens": 300,
+        "cache_creation_input_tokens": 1_000,
+        "cache_creation": {"ephemeral_5m_input_tokens": 1_000},
+    }
+    second_usage = {
+        "input_tokens": 200,
+        "output_tokens": 150,
+        "cache_read_input_tokens": 1_000,
+    }
+    bodies = [_messages_body(first_usage), _messages_body(second_usage)]
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, headers={"content-type": "application/json"}, content=bodies.pop(0))
+
+    client, registry = _app(handler)
+    registry.open_turn("sess-1", "prompt-key")
+    client.post("/v1/messages", content=json.dumps({"model": "claude-opus-4-8"}), headers=_headers())
+    client.post("/v1/messages", content=json.dumps({"model": "claude-opus-4-8"}), headers=_headers())
+    registry.finalize_turn("sess-1", "completed")
+
+    status = registry.claude_status("sess-1")
+    total = Decimal(_expected_total(first_usage)) + Decimal(_expected_total(second_usage))
+    assert Decimal(status["session_total"]) == total
+    assert status["turn"]["num_calls"] == 2
+    assert status["turn"]["state"] == "completed"
