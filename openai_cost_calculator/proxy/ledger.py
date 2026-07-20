@@ -286,6 +286,54 @@ class SQLiteLedger:
             self._rollback()
             raise LedgerError(f"cannot append SQLite diagnostic: {exc}") from exc
 
+    def record_turn(
+        self,
+        session: str,
+        label: str,
+        state: str,
+        idem_key: str | None,
+        ordinal: int,
+    ) -> None:
+        """Persist a turn's lifecycle state, preserving its ordinal on update."""
+        try:
+            self._connection.execute(
+                """
+                INSERT INTO turn_lifecycle (session, label, state, idem_key, ordinal)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(session, label) DO UPDATE SET
+                    state = excluded.state,
+                    idem_key = excluded.idem_key
+                """,
+                (session, label, state, idem_key, ordinal),
+            )
+        except sqlite3.Error as exc:
+            raise LedgerError(f"cannot persist turn lifecycle: {exc}") from exc
+
+    def load_turns(self) -> dict[str, dict[str, Any]]:
+        """Load persisted turn lifecycle state grouped by session."""
+        sessions: dict[str, dict[str, Any]] = {}
+        try:
+            rows = self._connection.execute(
+                "SELECT session, label, state, idem_key, ordinal "
+                "FROM turn_lifecycle ORDER BY session, ordinal"
+            ).fetchall()
+        except sqlite3.Error as exc:
+            raise LedgerError(f"cannot read turn lifecycle: {exc}") from exc
+        for row in rows:
+            state = sessions.setdefault(
+                row["session"],
+                {"active": None, "states": {}, "keys": {}, "order": [], "counter": 0},
+            )
+            label = row["label"]
+            state["states"][label] = row["state"]
+            if row["idem_key"] is not None:
+                state["keys"][label] = row["idem_key"]
+            state["order"].append(label)
+            state["counter"] = max(state["counter"], int(row["ordinal"]))
+            if row["state"] == "active":
+                state["active"] = label
+        return sessions
+
     def checkpoint(self, session: str) -> dict[str, Any]:
         try:
             self._connection.execute("BEGIN IMMEDIATE")
@@ -410,6 +458,7 @@ class SQLiteLedger:
             self._connection.execute("DELETE FROM calls")
             self._connection.execute("DELETE FROM diagnostics")
             self._connection.execute("DELETE FROM checkpoints")
+            self._connection.execute("DELETE FROM turn_lifecycle")
             self._connection.execute(
                 """
                 UPDATE metadata SET value = CAST(value AS INTEGER) + 1
@@ -459,6 +508,16 @@ class SQLiteLedger:
                 session TEXT PRIMARY KEY,
                 call_id INTEGER NOT NULL CHECK(call_id >= 0)
             );
+            CREATE TABLE IF NOT EXISTS turn_lifecycle (
+                session TEXT NOT NULL,
+                label TEXT NOT NULL,
+                state TEXT NOT NULL,
+                idem_key TEXT,
+                ordinal INTEGER NOT NULL CHECK(ordinal >= 0),
+                PRIMARY KEY (session, label)
+            );
+            CREATE INDEX IF NOT EXISTS turn_lifecycle_session_ordinal
+                ON turn_lifecycle(session, ordinal);
             """
         )
         row = self._connection.execute(

@@ -129,3 +129,42 @@ def test_admin_token_file_must_be_protected(tmp_path: Path, monkeypatch):
     token_file.chmod(0o644)
     with pytest.raises(ValueError, match="group or others"):
         _load_admin_token(str(token_file))
+
+
+def test_claude_pricing_validate_reports_tier_count(capsys):
+    assert main(["claude", "pricing", "validate"]) == 0
+    assert "Anthropic pricing valid" in capsys.readouterr().out
+
+
+def test_claude_install_check_uninstall_roundtrip(tmp_path: Path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path))
+    assert main(["claude", "install", "--proxy-url", "http://127.0.0.1:8200"]) == 0
+    capsys.readouterr()
+    assert main(["claude", "check"]) == 0
+    out = capsys.readouterr().out
+    assert "http://127.0.0.1:8200" in out
+    assert "Status line:          installed" in out
+    assert main(["claude", "uninstall"]) == 0
+    settings = json.loads((tmp_path / "settings.json").read_text(encoding="utf-8"))
+    assert settings == {}
+
+
+def test_claude_status_renders_turn_and_session(monkeypatch, capsys):
+    status = {
+        "session": "7f4a0000000000000000000091c2",
+        "session_total": "0.08370000",
+        "turn": {"label": "turn-2", "state": "active", "total_cost": "0.01240000", "num_calls": 2},
+        "turn_is_active": True,
+        "session_requests": 11,
+        "accounting": "complete",
+        "pricing_semantics": "api-equivalent",
+        "persistence": {"enabled": True, "healthy": True},
+    }
+    monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout: _Response(status))
+    assert main(["claude", "status", "--proxy-url", "http://127.0.0.1:8100"]) == 0
+    out = capsys.readouterr().out
+    assert "Turn cost:              $0.01240000" in out
+    assert "Session cost:           $0.08370000" in out
+    assert "Session requests:       11" in out
+    assert "Pricing semantics:      api-equivalent" in out
+    assert "7f4a…91c2" in out  # full session id is not exposed

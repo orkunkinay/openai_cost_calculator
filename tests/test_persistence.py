@@ -248,3 +248,78 @@ def test_sqlite_history_is_not_limited_by_in_memory_call_capacity(
     session = registry.summary("long-lived")["sessions"]["long-lived"]
     assert session["turns"][0]["num_calls"] == 2
     registry.close()
+
+
+def _anthropic_record():
+    from openai_cost_calculator.anthropic.usage import (
+        price_anthropic_usage,
+        to_cost_breakdown,
+        to_ledger_tokens,
+        usage_from_dict,
+    )
+
+    usage = usage_from_dict(
+        {
+            "input_tokens": 1_000,
+            "cache_read_input_tokens": 500,
+            "cache_creation_input_tokens": 200,
+            "output_tokens": 300,
+            "cache_creation": {"ephemeral_5m_input_tokens": 200},
+        }
+    )
+    cost = price_anthropic_usage("claude-opus-4-8", usage)
+    return to_ledger_tokens(usage), to_cost_breakdown(cost), f"{cost.total_cost:.8f}"
+
+
+@pytest.mark.parametrize("backend", ["json", "database"])
+def test_anthropic_costed_calls_survive_restart_and_mark_history(tmp_path: Path, backend: str):
+    tokens, breakdown, expected = _anthropic_record()
+    path = tmp_path / ("led.json" if backend == "json" else "led.db")
+    kwargs = {"ledger_path": path} if backend == "json" else {"database_path": path}
+
+    first = TrackerRegistry(**kwargs)
+    first.open_turn("sess-1", "prompt-key")
+    first.record_costed_call(
+        "sess-1", "claude-opus-4-8", tokens, breakdown, turn_label="turn-1"
+    )
+    assert first.claude_status("sess-1")["session_total"] == expected
+    first.close()
+
+    restored = TrackerRegistry(**kwargs)
+    status = restored.claude_status("sess-1")
+    assert status["session_total"] == expected
+    session = restored.summary("sess-1")["sessions"]["sess-1"]
+    # Restored history must not read as newly incurred current-process cost.
+    assert session["historical_total"] == expected
+    assert session["process_total"] == "0.00000000"
+    restored.close()
+
+
+@pytest.mark.parametrize("backend", ["json", "database"])
+def test_turn_lifecycle_survives_restart(tmp_path: Path, backend: str):
+    tokens, breakdown, expected = _anthropic_record()
+    path = tmp_path / ("led.json" if backend == "json" else "led.db")
+    kwargs = {"ledger_path": path} if backend == "json" else {"database_path": path}
+
+    first = TrackerRegistry(**kwargs)
+    first.open_turn("sess-1", "k1")
+    first.record_costed_call(
+        "sess-1", "claude-opus-4-8", tokens, breakdown, turn_label="turn-1"
+    )
+    first.finalize_turn("sess-1", "completed")
+    first.open_turn("sess-1", "k2")  # empty, still active at shutdown
+    first.close()
+
+    restored = TrackerRegistry(**kwargs)
+    status = restored.claude_status("sess-1")
+    # The empty active turn is restored as active with a legitimate zero.
+    assert status["active_turn"] == "turn-2"
+    assert status["turn"]["state"] == "active"
+    assert status["turn"]["total_cost"] == "0.00000000"
+    assert status["session_total"] == expected
+    assert status["num_turns"] == 2
+    # The counter continues so a new turn does not collide with a restored one.
+    assert restored.open_turn("sess-1", "k3") == "turn-3"
+    # A finalized turn keeps its state after restart.
+    assert restored._turn_states["sess-1"]["turn-1"] == "completed"
+    restored.close()

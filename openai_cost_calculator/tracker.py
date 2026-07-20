@@ -226,6 +226,36 @@ class CostTracker:
             self.session_total += record.cost.total_cost
         self.turns.append(turn)
 
+    def ensure_turn(self, label: Optional[str]) -> Turn:
+        """Return the turn with ``label``, creating an empty one if needed."""
+        return self._find_or_create_turn(label)
+
+    def add_costed_call(
+        self,
+        model: str,
+        tokens: Dict[str, int],
+        cost: CostBreakdown,
+        *,
+        turn_label: Optional[str] = None,
+    ) -> CallRecord:
+        """Record an already-priced call without repricing it.
+
+        Used for protocols (such as Anthropic Messages) whose pricing is
+        computed outside the OpenAI three-bucket estimator.
+        """
+        record = CallRecord(
+            model=model,
+            prompt_tokens=tokens["prompt_tokens"],
+            completion_tokens=tokens["completion_tokens"],
+            cached_tokens=tokens["cached_tokens"],
+            cost=cost,
+            timestamp=time.time(),
+        )
+        turn = self._active_turn or self._find_or_create_turn(turn_label)
+        turn.add(record)
+        self.session_total += record.cost.total_cost
+        return record
+
     def _find_or_create_turn(self, label: Optional[str]) -> Turn:
         for turn in self.turns:
             if turn.label == label:

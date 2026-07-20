@@ -10,6 +10,13 @@ from typing import Any, Optional, Tuple
 
 OCC_STATUSLINE = {"type": "command", "command": "occ-cc-statusline"}
 OCC_STOP_HOOK = {"type": "command", "command": "occ-cc-stop-hook", "timeout": 5}
+
+# Proxy-backed Claude integration (occ-claude-*).
+OCC_CLAUDE_STATUSLINE = {"type": "command", "command": "occ-claude-statusline"}
+OCC_CLAUDE_HOOK = {"type": "command", "command": "occ-claude-hook", "timeout": 5}
+OCC_CLAUDE_HOOK_EVENTS = ("UserPromptSubmit", "Stop", "SessionEnd")
+OCC_CLAUDE_MANIFEST = "occ-claude-install.json"
+OCC_CLAUDE_VERSION = 1
 CODEX_BEGIN = "# >>> openai-cost-calculator"
 CODEX_END = "# <<< openai-cost-calculator"
 CODEX_RESTORE_PREFIX = "# occ-restore-"
@@ -71,6 +78,264 @@ def uninstall_claude_code(scope: str = "user") -> list[str]:
     if changed:
         _write_json(path, settings)
     return [f"{path}: removed {', '.join(changed)}"] if changed else [f"{path}: not installed"]
+
+
+def _claude_config_dir() -> Path:
+    root = os.environ.get("CLAUDE_CONFIG_DIR")
+    return Path(root) if root else Path.home() / ".claude"
+
+
+def _claude_settings_file() -> Path:
+    return _claude_config_dir() / "settings.json"
+
+
+def _claude_manifest_file() -> Path:
+    return _claude_config_dir() / OCC_CLAUDE_MANIFEST
+
+
+def _is_occ_statusline(value: Any) -> bool:
+    return (
+        isinstance(value, dict)
+        and isinstance(value.get("command"), str)
+        and "occ-claude-statusline" in value["command"]
+    )
+
+
+def _is_command_statusline(value: Any) -> bool:
+    return (
+        isinstance(value, dict)
+        and value.get("type", "command") == "command"
+        and isinstance(value.get("command"), str)
+        and bool(value["command"])
+    )
+
+
+def install_claude(
+    proxy_url: str = "http://127.0.0.1:8100",
+    *,
+    replace_statusline: bool = False,
+    compose_statusline: bool = False,
+    upstream: Optional[str] = None,
+) -> list[str]:
+    """Install the proxy-backed Claude integration into settings.json.
+
+    Merges ``env.ANTHROPIC_BASE_URL``/``env.OCC_PROXY_URL``, the OCC status line,
+    and the OCC lifecycle hooks without disturbing unrelated settings.  Existing
+    values are recorded in a non-sensitive manifest for exact restoration.
+    """
+    path = _claude_settings_file()
+    _refuse_symlink(path)
+    settings = _read_json_object(path)
+    messages: list[str] = []
+    changed: list[str] = []
+    base = proxy_url.rstrip("/")
+
+    env = settings.get("env")
+    if not isinstance(env, dict):
+        env = {}
+    previous_base_url = env.get("ANTHROPIC_BASE_URL")
+    if isinstance(previous_base_url, str) and previous_base_url and previous_base_url != base:
+        # Preserve an existing gateway so the proxy can chain to it.
+        messages.append(
+            f"Existing ANTHROPIC_BASE_URL preserved for chaining: run the proxy "
+            f"with --upstream {previous_base_url}"
+        )
+    previous_env = {
+        "ANTHROPIC_BASE_URL": env.get("ANTHROPIC_BASE_URL"),
+        "OCC_PROXY_URL": env.get("OCC_PROXY_URL"),
+    }
+    if env.get("ANTHROPIC_BASE_URL") != base or env.get("OCC_PROXY_URL") != base:
+        env = dict(env)
+        env["ANTHROPIC_BASE_URL"] = base
+        env["OCC_PROXY_URL"] = base
+        settings["env"] = env
+        changed.append("env.ANTHROPIC_BASE_URL")
+
+    previous_statusline = settings.get("statusLine")
+    statusline_managed = False
+    if _is_occ_statusline(previous_statusline):
+        statusline_managed = True
+    elif previous_statusline is None:
+        settings["statusLine"] = dict(OCC_CLAUDE_STATUSLINE)
+        statusline_managed = True
+        changed.append("statusLine")
+    elif compose_statusline and _is_command_statusline(previous_statusline):
+        from openai_cost_calculator.adapters.claude_proxy import (
+            encode_previous_statusline,
+        )
+
+        encoded = encode_previous_statusline(previous_statusline["command"])
+        settings["statusLine"] = {
+            "type": "command",
+            "command": f"occ-claude-statusline --compose {encoded}",
+        }
+        statusline_managed = True
+        changed.append("statusLine (composed with existing)")
+    elif replace_statusline:
+        settings["statusLine"] = dict(OCC_CLAUDE_STATUSLINE)
+        statusline_managed = True
+        changed.append("statusLine (replaced existing)")
+    else:
+        raise ValueError(
+            "Refusing to overwrite an existing Claude status line; re-run with "
+            "replace_statusline=True to replace it, or compose_statusline=True to "
+            "keep it alongside the OCC status line"
+        )
+
+    hooks = settings.get("hooks")
+    if not isinstance(hooks, dict):
+        hooks = {}
+    else:
+        hooks = dict(hooks)
+    hooks_changed = False
+    for event in OCC_CLAUDE_HOOK_EVENTS:
+        entries = hooks.get(event)
+        entries = list(entries) if isinstance(entries, list) else []
+        if not _has_hook(entries, "occ-claude-hook"):
+            entries.append({"hooks": [dict(OCC_CLAUDE_HOOK)]})
+            hooks_changed = True
+        hooks[event] = entries
+    if hooks_changed:
+        settings["hooks"] = hooks
+        changed.append("hooks")
+    elif "hooks" not in settings:
+        settings["hooks"] = hooks
+
+    manifest = {
+        "version": OCC_CLAUDE_VERSION,
+        "config_path": str(path),
+        "proxy_url": base,
+        "managed": {
+            "env": ["ANTHROPIC_BASE_URL", "OCC_PROXY_URL"],
+            "statusLine": statusline_managed,
+            "hook_events": list(OCC_CLAUDE_HOOK_EVENTS),
+        },
+        "previous": {
+            "env": previous_env,
+            "statusLine": None
+            if _is_occ_statusline(previous_statusline)
+            else previous_statusline,
+        },
+        "hash": _managed_hash(base),
+    }
+
+    if changed or not _claude_manifest_file().exists():
+        _write_json(path, settings)
+        _write_json(_claude_manifest_file(), manifest)
+        messages.insert(0, f"{path}: installed {', '.join(dict.fromkeys(changed)) or 'manifest'}")
+        messages.append(
+            "Start the matching proxy: openai-cost-calculator proxy "
+            f"--port {_proxy_port(base)} --protocol anthropic-messages"
+        )
+    else:
+        messages.insert(0, f"{path}: already installed")
+    return messages
+
+
+def uninstall_claude() -> list[str]:
+    """Remove the proxy-backed Claude integration, restoring previous values."""
+    path = _claude_settings_file()
+    _refuse_symlink(path)
+    settings = _read_json_object(path)
+    manifest = _read_json_object(_claude_manifest_file())
+    previous = manifest.get("previous") if isinstance(manifest, dict) else {}
+    previous = previous if isinstance(previous, dict) else {}
+    changed: list[str] = []
+
+    env = settings.get("env")
+    if isinstance(env, dict):
+        env = dict(env)
+        previous_env = previous.get("env") if isinstance(previous.get("env"), dict) else {}
+        for key in ("ANTHROPIC_BASE_URL", "OCC_PROXY_URL"):
+            restore = previous_env.get(key)
+            if restore is not None:
+                if env.get(key) != restore:
+                    env[key] = restore
+                    changed.append(f"env.{key}")
+            elif key in env:
+                del env[key]
+                changed.append(f"env.{key}")
+        if env:
+            settings["env"] = env
+        else:
+            settings.pop("env", None)
+
+    if _is_occ_statusline(settings.get("statusLine")):
+        restore = previous.get("statusLine")
+        if restore is not None:
+            settings["statusLine"] = restore
+        else:
+            settings.pop("statusLine", None)
+        changed.append("statusLine")
+
+    hooks = settings.get("hooks")
+    if isinstance(hooks, dict):
+        hooks = dict(hooks)
+        for event in OCC_CLAUDE_HOOK_EVENTS:
+            entries = hooks.get(event)
+            if not isinstance(entries, list):
+                continue
+            filtered = [_remove_hook(entry, "occ-claude-hook") for entry in entries]
+            filtered = [entry for entry in filtered if entry is not None]
+            if filtered != entries:
+                changed.append("hooks")
+            if filtered:
+                hooks[event] = filtered
+            else:
+                hooks.pop(event, None)
+        if hooks:
+            settings["hooks"] = hooks
+        else:
+            settings.pop("hooks", None)
+
+    if changed:
+        _write_json(path, settings)
+    _claude_manifest_file().unlink(missing_ok=True)
+    if changed:
+        return [f"{path}: removed {', '.join(dict.fromkeys(changed))}"]
+    return [f"{path}: not installed"]
+
+
+def check_claude() -> dict[str, Any]:
+    """Report the effective Claude integration state and likely conflicts."""
+    path = _claude_settings_file()
+    settings = _read_json_object(path)
+    env = settings.get("env") if isinstance(settings.get("env"), dict) else {}
+    hooks = settings.get("hooks") if isinstance(settings.get("hooks"), dict) else {}
+    installed_events = [
+        event
+        for event in OCC_CLAUDE_HOOK_EVENTS
+        if isinstance(hooks.get(event), list) and _has_hook(hooks[event], "occ-claude-hook")
+    ]
+    conflicts: list[str] = []
+    project_settings = Path.cwd() / ".claude" / "settings.json"
+    if project_settings.exists() and project_settings != path:
+        project = _read_json_object(project_settings)
+        project_env = project.get("env") if isinstance(project.get("env"), dict) else {}
+        if project_env.get("ANTHROPIC_BASE_URL"):
+            conflicts.append(
+                "project .claude/settings.json overrides ANTHROPIC_BASE_URL"
+            )
+    return {
+        "config_path": str(path),
+        "settings_exists": path.exists(),
+        "anthropic_base_url": env.get("ANTHROPIC_BASE_URL"),
+        "occ_proxy_url": env.get("OCC_PROXY_URL"),
+        "statusline_installed": _is_occ_statusline(settings.get("statusLine")),
+        "hook_events_installed": installed_events,
+        "manifest_present": _claude_manifest_file().exists(),
+        "conflicts": conflicts,
+    }
+
+
+def _managed_hash(base: str) -> str:
+    import hashlib
+
+    material = json.dumps(
+        {"proxy_url": base, "statusline": OCC_CLAUDE_STATUSLINE, "hook": OCC_CLAUDE_HOOK},
+        sort_keys=True,
+    )
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
 def install_codex(

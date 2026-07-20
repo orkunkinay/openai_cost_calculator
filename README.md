@@ -242,6 +242,86 @@ Claude Code session totals come from Claude Code's own status-line JSON. The
 per-turn hook prefers exact per-message costs from the local transcript; if only
 usage is available, it estimates from seeded Claude prices.
 
+## Proxy-backed Claude Code cost observation
+
+The `install claude-code` adapter above reads Claude Code's own reported cost from the transcript.
+The proxy-backed integration below is independent: it routes Claude Code's Anthropic Messages traffic through the local OCC proxy, prices every request from this project's Anthropic pricing table, and shows both the current-turn and cumulative-session cost that OCC observed.
+
+Why a proxy: Claude uses the Anthropic Messages API, whose usage schema separates uncached input, cache-creation writes (with 5-minute and 1-hour TTLs), cache reads, and output.
+These are priced independently and cannot be expressed by the OpenAI three-bucket schema, so the Anthropic path is kept separate from the Codex/Responses path rather than forced into it.
+
+Install the settings.json integration and start the matching proxy:
+
+```bash
+openai-cost-calculator claude install --proxy-url http://127.0.0.1:8100
+openai-cost-calculator proxy --port 8100 --protocol anthropic-messages
+```
+
+The installer merges `env.ANTHROPIC_BASE_URL` (and `env.OCC_PROXY_URL`), the `occ-claude-statusline` status line, and the `occ-claude-hook` lifecycle hooks (`UserPromptSubmit`, `Stop`, `SessionEnd`) into `settings.json` under `CLAUDE_CONFIG_DIR` (or `~/.claude`).
+It writes atomically, records a non-sensitive manifest for exact restoration, never touches authentication tokens, managed settings, MCP, permissions, plugins, or agents, and refuses to overwrite an existing status line unless you pass `--replace-statusline`.
+An existing `ANTHROPIC_BASE_URL` gateway is preserved and reported so you can chain to it with `proxy --upstream <url>`, and it is restored on uninstall.
+
+The status line shows both totals directly inside Claude Code:
+
+```text
+OCC Turn $0.0124 · Session $0.0837
+```
+
+Subscription (Pro/Max/Team/Enterprise) OAuth sessions are labelled `API-eq` because token pricing is an API-equivalent estimate, not an amount actually billed:
+
+```text
+OCC Turn API-eq $0.0124 · Session API-eq $0.0837
+```
+
+When no turn is active the line shows the last completed turn (`OCC Last turn …`); a just-opened turn shows `OCC Turn $0.0000` until its first request is accounted; and an accounting gap shows `inspect diagnostics` or `OCC cost unavailable` rather than a false zero.
+
+Definitions.
+A *session* is one Claude Code session, keyed by its stable session id (`x-claude-code-session-id`); its total is the sum of every accounted request in the session and increases monotonically across turns.
+A *turn* is one user prompt: it opens on `UserPromptSubmit`, aggregates every Messages request that belongs to it — including tool-use continuations, compaction, retries, and main-agent and subagent calls — and finalizes on `Stop` (completed) or `SessionEnd` (interrupted).
+Subagent cost is included in both the turn and the session total.
+Turn boundaries come from the hooks, but request cost is recorded at the proxy as each response is observed, so totals update without waiting for the final hook.
+A *checkpoint* is a separate incremental cursor: the first checkpoint returns the cost accumulated since the previous one, a repeated checkpoint returns zero, and status reads never consume a checkpoint or mutate any total.
+
+Inspect and manage from the CLI:
+
+```bash
+openai-cost-calculator claude status          # current/last turn and session cost
+openai-cost-calculator claude status --json    # stable, decimal-safe JSON
+openai-cost-calculator claude check            # effective config and conflicts
+openai-cost-calculator claude checkpoint       # consume the next incremental delta
+openai-cost-calculator claude pricing validate # validate the Anthropic pricing table
+```
+
+Cost semantics and supported providers.
+A direct Anthropic API key yields a close *billed estimate* (still not an invoice: credits, tiers, and beta pricing may differ).
+Subscription OAuth yields an *API-equivalent* estimate.
+The proxy infers which of these applies from the credential *header kind* — an API key is sent as `x-api-key`, subscription OAuth as `authorization: Bearer` — so a subscription login stored in the OS keychain is still labelled `API-eq` even though the resolver cannot read it.
+Direct Anthropic API keys, subscription OAuth via a local `ANTHROPIC_BASE_URL`, bearer-token Anthropic-format gateways, and chainable custom Anthropic-format base URLs are supported; a custom gateway's cost is reported as unavailable unless a pricing profile is known.
+Amazon Bedrock, Google Vertex, and Microsoft Foundry are detected and refused rather than mispriced, because their payloads are not the Anthropic Messages protocol; unsupported providers never produce a false zero-cost result.
+
+Session attribution uses the `x-claude-code-session-id` request header by default.
+If your Claude Code build sends a different header, set `OCC_CLAUDE_SESSION_HEADER` on the proxy to that name — no code change needed.
+To confirm which headers Claude Code actually sends when routed through the proxy, start it with `OCC_CLAUDE_DEBUG_HEADERS=1` and run one session; the proxy records the inbound header *names* (never their values) once per session as a `claude_headers_seen` diagnostic visible via `claude status --diagnostics`.
+
+Streaming responses are commonly `gzip`-encoded; the proxy forwards the raw bytes unchanged and decodes a private copy only for accounting.
+
+Persistence and limitations.
+Add `--database <path>` to the proxy for a concurrent SQLite ledger; turn and session totals *and the turn lifecycle* (open/finalized turn states) survive proxy restarts, and restored history is reported separately from current-process cost.
+The JSON ledger persists the same lifecycle in its snapshot.
+The integration has been validated with one real Claude Code (2.1.x) subscription request end to end: the request routed through the proxy, `x-claude-code-session-id` attributed it to the active turn, two Messages requests aggregated into one turn, the gzip stream was priced, and the status line showed matching API-equivalent turn and session totals with an idempotent checkpoint.
+A subscription (Keychain) login is used read-only against the real config directory, because it is not visible inside an isolated empty home; file-backed or `ANTHROPIC_API_KEY` credentials run fully isolated.
+
+### Maintainer Claude self-test
+
+`scripts/self_test_claude_integration.py` is an opt-in, paid, end-to-end test; ordinary tests never contact a paid service.
+
+```bash
+python scripts/self_test_claude_integration.py
+```
+
+It creates a unique temporary working directory and an isolated `CLAUDE_CONFIG_DIR`, copies only minimal file-backed authentication when present (never printing or exporting it, never reading keychain secrets, never modifying the source configuration), installs the OCC hooks and status line, starts the anthropic-messages proxy, launches one tool-free `claude` prompt with no automatic paid retries, independently recomputes the request cost from the Anthropic pricing table, verifies that request, turn, session, and first-checkpoint costs agree while the second checkpoint is zero and status reads do not mutate totals, terminates the proxy, and removes all temporary material.
+If no safe authentication prerequisite exists it states that the deterministic paths passed and the live path remains untested rather than fabricating success.
+
 Install the Codex adapters:
 
 ```bash
@@ -446,6 +526,12 @@ Recoverable issues raise `CostEstimateError` with a clear message (missing prici
 - **Remote bind refused** → add `--allow-remote` and a protected administrative token only after TLS and network access controls are ready.
 - **`websocket_missing_terminal`** → the upstream connection closed before a terminal Responses event; inspect diagnostics and upstream connectivity without assuming a zero-cost success.
 - **WebSocket handshake failure** → confirm the selected authentication domain, custom upstream WebSocket support, forwarded subprotocol, and proxy optional dependencies.
+- **Claude `401` or subscription OAuth routing failure** → confirm Claude Code is logged in and that `env.ANTHROPIC_BASE_URL` points at the running proxy; the proxy forwards Claude's own credentials and never mixes API-key and subscription domains.
+- **Claude cost shows `unavailable` or `inspect diagnostics`** → run `openai-cost-calculator claude status --diagnostics`; a custom gateway or unsupported provider (Bedrock/Vertex/Foundry) reports cost as unavailable rather than a false zero.
+- **Claude turn cost is unavailable while the session cost is known** → one request in the turn could not be priced (unknown model or pricing gap); the session total remains correct and the unpriced request is listed in diagnostics.
+- **Claude status line differs from Claude Code's own estimate** → they are independent; Claude Code's `cost.total_cost_usd` is a reconciliation signal, not the OCC ledger, and is never added to OCC totals.
+- **Claude project settings override user settings** → `openai-cost-calculator claude check` reports a project `.claude/settings.json` that overrides `ANTHROPIC_BASE_URL`.
+- **Claude turn attribution failure (`turn_unattributed`)** → a request arrived with no open turn (for example before the first `UserPromptSubmit` hook); it is recorded under a named session-only synthetic turn and still counted in the session total.
 
 Keep the default loopback bind unless remote access is operationally necessary.
 
