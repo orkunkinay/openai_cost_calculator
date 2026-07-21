@@ -252,6 +252,9 @@ def _money(value: Decimal) -> str:
 
 
 def _diagnostic_path() -> Path:
+    override = os.environ.get("OCC_CLAUDE_DIAG_DIR")
+    if override:
+        return Path(override) / "occ-claude-hook-diagnostics.jsonl"
     root = os.environ.get("CLAUDE_CONFIG_DIR")
     base = Path(root) if root else Path.home() / ".claude"
     return base / "occ-claude-hook-diagnostics.jsonl"

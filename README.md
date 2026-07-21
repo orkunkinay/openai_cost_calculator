@@ -302,13 +302,15 @@ Amazon Bedrock, Google Vertex, and Microsoft Foundry are detected and refused ra
 Session attribution uses the `x-claude-code-session-id` request header by default.
 If your Claude Code build sends a different header, set `OCC_CLAUDE_SESSION_HEADER` on the proxy to that name — no code change needed.
 To confirm which headers Claude Code actually sends when routed through the proxy, start it with `OCC_CLAUDE_DEBUG_HEADERS=1` and run one session; the proxy records the inbound header *names* (never their values) once per session as a `claude_headers_seen` diagnostic visible via `claude status --diagnostics`.
+To confirm the lifecycle hooks fire, set `OCC_CLAUDE_HOOK_DEBUG=1` (and optionally `OCC_CLAUDE_DIAG_DIR` to redirect the hook's diagnostics file); each `occ-claude-hook` invocation is then recorded as a `hook_invoked` diagnostic with the event name and a redacted session reference.
 
 Streaming responses are commonly `gzip`-encoded; the proxy forwards the raw bytes unchanged and decodes a private copy only for accounting.
 
 Persistence and limitations.
 Add `--database <path>` to the proxy for a concurrent SQLite ledger; turn and session totals *and the turn lifecycle* (open/finalized turn states) survive proxy restarts, and restored history is reported separately from current-process cost.
 The JSON ledger persists the same lifecycle in its snapshot.
-The integration has been validated with one real Claude Code (2.1.x) subscription request end to end: the request routed through the proxy, `x-claude-code-session-id` attributed it to the active turn, two Messages requests aggregated into one turn, the gzip stream was priced, and the status line showed matching API-equivalent turn and session totals with an idempotent checkpoint.
+The integration has been validated with real Claude Code (2.1.x) subscription requests end to end: traffic routed through the proxy, `x-claude-code-session-id` attributed each request to the active turn, the gzip stream was priced, and the status line showed matching API-equivalent turn and session totals with an idempotent checkpoint.
+The lifecycle hooks were also validated firing for real: Claude Code invoked `occ-claude-hook` for `UserPromptSubmit`, `Stop`, and `SessionEnd`, opening and finalizing the turn; a request that arrived after `Stop` was placed in the named session-only turn and still counted in the session total.
 A subscription (Keychain) login is used read-only against the real config directory, because it is not visible inside an isolated empty home; file-backed or `ANTHROPIC_API_KEY` credentials run fully isolated.
 
 ### Maintainer Claude self-test
