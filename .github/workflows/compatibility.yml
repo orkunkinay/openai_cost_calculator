@@ -1,36 +1,23 @@
-name: Run Tests
+name: Compatibility Tests
 
 on:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - "**/*.md"
-      - LICENSE
-      - index.html
-  pull_request:
-    paths-ignore:
-      - "**/*.md"
-      - LICENSE
-      - index.html
+  schedule:
+    - cron: "17 4 1 * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
-  test:
-    name: test (${{ matrix.os }}, py${{ matrix.python-version }})
+  compatibility:
+    name: compatibility (${{ matrix.os }}, py${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
-        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.11"]' || '["3.9", "3.10", "3.11", "3.12"]') }}
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
       - name: Checkout Code
