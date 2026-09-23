@@ -20,6 +20,10 @@ from .model import CONDITION_KEYS, IMPLICIT_CONDITIONS, ModelPricing, PriceSet
 
 ConditionKey = Tuple[Tuple[str, str], ...]
 
+#: Defaults too obvious to report as assumptions (you get the standard tier
+#: unless you ask for batch/flex/priority).
+_UNREMARKABLE = {("service_tier", "standard")}
+
 
 @dataclass(frozen=True)
 class RequestConditions:
@@ -108,7 +112,7 @@ def select_price_set(
     assumptions = []
     varying = _varying_keys(effective)
     for key in sorted(varying):
-        if key in request.explicit:
+        if key in request.explicit or (key, in_effect.get(key)) in _UNREMARKABLE:
             continue
         value = in_effect.get(key)
         if value is not None:

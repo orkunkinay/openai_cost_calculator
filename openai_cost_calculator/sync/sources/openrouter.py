@@ -91,7 +91,9 @@ def parse(payload: Any) -> SourceResult:
             sets.append(price_set(_rates(merged), min_input_tokens=minimum))
         vendor = model_id.split("/", 1)[0] if "/" in model_id else None
         slug = item.get("canonical_slug")
-        aliases = (slug,) if isinstance(slug, str) and slug and slug != model_id else ()
+        # Variants (":batch", ":free") share their base model's slug; only the
+        # base id may claim it, or two entries would own one identifier.
+        aliases = (slug,) if isinstance(slug, str) and slug and slug != model_id and ":" not in model_id else ()
         result.add(
             ModelPricing(
                 id=model_id,

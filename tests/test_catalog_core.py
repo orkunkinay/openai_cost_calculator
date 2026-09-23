@@ -192,7 +192,7 @@ def test_explicit_conditions_are_not_reported_as_assumptions():
     model = _model("m", _set(input="1", output="2"), _set({"service_tier": "batch"}, input="0.5", output="1"))
     assumed = select_price_set(model, _request(), total_input_tokens=0, on=date(2026, 1, 1), provider="acme")
     assert assumed.conditions == {"service_tier": "standard"}
-    assert assumed.assumptions == ("assumed service_tier=standard (pass service_tier=... to price another option)",)
+    assert assumed.assumptions == ()  # the standard tier is not worth reporting
     explicit = select_price_set(model, _request(explicit={"service_tier"}, service_tier="batch"), total_input_tokens=0, on=date(2026, 1, 1), provider="acme")
     assert explicit.assumptions == ()
 

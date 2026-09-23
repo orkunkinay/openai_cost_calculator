@@ -41,7 +41,7 @@ def render_markdown(outcomes: Sequence[ProviderOutcome], *, today: date) -> str:
             f"{len(o.needs_review) + len(o.blocking_issues)} | [{o.source_id}]({o.source_url}) |"
         )
     for o in outcomes:
-        if o.status == "unchanged":
+        if o.status == "unchanged" and not o.notes:
             continue
         lines += ["", f"## {o.provider}", ""]
         if o.error:

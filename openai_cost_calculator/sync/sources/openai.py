@@ -37,6 +37,27 @@ SOURCE = Source(
 #: columns but no note use the same documented threshold.
 LONG_CONTEXT_THRESHOLD = 272_000
 
+#: Dated snapshot ids priced like their undated family.  OpenAI's page lists
+#: undated names; these aliases keep dated ids (and the legacy CSV rows that
+#: installed clients depend on) resolving to the right family rather than to an
+#: older, differently priced snapshot such as gpt-4o-2024-05-13.
+KNOWN_SNAPSHOTS = {
+    "gpt-4o": ("gpt-4o-2024-08-06", "gpt-4o-2024-11-20"),
+    "gpt-4o-mini": ("gpt-4o-mini-2024-07-18",),
+    "gpt-4.1": ("gpt-4.1-2025-04-14",),
+    "gpt-4.1-mini": ("gpt-4.1-mini-2025-04-14",),
+    "gpt-4.1-nano": ("gpt-4.1-nano-2025-04-14",),
+    "gpt-5": ("gpt-5-2025-08-07",),
+    "gpt-5-mini": ("gpt-5-mini-2025-08-07",),
+    "gpt-5-nano": ("gpt-5-nano-2025-08-07",),
+    "o1": ("o1-2024-12-17",),
+    "o1-pro": ("o1-pro-2025-03-19",),
+    "o3": ("o3-2025-04-16",),
+    "o3-mini": ("o3-mini-2025-01-31",),
+    "o3-pro": ("o3-pro-2025-06-10",),
+    "o4-mini": ("o4-mini-2025-04-16",),
+}
+
 _TIER_LABELS = {"standard": "standard", "batch": "batch", "flex": "flex", "fast mode": "priority", "priority": "priority"}
 _SKIPPED_SECTIONS = ("finetuning", "fine-tuning", "video generation", "transcription", "tools", "gpt-live")
 _MODEL_CELL = re.compile(r"^(?P<id>[a-z0-9][a-z0-9.\-:]*)\s*(?:\((?P<note>[^)]*)\))?$")
@@ -108,6 +129,7 @@ def _model(model_id: str, prices, display: Optional[str] = None) -> ModelPricing
         vendor="openai",
         canonical_id=f"openai/{model_id}",
         display_name=display,
+        aliases=KNOWN_SNAPSHOTS.get(model_id, ()),
     )
 
 

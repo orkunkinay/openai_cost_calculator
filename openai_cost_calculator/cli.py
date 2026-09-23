@@ -114,13 +114,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     database_reset.add_argument("path")
     database_reset.add_argument("--yes", action="store_true")
 
-    pricing_parser = subparsers.add_parser("pricing", help="Pricing data operations")
-    pricing_subparsers = pricing_parser.add_subparsers(dest="pricing_command", required=True)
-    pricing_validate = pricing_subparsers.add_parser("validate")
-    pricing_validate.add_argument(
-        "--file",
-        default=str(Path(__file__).resolve().parents[1] / "data" / "gpt_pricing_data.csv"),
-    )
+    from openai_cost_calculator.pricing_cli import add_pricing_parser
+
+    add_pricing_parser(subparsers)
 
     _add_claude_parser(subparsers)
 
@@ -515,15 +511,9 @@ def _database(args: argparse.Namespace) -> int:
 
 
 def _pricing(args: argparse.Namespace) -> int:
-    from openai_cost_calculator.pricing import validate_pricing_file
+    from openai_cost_calculator.pricing_cli import run
 
-    try:
-        count = validate_pricing_file(args.file)
-    except (OSError, ValueError) as exc:
-        print(f"pricing validation failed: {exc}", file=sys.stderr)
-        return 1
-    print(f"Pricing data valid: {count} model/date entries in {args.file}")
-    return 0
+    return run(args)
 
 
 def _request_json(
