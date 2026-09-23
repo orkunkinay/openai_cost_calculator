@@ -22,6 +22,7 @@ USAGE_FIELDS: Mapping[str, str] = {
     "cached_input_audio": "cached_input_audio_tokens",
     "input_image": "input_image_tokens",
     "output": "output_tokens",
+    "reasoning": "reasoning_tokens",
     "output_audio": "output_audio_tokens",
     "output_image": "output_image_tokens",
     "web_search": "web_search_calls",
@@ -36,8 +37,9 @@ class Usage:
     ``input_tokens`` counts only uncached text input: cache reads belong in
     ``cached_input_tokens`` and cache writes in ``cache_write_tokens``.  (The
     OpenAI API's ``prompt_tokens`` *includes* cached tokens; use
-    :meth:`from_totals` to convert.)  Reasoning tokens are part of
-    ``output_tokens``: every researched provider bills them as output.
+    :meth:`from_totals` to convert.)  ``reasoning_tokens`` may be reported
+    separately from ``output_tokens``; they are charged at the output rate
+    unless the model publishes a distinct reasoning rate.
     """
 
     input_tokens: int = 0
@@ -48,6 +50,7 @@ class Usage:
     cached_input_audio_tokens: int = 0
     input_image_tokens: int = 0
     output_tokens: int = 0
+    reasoning_tokens: int = 0
     output_audio_tokens: int = 0
     output_image_tokens: int = 0
     web_search_calls: int = 0

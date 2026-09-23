@@ -105,6 +105,14 @@ def test_fallbacks_charge_cache_reads_and_writes_at_input_rate():
     assert [i.rate_dimension for i in items] == ["input", "input"]
 
 
+def test_reasoning_is_charged_at_output_rate_unless_priced_separately():
+    usage = Usage(output_tokens=1_000_000, reasoning_tokens=1_000_000)
+    total, items = price_usage(usage, _set(input="1", output="4"), where="t")
+    assert total == D("8") and items[1].rate_dimension == "output"
+    total, _ = price_usage(usage, _set(input="1", output="4", reasoning="2"), where="t")
+    assert total == D("6")
+
+
 def test_missing_rate_without_safe_fallback_is_an_explicit_error():
     with pytest.raises(MissingRateError, match="input_audio"):
         price_usage(Usage(input_audio_tokens=10), _set(input="1", output="1"), where="acme/m")

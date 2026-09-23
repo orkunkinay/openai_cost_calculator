@@ -56,7 +56,14 @@ _ALL: Tuple[Dimension, ...] = (
     _token("input_audio", "input", "Uncached audio input tokens."),
     _token("cached_input_audio", "input", "Cached audio input tokens.", "input_audio"),
     _token("input_image", "input", "Image input tokens, where priced separately from text."),
-    _token("output", "output", "Output tokens, including reasoning/thinking tokens."),
+    _token("output", "output", "Output tokens other than reasoning tokens."),
+    _token(
+        "reasoning",
+        "output",
+        "Reasoning/thinking tokens. Almost every provider bills them as output; a "
+        "separate rate exists only where one is published (e.g. some OpenRouter models).",
+        "output",
+    ),
     _token("output_audio", "output", "Audio output tokens."),
     _token("output_image", "output", "Image output tokens."),
     _unit("web_search", "call", "Web-search / grounding tool calls."),

@@ -12,7 +12,7 @@ and each owns one format's overlapping-counter quirks:
 * Anthropic: ``input_tokens`` *excludes* cache reads and writes; writes are
   split by TTL; web searches are counted separately.
 * Gemini: ``promptTokenCount`` includes cached content; thinking tokens are
-  reported apart from candidates but billed as output.
+  reported apart from candidates (billed at the output rate).
 * Bedrock Converse: ``inputTokens`` excludes cache reads and writes.
 
 Works with SDK objects (attribute access) and plain JSON dicts.
@@ -88,6 +88,7 @@ def from_openai(usage: Any) -> Usage:
     written = _int(usage, in_details, "cache_write_tokens")
     audio_in = _int(usage, in_details, "audio_tokens")
     audio_out = _int(usage, out_details, "audio_tokens")
+    reasoning = _int(usage, out_details, "reasoning_tokens")
 
     uncached = _subtract(total_in, cached + written, "cached + cache-write tokens")
     # Audio details count all audio input (cached or not); attribute cached
@@ -98,7 +99,8 @@ def from_openai(usage: Any) -> Usage:
         input_audio_tokens=min(audio_in, uncached),
         cached_input_tokens=cached,
         cache_write_tokens=written,
-        output_tokens=_subtract(out, audio_out, "audio output tokens"),
+        output_tokens=_subtract(out, audio_out + reasoning, "audio + reasoning output tokens"),
+        reasoning_tokens=reasoning,
         output_audio_tokens=audio_out,
     )
 
@@ -148,13 +150,15 @@ def from_gemini(metadata: Any) -> Usage:
     audio_cached = _modality_count(cache_details, "AUDIO")
     uncached = _subtract(prompt, cached, "cached content tokens")
     audio_uncached = _subtract(audio_in, audio_cached, "cached audio tokens")
-    output = pick("candidatesTokenCount", "candidates_token_count") + pick("thoughtsTokenCount", "thoughts_token_count")
+    output = pick("candidatesTokenCount", "candidates_token_count")
+    thoughts = pick("thoughtsTokenCount", "thoughts_token_count")
     return Usage(
         input_tokens=_subtract(uncached, audio_uncached, "uncached audio tokens"),
         input_audio_tokens=audio_uncached,
         cached_input_tokens=_subtract(cached, audio_cached, "cached audio tokens"),
         cached_input_audio_tokens=audio_cached,
         output_tokens=output,
+        reasoning_tokens=thoughts,
     )
 
 

@@ -27,7 +27,7 @@ def test_openai_chat_completions_subtracts_cached_and_audio():
     extracted = extract_usage(payload)
     assert extracted.format == "openai" and extracted.model == "gpt-4o-2024-08-06"
     assert extracted.usage == Usage(
-        input_tokens=700, input_audio_tokens=100, cached_input_tokens=200, output_tokens=260, output_audio_tokens=40
+        input_tokens=700, input_audio_tokens=100, cached_input_tokens=200, output_tokens=210, reasoning_tokens=50, output_audio_tokens=40
     )
 
 
@@ -42,7 +42,8 @@ def test_openai_responses_api_objects_with_cache_writes():
         ),
     )
     usage = extract_usage(response).usage
-    assert (usage.input_tokens, usage.cached_input_tokens, usage.cache_write_tokens, usage.output_tokens) == (1_000, 6_000, 3_000, 500)
+    assert (usage.input_tokens, usage.cached_input_tokens, usage.cache_write_tokens) == (1_000, 6_000, 3_000)
+    assert (usage.output_tokens, usage.reasoning_tokens) == (300, 200)
     assert usage.total_input_tokens == 10_000
 
 
@@ -80,7 +81,7 @@ def test_anthropic_messages_cache_ttl_split_and_web_search():
     )
 
 
-def test_gemini_usage_metadata_counts_thoughts_as_output_and_splits_audio():
+def test_gemini_usage_metadata_reports_thoughts_and_splits_audio():
     payload = {
         "modelVersion": "gemini-2.5-flash",
         "usageMetadata": {
@@ -96,7 +97,7 @@ def test_gemini_usage_metadata_counts_thoughts_as_output_and_splits_audio():
     extracted = extract_usage(payload)
     assert extracted.format == "gemini" and extracted.model == "gemini-2.5-flash"
     assert extracted.usage == Usage(
-        input_tokens=410, input_audio_tokens=200, cached_input_tokens=300, cached_input_audio_tokens=100, output_tokens=200
+        input_tokens=410, input_audio_tokens=200, cached_input_tokens=300, cached_input_audio_tokens=100, output_tokens=120, reasoning_tokens=80
     )
 
 
