@@ -10,9 +10,45 @@
       "kind": "official_docs",
       "url": "https://ai.google.dev/gemini-api/docs/pricing",
       "description": "Gemini Developer API pricing documentation (Markdown rendition)"
+    },
+    {
+      "id": "legacy-csv",
+      "kind": "manual",
+      "url": "https://github.com/orkunkinay/openai_cost_calculator/blob/main/data/gpt_pricing_data.csv",
+      "description": "Rows carried over from the pre-catalog pricing CSV; not listed by any official source at migration time"
     }
   ],
   "models": [
+    {
+      "id": "gemini-2.0-flash-2025-02-05",
+      "vendor": "google",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.1",
+            "cached_input": "0.025",
+            "output": "0.4"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gemini-2.0-flash-lite-2025-02-25",
+      "vendor": "google",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.075",
+            "cached_input": "0.075",
+            "output": "0.3"
+          }
+        }
+      ]
+    },
     {
       "id": "gemini-2.5-flash",
       "display_name": "Gemini 2.5 Flash",

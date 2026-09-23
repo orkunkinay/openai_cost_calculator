@@ -6,6 +6,12 @@
   "verified_at": "2026-09-23",
   "sources": [
     {
+      "id": "legacy-csv",
+      "kind": "manual",
+      "url": "https://github.com/orkunkinay/openai_cost_calculator/blob/main/data/gpt_pricing_data.csv",
+      "description": "Rows carried over from the pre-catalog pricing CSV; not listed by any official source at migration time"
+    },
+    {
       "id": "openai-pricing-docs",
       "kind": "official_docs",
       "url": "https://developers.openai.com/api/docs/pricing",
@@ -76,6 +82,20 @@
             "input_image": "4",
             "output": "5",
             "output_image": "16"
+          }
+        }
+      ]
+    },
+    {
+      "id": "computer-use-preview-2025-03-11",
+      "vendor": "openai",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "3",
+            "output": "12"
           }
         }
       ]
@@ -335,6 +355,21 @@
       ]
     },
     {
+      "id": "gpt-4.5-preview-2025-02-27",
+      "vendor": "openai",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "75",
+            "cached_input": "37.5",
+            "output": "150"
+          }
+        }
+      ]
+    },
+    {
       "id": "gpt-4o",
       "vendor": "openai",
       "canonical_id": "openai/gpt-4o",
@@ -405,6 +440,34 @@
       ]
     },
     {
+      "id": "gpt-4o-audio-preview-2024-10-01",
+      "vendor": "openai",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "2.5",
+            "output": "10"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-4o-audio-preview-2024-12-17",
+      "vendor": "openai",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "2.5",
+            "output": "10"
+          }
+        }
+      ]
+    },
+    {
       "id": "gpt-4o-mini",
       "vendor": "openai",
       "canonical_id": "openai/gpt-4o-mini",
@@ -442,6 +505,49 @@
       ]
     },
     {
+      "id": "gpt-4o-mini-audio-preview-2024-12-17",
+      "vendor": "openai",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.15",
+            "output": "0.6"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-4o-mini-realtime-preview-2024-12-17",
+      "vendor": "openai",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.6",
+            "cached_input": "0.3",
+            "output": "2.4"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-4o-mini-search-preview-2025-03-11",
+      "vendor": "openai",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.15",
+            "output": "0.6"
+          }
+        }
+      ]
+    },
+    {
       "id": "gpt-4o-mini-tts",
       "vendor": "openai",
       "canonical_id": "openai/gpt-4o-mini-tts",
@@ -451,6 +557,50 @@
           "rates": {
             "input": "0.6",
             "output_audio": "12"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-4o-realtime-preview-2024-10-01",
+      "vendor": "openai",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "5",
+            "cached_input": "2.5",
+            "output": "20"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-4o-realtime-preview-2024-12-17",
+      "vendor": "openai",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "5",
+            "cached_input": "2.5",
+            "output": "20"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-4o-search-preview-2025-03-11",
+      "vendor": "openai",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "2.5",
+            "output": "10"
           }
         }
       ]
@@ -499,6 +649,51 @@
             "input": "2.5",
             "cached_input": "0.25",
             "output": "20"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-5-chat",
+      "vendor": "openai",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "1.25",
+            "cached_input": "0.125",
+            "output": "10"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-5-chat-latest",
+      "vendor": "openai",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "1.25",
+            "cached_input": "0.125",
+            "output": "10"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-5-codex",
+      "vendor": "openai",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "1.25",
+            "cached_input": "0.125",
+            "output": "10"
           }
         }
       ]
@@ -673,6 +868,66 @@
       ]
     },
     {
+      "id": "gpt-5.1-chat-latest",
+      "vendor": "openai",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "1.25",
+            "cached_input": "0.125",
+            "output": "10"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-5.1-codex",
+      "vendor": "openai",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "1.25",
+            "cached_input": "0.125",
+            "output": "10"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-5.1-codex-max",
+      "vendor": "openai",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "1.25",
+            "cached_input": "0.125",
+            "output": "10"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-5.1-codex-mini",
+      "vendor": "openai",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.25",
+            "cached_input": "0.025",
+            "output": "2"
+          }
+        }
+      ]
+    },
+    {
       "id": "gpt-5.2",
       "vendor": "openai",
       "canonical_id": "openai/gpt-5.2",
@@ -718,6 +973,36 @@
       ]
     },
     {
+      "id": "gpt-5.2-chat-latest",
+      "vendor": "openai",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "1.75",
+            "cached_input": "0.175",
+            "output": "14"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-5.2-codex",
+      "vendor": "openai",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "1.75",
+            "cached_input": "0.175",
+            "output": "14"
+          }
+        }
+      ]
+    },
+    {
       "id": "gpt-5.2-pro",
       "vendor": "openai",
       "canonical_id": "openai/gpt-5.2-pro",
@@ -736,6 +1021,21 @@
           "rates": {
             "input": "10.5",
             "output": "84"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-5.3-chat-latest",
+      "vendor": "openai",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "1.75",
+            "cached_input": "0.175",
+            "output": "14"
           }
         }
       ]
@@ -1104,6 +1404,29 @@
           "rates": {
             "input": "15",
             "output": "90"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-5.6",
+      "vendor": "openai",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "4",
+            "cached_input": "0.4",
+            "output": "20"
+          }
+        },
+        {
+          "min_input_tokens": 272001,
+          "rates": {
+            "input": "8",
+            "cached_input": "0.8",
+            "output": "30"
           }
         }
       ]
@@ -2030,6 +2353,36 @@
           "rates": {
             "input": "7.5",
             "output": "30"
+          }
+        }
+      ]
+    },
+    {
+      "id": "o1-mini-2024-09-12",
+      "vendor": "openai",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "1.1",
+            "cached_input": "0.55",
+            "output": "4.4"
+          }
+        }
+      ]
+    },
+    {
+      "id": "o1-preview-2024-09-12",
+      "vendor": "openai",
+      "status": "unverified",
+      "source": "legacy-csv",
+      "prices": [
+        {
+          "rates": {
+            "input": "15",
+            "cached_input": "7.5",
+            "output": "60"
           }
         }
       ]

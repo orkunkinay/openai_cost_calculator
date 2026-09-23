@@ -1,5 +1,19 @@
 """
-Remote CSV → in-memory dict (with a tiny 24-hour cache).
+Legacy OpenAI pricing store: remote CSV -> in-memory dict (24-hour cache).
+
+This module backs the original ``estimate_cost`` API and keeps its contract:
+prices come from the repository's published ``data/gpt_pricing_data.csv``
+(refreshed at most daily), local overrides always win, and offline mode uses
+local overrides only.  The CSV itself is now generated from the provider
+catalog (see :mod:`openai_cost_calculator.legacy`), so it is maintained by the
+automated pricing sync rather than by hand.
+
+If the CSV cannot be fetched, the last good copy is kept; without one, the
+bundled catalog is used instead of failing every estimate.  A CSV that is
+fetched but malformed still raises: bad data must never be used silently.
+
+New code should prefer :func:`openai_cost_calculator.calculate_cost`, which
+uses the bundled catalog directly and performs no network I/O.
 
 Pricing CSV may contain tiered rows per (model, date) using `Minimum Tokens`.
 If the column is missing, rows are treated as a single tier with minimum 0.
@@ -9,6 +23,7 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 import math
 import time
 import threading
@@ -16,6 +31,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Tuple, Iterable, Mapping, Optional, List
 import requests
+
+logger = logging.getLogger(__name__)
 
 _PRICING_CSV_URL = (
     "https://raw.githubusercontent.com/orkunkinay/openai_cost_calculator/refs/heads/main/data/gpt_pricing_data.csv"
@@ -260,7 +277,18 @@ def load_pricing_tiered() -> Dict[Tuple[str, str], List[dict]]:
     if not _OFFLINE_ONLY:
         now = time.time()
         if _CACHE is None or (now - _CACHE_TS) > _TTL:
-            _CACHE = _fetch_csv()
+            try:
+                _CACHE = _fetch_csv()
+            except requests.RequestException as exc:
+                # Availability problems degrade gracefully; a malformed CSV
+                # (ValueError) is an integrity problem and still raises.
+                if _CACHE is None:
+                    from .legacy import legacy_tiered_pricing
+
+                    logger.warning("pricing CSV unavailable (%s); using the bundled catalog", exc)
+                    _CACHE = legacy_tiered_pricing()
+                else:
+                    logger.warning("pricing CSV refresh failed (%s); keeping the cached copy", exc)
             _CACHE_TS = now
         base = {key: [dict(tier) for tier in tiers] for key, tiers in _CACHE.items()}
 
