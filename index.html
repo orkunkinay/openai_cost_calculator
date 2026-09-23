@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>openai_cost_calculator — Instant, accurate token-cost estimates</title>
+  <title>openai_cost_calculator — Exact LLM API costs across 13 providers</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <style>
@@ -205,6 +205,26 @@
         <a href="#install">Installation</a>
         <a href="#quickstart">Quick start</a>
 
+        <h6>Pricing any provider</h6>
+        <a href="#calculate-cost">Price a request</a>
+        <div class="sub">
+          <a href="#long-context">Long-context tiers</a>
+          <a href="#conditions">Tiers, regions &amp; time</a>
+        </div>
+        <a href="#responses">Price a provider response</a>
+        <a href="#compare">Compare providers</a>
+        <a href="#providers">Supported providers</a>
+        <a href="#cost-object">The Cost object</a>
+        <a href="#errors">Error handling</a>
+
+        <h6>OpenAI response API</h6>
+        <a href="#typed-api">Typed &amp; legacy API</a>
+        <div class="sub">
+          <a href="#costbreakdown">CostBreakdown</a>
+          <a href="#streaming">Streaming</a>
+        </div>
+        <a href="#pricing-utils">Pricing utilities</a>
+
         <h6>Tracking &amp; agents</h6>
         <a href="#tracking-agent-turns">Tracking agent turns</a>
         <a href="#zero-config-proxy">Zero-config proxy</a>
@@ -214,24 +234,13 @@
           <a href="#codex">Codex</a>
         </div>
 
-        <h6>API reference</h6>
-        <a href="#typed-api">Typed API</a>
-        <div class="sub">
-          <a href="#costbreakdown">CostBreakdown</a>
-        </div>
-        <a href="#legacy-api">Legacy API</a>
-        <a href="#pricing-utils">Pricing utilities</a>
-
-        <h6>Concepts</h6>
-        <a href="#pricing-sources">Pricing sources &amp; cache</a>
-        <a href="#streaming">Streaming</a>
-        <a href="#errors">Error handling</a>
-        <a href="#comparison">LiteLLM vs this library</a>
-
-        <h6>Cookbook</h6>
-        <a href="#cookbook">Add your own model pricing</a>
+        <h6>Pricing data</h6>
+        <a href="#pricing-updates">Automated updates</a>
+        <a href="#cli">Command line</a>
+        <a href="#cookbook">Custom model prices</a>
 
         <h6>Help</h6>
+        <a href="#limitations">Limitations</a>
         <a href="#troubleshooting">Troubleshooting</a>
         <a href="#license">License</a>
       </nav>
@@ -240,85 +249,295 @@
     <!-- Main -->
     <main>
       <div class="hero">
-        <h1>Instant, accurate USD cost estimates for OpenAI &amp; Azure OpenAI</h1>
-        <p class="lead">v1.2.0 turns any API response (Chat Completions or Responses API, streaming or non-streaming) into precise, per-request costs — 8-decimal strings or <code>Decimal</code> via a typed dataclass.</p>
+        <h1>Exact, auditable LLM API costs across 13 providers</h1>
+        <p class="lead">v1.3.0 prices usage for OpenAI, Anthropic, Google Gemini, Vertex AI, Azure OpenAI, Amazon Bedrock, OpenRouter, DeepSeek, Together AI, Groq, Fireworks AI, DeepInfra and Mistral — with <code>Decimal</code> precision and prices synced automatically from each provider's official pricing API or documentation.</p>
       </div>
 
       <section id="overview">
         <h2>Overview</h2>
         <p>
-          <strong>openai_cost_calculator</strong> is a tiny, production-hardened helper that reads the
-          usage counters returned by OpenAI/Azure OpenAI and outputs the exact USD cost for that call.
-          It supports cached tokens, undated models, streaming generators, and both classic and new SDKs.
+          Application code names a <strong>provider</strong> and a <strong>model</strong>. Everything provider-specific —
+          model id formats, global vs regional endpoints, batch/flex/priority tiers, cache-write TTLs,
+          long-context thresholds, peak hours and scheduled price changes — is resolved by the library.
         </p>
         <ul>
-          <li><strong>Typed API</strong> for exact financial arithmetic (<code>Decimal</code>)</li>
-          <li><strong>Legacy API</strong> for drop-in string output (8 decimal places)</li>
-          <li><strong>Agent turn tracking</strong> with <code>CostTracker</code>, <code>Turn</code>, session totals, and per-model rollups</li>
-          <li><strong>OpenAI-compatible proxy</strong> for zero-config cost capture from agents, IDEs, and SDK clients</li>
-          <li><strong>Claude Code &amp; Codex adapters</strong> for status lines, hooks, and per-turn cost notifications</li>
-          <li><strong>Pricing</strong> loaded from a remote CSV with a <em>24h cache</em> + local overrides</li>
-          <li><strong>Offline mode</strong> for pinned environments (no network calls)</li>
+          <li><strong>Provider-agnostic API</strong>: <code>calculate_cost</code>, <code>estimate_response_cost</code>, <code>compare_costs</code></li>
+          <li><strong>Itemized results</strong> with the conditions applied, any assumptions, and the official source of every price</li>
+          <li><strong>Rich pricing model</strong>: cache reads and 5-minute/1-hour cache writes, audio, image and reasoning tokens, tool calls</li>
+          <li><strong>Bundled catalog</strong>: no network calls on the pricing path; deterministic and offline-friendly</li>
+          <li><strong>Automated, fail-closed updates</strong> from official sources, reviewed through pull requests</li>
+          <li><strong>OpenAI response API</strong> (<code>estimate_cost</code>, <code>estimate_cost_typed</code>) unchanged</li>
+          <li><strong>Agent tooling</strong>: <code>CostTracker</code>, a local accounting proxy, Claude Code &amp; Codex status lines</li>
         </ul>
       </section>
 
       <section id="install">
         <h2>Installation</h2>
         <pre><button class="copy" data-copy>Copy</button><code>pip install openai-cost-calculator</code></pre>
-        <p class="lead"><small>Package name on PyPI uses dashes; import name uses underscores.</small></p>
+        <p class="lead"><small>Package name on PyPI uses dashes; import name uses underscores. The pricing catalog ships inside the package.</small></p>
       </section>
 
       <section id="quickstart">
         <h2>Quick start</h2>
-        <div class="tip"><strong>Tip:</strong> Prefer the <em>typed</em> API for money math.</div>
+<pre><button class="copy" data-copy>Copy</button><code class="language-python">from openai_cost_calculator import calculate_cost
 
-        <h3>One-line (legacy string API)</h3>
-<pre><button class="copy" data-copy>Copy</button><code class="language-python">from openai import OpenAI
-from openai_cost_calculator import estimate_cost
-
-client = OpenAI()
-resp = client.chat.completions.create(
-    model="gpt-4o-mini",
-    messages=[{"role":"user","content":"Hi there!"}],
+cost = calculate_cost(
+    provider="aws-bedrock",
+    model="anthropic/claude-opus-5-5",
+    input_tokens=12_000,
+    output_tokens=800,
 )
+print(cost.total)        # Decimal('0.064')
+print(cost.conditions)   # {'service_tier': 'standard', 'region': 'global'}
+print(cost.assumptions)  # ('assumed region=global (pass region=... to price another option)',)
+print(cost.source_url)   # the official source the price came from</code></pre>
+        <p>The same response can cost different amounts depending on who bills it:</p>
+<pre><button class="copy" data-copy>Copy</button><code class="language-python">from openai_cost_calculator import estimate_response_cost
 
-print(estimate_cost(resp))
-# {'prompt_cost_uncached': '0.00000150',
-#  'prompt_cost_cached'  : '0.00000000',
-#  'completion_cost'     : '0.00000600',
-#  'total_cost'          : '0.00000750'}</code></pre>
+message = {  # an Anthropic Messages API response (dict or SDK object)
+    "type": "message",
+    "model": "claude-sonnet-5",
+    "usage": {"input_tokens": 400_000, "cache_read_input_tokens": 0, "output_tokens": 0},
+}
+estimate_response_cost(message, provider="anthropic").total            # Decimal('0.8')
+estimate_response_cost(message, provider="bedrock").total              # Decimal('0.8')   global endpoint
+estimate_response_cost(message, provider="vertex", region="us").total  # Decimal('0.88')  multi-region +10%</code></pre>
+      </section>
 
-        <h3 id="typed-api">Typed API (recommended)</h3>
+      <section id="calculate-cost">
+        <h2>Price a request</h2>
+        <p>
+          Token counts are <strong>disjoint</strong>: <code>input_tokens</code> excludes cache reads
+          (<code>cached_input_tokens</code>) and cache writes (<code>cache_write_tokens</code>, or
+          <code>cache_write_1h_tokens</code> for Anthropic's 1-hour cache).
+        </p>
+<pre><button class="copy" data-copy>Copy</button><code class="language-python">from openai_cost_calculator import calculate_cost
+
+cost = calculate_cost(
+    provider="anthropic",
+    model="claude-opus-5-5",
+    input_tokens=10_000,
+    cached_input_tokens=100_000,
+    cache_write_tokens=10_000,
+    output_tokens=2_000,
+)
+for item in cost.items:
+    print(item.dimension, item.quantity, item.unit_price, item.cost)
+# input        10000   4     0.04
+# cached_input 100000  0.2   0.02
+# cache_write  10000   5     0.05
+# output       2000    20    0.04
+print(cost.total)  # Decimal('0.15')</code></pre>
+        <p>For audio, image or reasoning tokens and tool calls, pass a <code>Usage</code>:</p>
+<pre><button class="copy" data-copy>Copy</button><code class="language-python">from openai_cost_calculator import Usage, calculate_cost
+
+usage = Usage(input_tokens=2_000, input_audio_tokens=50_000, output_audio_tokens=20_000)
+calculate_cost("openai", "gpt-realtime-2.1", usage=usage).total  # Decimal('2.888')</code></pre>
+        <div class="note">
+          If you have an OpenAI-style total that <em>includes</em> cached tokens, convert it with
+          <code>Usage.from_totals(total_input_tokens=..., cached_input_tokens=..., output_tokens=...)</code>.
+        </div>
+
+        <h3 id="long-context">Long-context tiers</h3>
+        <p>
+          Several providers charge a higher rate for <em>every</em> token once a request's input crosses a threshold
+          (OpenAI ≥272K, Gemini and Vertex &gt;200K). Cached and cache-write tokens count toward the threshold, and
+          <code>cost.min_input_tokens</code> shows which tier applied:
+        </p>
+<pre><button class="copy" data-copy>Copy</button><code class="language-python">cost = calculate_cost("openai", "gpt-6-sol", input_tokens=300_000)
+cost.total, cost.min_input_tokens   # (Decimal('1.2'), 272000) — $4/1M instead of $2/1M</code></pre>
+
+        <h3 id="conditions">Tiers, regions &amp; time</h3>
+<pre><button class="copy" data-copy>Copy</button><code class="language-python">from datetime import date, datetime, timezone
+
+calculate_cost("openai", "gpt-6-luna", input_tokens=100_000, service_tier="batch")    # Decimal('0.005') batch tier
+calculate_cost("anthropic", "claude-sonnet-5", input_tokens=1_000_000, region="us")   # Decimal('2.2')  inference_geo=us
+calculate_cost("azure", "gpt-6-astra", input_tokens=100_000, region="data-zone")      # Decimal('1.1')  Data Zone deployment
+calculate_cost("bedrock", "us.anthropic.claude-opus-5-5", input_tokens=1_000)         # regional rate, explained in assumptions
+calculate_cost("vertex", "gemini-3.8-flash", input_tokens=1_000_000, region="us-central1")  # non-global Gemini price
+calculate_cost("gemini", "gemini-3.8-flash", input_tokens=1_000_000, at=date(2027, 1, 2))   # Decimal('1.5')  scheduled price
+calculate_cost("deepseek", "deepseek-flash", input_tokens=1_000_000,
+               at=datetime(2026, 9, 26, 8, 0, tzinfo=timezone.utc))                      # Decimal('0.15') off-peak</code></pre>
+        <p>
+          When you don't specify a condition that affects the price, the provider default is used and reported in
+          <code>cost.assumptions</code>. When a condition is unavailable, you get an error listing the alternatives
+          instead of a guess:
+        </p>
+<pre><code>PricingUnavailableError: bedrock/anthropic.claude-opus-5-5 has no price for region=ap-south-1, service_tier=standard;
+available: region=eu-central-1; region=global; region=us-east-1; region=us-west-2</code></pre>
+        <p>OpenAI's "Fast mode" can be requested as <code>service_tier="fast"</code> or <code>"priority"</code>.</p>
+      </section>
+
+      <section id="responses">
+        <h2>Price a provider response</h2>
+        <p>
+          <code>estimate_response_cost</code> reads usage from any supported wire format — OpenAI Chat Completions and
+          Responses (also used by Azure, OpenRouter, Groq, Together, Fireworks, DeepInfra and Mistral), DeepSeek,
+          Anthropic Messages, Gemini <code>usageMetadata</code> and Bedrock Converse — as SDK objects or JSON dicts.
+          The <em>billing provider</em> is passed separately, because the same format is billed differently by different providers.
+        </p>
 <pre><button class="copy" data-copy>Copy</button><code class="language-python">from openai import OpenAI
-from openai_cost_calculator import estimate_cost_typed
+from openai_cost_calculator import estimate_response_cost
+
+client = OpenAI()
+resp = client.responses.create(model="gpt-6-sol", input="Summarize the release notes")
+cost = estimate_response_cost(resp, provider="openai")   # cache writes and reasoning tokens itemized
+
+estimate_response_cost(converse_response, provider="bedrock", model="anthropic.claude-sonnet-5")
+estimate_response_cost(gemini_response, provider="gemini")</code></pre>
+      </section>
+
+      <section id="compare">
+        <h2>Compare providers, inspect prices</h2>
+<pre><button class="copy" data-copy>Copy</button><code class="language-python">from openai_cost_calculator import Usage, compare_costs, get_model_pricing, list_models
+
+for cost in compare_costs("anthropic/claude-opus-5-5", usage=Usage(input_tokens=50_000, output_tokens=2_000)):
+    print(cost.provider, cost.resolved_model, cost.total)
+# anthropic   claude-opus-5-5             0.24
+# bedrock     anthropic.claude-opus-5-5   0.24
+# openrouter  anthropic/claude-opus-5.5   0.24
+# vertex      claude-opus-5-5             0.24
+
+get_model_pricing("bedrock", "global.anthropic.claude-opus-5-5").prices  # every tier and region
+list_models("gemini")</code></pre>
+      </section>
+
+      <section id="providers">
+        <h2>Supported providers</h2>
+        <table>
+          <thead><tr><th>Provider id</th><th>Aliases</th><th>Pricing source</th></tr></thead>
+          <tbody>
+            <tr><td><code>openai</code></td><td></td><td>OpenAI pricing docs (Markdown rendition)</td></tr>
+            <tr><td><code>anthropic</code></td><td><code>claude</code></td><td>Claude API pricing docs (Markdown rendition)</td></tr>
+            <tr><td><code>gemini</code></td><td><code>google-gemini</code>, <code>google-ai-studio</code></td><td>Gemini API pricing docs (Markdown rendition)</td></tr>
+            <tr><td><code>vertex</code></td><td><code>vertex-ai</code>, <code>google-vertex</code></td><td>Vertex AI generative AI pricing page</td></tr>
+            <tr><td><code>azure</code></td><td><code>azure-openai</code>, <code>azure-ai</code></td><td>Azure Retail Prices API</td></tr>
+            <tr><td><code>bedrock</code></td><td><code>aws-bedrock</code>, <code>amazon-bedrock</code></td><td>AWS Price List API</td></tr>
+            <tr><td><code>openrouter</code></td><td></td><td>OpenRouter models API</td></tr>
+            <tr><td><code>deepseek</code></td><td></td><td>DeepSeek API docs</td></tr>
+            <tr><td><code>together</code></td><td><code>together-ai</code></td><td>Together serverless model catalog</td></tr>
+            <tr><td><code>groq</code></td><td></td><td>GroqCloud models page</td></tr>
+            <tr><td><code>fireworks</code></td><td><code>fireworks-ai</code></td><td>Fireworks serverless pricing docs</td></tr>
+            <tr><td><code>deepinfra</code></td><td></td><td>DeepInfra model list API</td></tr>
+            <tr><td><code>mistral</code></td><td><code>mistral-ai</code></td><td>Mistral API pricing page</td></tr>
+          </tbody>
+        </table>
+        <p>Model identifiers are accepted in each provider's own format — for example
+          <code>us.anthropic.claude-opus-5-5</code> (Bedrock inference profile), <code>publishers/anthropic/models/claude-opus-5-5</code>
+          (Vertex), <code>models/gemini-3.8-flash</code> (Gemini API) or canonical ids such as
+          <code>anthropic/claude-opus-5-5</code>. Unknown models get "did you mean" suggestions.</p>
+      </section>
+
+      <section id="cost-object">
+        <h2>The Cost object</h2>
+        <table>
+          <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>total</code></td><td>Exact <code>Decimal</code> total in USD (<code>rounded(8)</code> for display)</td></tr>
+            <tr><td><code>items</code></td><td>Line items: dimension, quantity, unit price, cost</td></tr>
+            <tr><td><code>provider</code>, <code>resolved_model</code>, <code>canonical_model</code></td><td>Who billed it and which offering was priced</td></tr>
+            <tr><td><code>conditions</code></td><td>Service tier, region and period in effect</td></tr>
+            <tr><td><code>min_input_tokens</code></td><td>Long-context tier applied (0 for the base tier)</td></tr>
+            <tr><td><code>assumptions</code></td><td>Defaults that affected the price</td></tr>
+            <tr><td><code>source_url</code>, <code>verified_at</code></td><td>Provenance of the price</td></tr>
+            <tr><td><code>to_breakdown()</code></td><td>Projection onto the three-bucket <code>CostBreakdown</code></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="errors">
+        <h2>Error handling</h2>
+        <p>All pricing errors derive from <code>PricingError</code> (a <code>ValueError</code>) and say what to do next.</p>
+        <table>
+          <thead><tr><th>Error</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>UnknownProviderError</code></td><td>Lists the supported providers</td></tr>
+            <tr><td><code>UnknownModelError</code></td><td>Includes "did you mean" suggestions</td></tr>
+            <tr><td><code>AmbiguousModelError</code></td><td>An identifier matches several offerings; lists them</td></tr>
+            <tr><td><code>PricingUnavailableError</code></td><td>The model exists, but not for the requested tier, region or date</td></tr>
+            <tr><td><code>MissingRateError</code></td><td>Usage contains a dimension the model has no price for</td></tr>
+            <tr><td><code>UsageError</code></td><td>Negative, non-integer or inconsistent usage</td></tr>
+          </tbody>
+        </table>
+<pre><button class="copy" data-copy>Copy</button><code class="language-python">from openai_cost_calculator import PricingError, calculate_cost
+
+try:
+    calculate_cost("openai", "gpt-6-sun", input_tokens=1_000)
+except PricingError as e:
+    print(e)
+# no pricing for model 'gpt-6-sun' on provider 'openai'; did you mean: gpt-6-luna, gpt-6-sol, ...?</code></pre>
+        <div class="note">
+          Missing rates are never silently replaced, with two deliberate exceptions: cache reads and writes fall back
+          to the input rate, and reasoning tokens to the output rate.
+        </div>
+      </section>
+
+      <section id="typed-api">
+        <h2>OpenAI response API</h2>
+        <p>The original API for OpenAI SDK responses is unchanged and remains supported.</p>
+<pre><button class="copy" data-copy>Copy</button><code class="language-python">from openai import OpenAI
+from openai_cost_calculator import estimate_cost, estimate_cost_typed
 
 client = OpenAI()
 resp = client.chat.completions.create(
-    model="gpt-4o-mini",
-    messages=[{"role":"user","content":"Hi there!"}],
+    model="gpt-6-luna",
+    messages=[{"role": "user", "content": "Hi there!"}],
 )
 
 cost = estimate_cost_typed(resp)
-print(cost.total_cost)                 # Decimal('0.00000750')
-print(cost.as_dict(stringify=True))    # strings, 8 dp</code></pre>
+print(cost.total_cost)              # Decimal, e.g. 1,200 in / 300 out → Decimal('0.00027')
+print(estimate_cost(resp))          # legacy 8-decimal strings
+# {'prompt_cost_uncached': '0.00012000',
+#  'prompt_cost_cached'  : '0.00000000',
+#  'completion_cost'     : '0.00015000',
+#  'total_cost'          : '0.00027000'}</code></pre>
+        <p>Both functions accept Chat Completions, Responses API objects and streams.</p>
 
-        <h3>Responses API</h3>
-<pre><button class="copy" data-copy>Copy</button><code class="language-python">resp = client.responses.create(
-    model="gpt-4.1-mini",
-    input=[{"role":"user","content":"Hi there!"}],
+        <h3 id="costbreakdown">CostBreakdown</h3>
+<pre><code>CostBreakdown(
+  prompt_cost_uncached: Decimal,
+  prompt_cost_cached:   Decimal,
+  completion_cost:      Decimal,
+  total_cost:           Decimal
+)</code></pre>
+        <p>Use <code>.as_dict(stringify=True|False)</code> for 8-dp strings or raw <code>Decimal</code>s. The provider-agnostic
+          <code>Cost</code> itemizes cache writes and audio separately; <code>Cost.to_breakdown()</code> converts it to this shape.</p>
+
+        <h3 id="streaming">Streaming</h3>
+        <p>Pass the stream directly; the last chunk that carries <code>.usage</code> is used.</p>
+<pre><button class="copy" data-copy>Copy</button><code class="language-python">stream = client.chat.completions.create(
+    model="gpt-6-sol",
+    messages=[{"role": "user", "content": "Hi!"}],
+    stream=True,
+    stream_options={"include_usage": True},
 )
+print(estimate_cost_typed(stream).total_cost)</code></pre>
+      </section>
 
-# Both work
-from openai_cost_calculator import estimate_cost, estimate_cost_typed
-print(estimate_cost(resp))         # dict[str, str]
-print(estimate_cost_typed(resp))   # CostBreakdown</code></pre>
+      <section id="pricing-utils">
+        <h2>Pricing utilities (OpenAI response API)</h2>
+        <p>
+          The OpenAI response API reads the published <code>data/gpt_pricing_data.csv</code> (refreshed at most every 24 hours).
+          That file is <strong>generated from the catalog</strong>, so it is kept current by the same official-source pipeline.
+          If it cannot be downloaded, the last good copy and then the bundled catalog are used instead of failing.
+        </p>
+        <table>
+          <thead><tr><th>Function</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>refresh_pricing()</code></td><td>Re-download the CSV now.</td></tr>
+            <tr><td><code>set_offline_mode(True)</code></td><td>Never touch the network; only local overrides are used.</td></tr>
+            <tr><td><code>add_pricing_entry(name, date, …)</code></td><td>Add or override one row; supports <code>minimum_tokens</code> tiers.</td></tr>
+            <tr><td><code>add_pricing_entries([...])</code></td><td>Bulk add or override rows.</td></tr>
+            <tr><td><code>clear_local_pricing()</code></td><td>Drop all in-process overrides.</td></tr>
+          </tbody>
+        </table>
+        <div class="note">The provider-agnostic API never uses the network; it reads the catalog bundled with the package.</div>
       </section>
 
       <section id="tracking-agent-turns">
         <h2>Tracking agent turns</h2>
         <p>
-          Use <code>CostTracker</code> when one user-visible turn can make many OpenAI calls and you want a running total.
-          Wrap an SDK client with <code>wrap(client)</code>, group work with <code>turn()</code>, and read totals from the returned <code>Turn</code> plus the tracker session.
+          Use <code>CostTracker</code> when one user-visible turn makes many OpenAI calls and you want a running total.
         </p>
 <pre><button class="copy" data-copy>Copy</button><code class="language-python">from openai import OpenAI
 from openai_cost_calculator import CostTracker
@@ -328,11 +547,11 @@ client = tracker.wrap(OpenAI())
 
 with tracker.turn("Refactor auth") as turn:
     client.chat.completions.create(
-        model="gpt-5.4-mini",
+        model="gpt-6-luna",
         messages=[{"role": "user", "content": "Plan the refactor"}],
     )
     client.responses.create(
-        model="gpt-5.4-mini",
+        model="gpt-6-sol",
         input=[{"role": "user", "content": "Summarize the changes"}],
     )
 
@@ -347,318 +566,153 @@ print(tracker.session_total)</code></pre>
             <tr><td><code>tracker.turn(label)</code></td><td>Creates a <code>Turn</code> context for one visible agent turn.</td></tr>
             <tr><td><code>turn.total_cost</code></td><td>Total <code>Decimal</code> cost for calls made inside that turn.</td></tr>
             <tr><td><code>turn.cost_by_model</code></td><td>Per-model <code>Decimal</code> totals for the turn.</td></tr>
-            <tr><td><code>tracker.session_total</code></td><td>Running <code>Decimal</code> total across the tracker session.</td></tr>
+            <tr><td><code>tracker.session_total</code></td><td>Running <code>Decimal</code> total across the session.</td></tr>
           </tbody>
         </table>
-        <div class="note">
-          For streaming calls, pass <code>stream_options={"include_usage": True}</code> so the final usage chunk is available for cost tracking.
-        </div>
+        <div class="note">For streaming calls, pass <code>stream_options={"include_usage": True}</code> so the final usage chunk can be costed.</div>
       </section>
 
       <section id="zero-config-proxy">
         <h2>Zero-config tracking with the proxy</h2>
-        <p>
-          Install the optional proxy dependencies, run the local OpenAI-compatible proxy, and point any OpenAI-compatible
-          agent, IDE, or SDK client at its <code>base_url</code>.
-        </p>
-<pre><button class="copy" data-copy>Copy</button><code>pip install openai-cost-calculator[proxy]</code></pre>
-<pre><button class="copy" data-copy>Copy</button><code>openai-cost-calculator proxy --port 8100</code></pre>
-        <p>Set the agent or client <code>base_url</code> to:</p>
-<pre><button class="copy" data-copy>Copy</button><code>http://127.0.0.1:8100/v1</code></pre>
-        <p>
-          The proxy forwards requests to <code>https://api.openai.com/v1</code> by default, preserving the request body and
-          <code>Authorization</code> header. To use another OpenAI-compatible upstream:
-        </p>
-<pre><button class="copy" data-copy>Copy</button><code>openai-cost-calculator proxy --port 8100 --upstream https://example.com/v1</code></pre>
-        <p>Read accumulated costs at:</p>
-<pre><button class="copy" data-copy>Copy</button><code>http://127.0.0.1:8100/_occ/costs</code></pre>
+        <p>Run the local proxy and point any OpenAI-compatible agent, IDE or SDK client at it.</p>
+<pre><button class="copy" data-copy>Copy</button><code>pip install openai-cost-calculator[proxy]
+openai-cost-calculator proxy --port 8100 --auth-mode api-key</code></pre>
+        <p>Set the client <code>base_url</code> to <code>http://127.0.0.1:8100/v1</code> and read accumulated costs at
+          <code>http://127.0.0.1:8100/_occ/costs</code>. <code>--auth-mode auto</code> routes Codex ChatGPT logins to the
+          ChatGPT backend and API keys to the OpenAI Platform; <code>--upstream URL</code> selects a trusted OpenAI-compatible upstream.</p>
+        <p>For Claude Code, run <code>openai-cost-calculator proxy --port 8100 --protocol anthropic-messages</code>; Anthropic
+          Messages traffic is priced with separate cache-write and cache-read rates.</p>
+        <p>Add <code>--database PATH</code> for a durable SQLite ledger that survives restarts and can be shared by several proxy processes.</p>
         <div class="note">
-          For grouping, send <code>X-OCC-Session</code> to separate agent sessions and <code>X-OCC-Turn</code> to group calls within a visible turn.
-          Streaming calls should set <code>stream_options={"include_usage": true}</code> so the final SSE usage event can be costed.
+          Send <code>X-OCC-Session</code> to separate agent sessions and <code>X-OCC-Turn</code> to group calls within a visible turn.
+          The proxy relays streaming and WebSocket traffic unchanged; accounting is a side effect and never alters a response.
+          The full guide is in <a href="https://github.com/orkunkinay/openai_cost_calculator/blob/main/docs/INTEGRATIONS.md">docs/INTEGRATIONS.md</a>.
         </div>
       </section>
 
       <section id="agent-adapters">
         <h2>Show cost inside Claude Code &amp; Codex</h2>
-        <p>
-          The installer can add Claude Code status-line and hook integration, or configure Codex notifications to read
-          turn checkpoints from the local proxy.
-        </p>
 
         <h3 id="claude-code">Claude Code</h3>
-        <p>Install the Claude Code UI adapters:</p>
+        <p>Proxy-backed status line and lifecycle hooks, with current-turn and session totals:</p>
+<pre><button class="copy" data-copy>Copy</button><code>openai-cost-calculator claude install --proxy-url http://127.0.0.1:8100
+openai-cost-calculator proxy --port 8100 --protocol anthropic-messages</code></pre>
+<pre><code>OCC Turn $0.0124 · Session $0.0837</code></pre>
+        <p>Subscription (OAuth) sessions are labelled <code>API-eq</code>, because token pricing is an API-equivalent estimate
+          rather than an amount billed. <code>openai-cost-calculator claude status</code> shows the same totals from the CLI.</p>
+        <p>The lighter transcript-based adapter reads Claude Code's own reported cost:</p>
 <pre><button class="copy" data-copy>Copy</button><code>openai-cost-calculator install claude-code</code></pre>
-        <p>
-          This adds a Claude Code status line command and a <code>Stop</code> hook. The status line shows the running
-          Claude Code session cost, and the hook prints an inline per-turn line after each assistant response:
-        </p>
-<pre><code>💰 $0.0123 session · last 8.5k->1.2k tok (cache 2.0k) · Sonnet 4.6 · ctx 14%
+<pre><code>💰 $0.0123 session · last 8.5k->1.2k tok (cache 2.0k) · Opus 5.5 · ctx 14%
 💰 This turn cost $0.0041 (12.3k in / 1.1k out)</code></pre>
-        <p>
-          Claude Code session totals come from Claude Code's own status-line JSON. The per-turn hook prefers exact
-          per-message costs from the local transcript; if only usage is available, it estimates from seeded Claude prices.
-        </p>
 
         <h3 id="codex">Codex</h3>
-        <p>Install the Codex adapters:</p>
-<pre><button class="copy" data-copy>Copy</button><code>openai-cost-calculator install codex --proxy-url http://127.0.0.1:8100 --session default</code></pre>
-        <p>Run the proxy:</p>
-<pre><button class="copy" data-copy>Copy</button><code>openai-cost-calculator proxy --port 8100</code></pre>
-        <p>
-          The Codex installer adds a managed <code>~/.codex/config.toml</code> block that selects an
-          <code>openai_cost_calculator</code> custom provider, points it at
-          <code>http://127.0.0.1:8100/v1</code>, uses <code>wire_api = "responses"</code>, and disables
-          websockets so the HTTP proxy can observe usage. The provider uses <code>OPENAI_API_KEY</code>,
-          so make sure that environment variable is available to Codex.
-        </p>
-        <p>
-          Codex notifications use the proxy checkpoint endpoint, so one <code>agent-turn-complete</code> notification
-          corresponds to one cost checkpoint:
-        </p>
+<pre><button class="copy" data-copy>Copy</button><code>openai-cost-calculator install codex --proxy-url http://127.0.0.1:8100 --session default
+openai-cost-calculator proxy --port 8100 --auth-mode auto</code></pre>
+        <p>The installer adds a managed <code>~/.codex/config.toml</code> block with an <code>openai_cost_calculator</code>
+          provider using <code>wire_api = "responses"</code> and Codex's existing ChatGPT or API-key login. Add
+          <code>--websockets</code> to opt in to WebSocket transport. Each <code>agent-turn-complete</code> notification
+          consumes one checkpoint:</p>
 <pre><code>💰 $0.0188 session · last $0.0032
-💰 Turn $0.0032 · gpt-5.5 1.2k->500</code></pre>
-        <p>
-          Codex does not pass token or cost data to <code>notify</code>; these numbers come from the local proxy. Current
-          Codex docs expose <code>notify</code> as an external program; some Codex surfaces, including
-          <code>codex exec</code>, run the notifier but do not display its stdout.
-          <code>occ-codex-statusline</code> is provided for wrappers or future Codex builds that can run an external status command.
-        </p>
+💰 Turn $0.0032 · gpt-6-sol 1.2k->500</code></pre>
 
         <h3>Uninstall</h3>
-<pre><button class="copy" data-copy>Copy</button><code>openai-cost-calculator uninstall claude-code
+<pre><button class="copy" data-copy>Copy</button><code>openai-cost-calculator claude uninstall
+openai-cost-calculator uninstall claude-code
 openai-cost-calculator uninstall codex</code></pre>
       </section>
 
-      <section id="costbreakdown">
-        <h2>CostBreakdown dataclass</h2>
-        <p>Typed results are returned as a frozen dataclass with <code>Decimal</code> fields:</p>
-<pre><code>CostBreakdown(
-  prompt_cost_uncached: Decimal,
-  prompt_cost_cached:   Decimal,
-  completion_cost:      Decimal,
-  total_cost:           Decimal
-)</code></pre>
-        <p>Use <code>.as_dict(stringify=True|False)</code> to convert to 8-dp strings (legacy) or raw <code>Decimal</code>s.</p>
-      </section>
-
-      <section id="legacy-api">
-        <h2>Legacy API</h2>
-        <p><code>estimate_cost(response) → dict[str,str]</code> keeps your existing code working. Returns:</p>
-<pre><code>{
-  "prompt_cost_uncached": "…",
-  "prompt_cost_cached"  : "…",
-  "completion_cost"     : "…",
-  "total_cost"          : "…"
-}</code></pre>
-      </section>
-
-      <section id="pricing-utils">
-        <h2>Pricing utilities</h2>
-        <p>The library resolves model rates from a remote CSV and merges local overrides, including tiered pricing by prompt/input size.</p>
-        <table>
-          <thead><tr><th>Function</th><th>Description</th></tr></thead>
-          <tbody>
-            <tr><td><code>refresh_pricing()</code></td><td>Force-reload the remote CSV (24-hour cache is bypassed).</td></tr>
-            <tr><td><code>set_offline_mode(True)</code></td><td>Disable all network fetches; only local overrides are used.</td></tr>
-            <tr><td><code>add_pricing_entry(name,date, …)</code></td><td>Add/override a single (model, YYYY-MM-DD) row; supports <code>minimum_tokens</code> for tiers.</td></tr>
-            <tr><td><code>add_pricing_entries([...])</code></td><td>Bulk add/override multiple rows (5-tuple or tiered 6-tuple format).</td></tr>
-            <tr><td><code>clear_local_pricing()</code></td><td>Drop all in-process overrides (remote cache unaffected).</td></tr>
-          </tbody>
-        </table>
-        <div class="note">
-          <strong>Note:</strong> The pricing CSV contains Text token prices (no Token-Type column) and can include a
-          <code>Minimum Tokens</code> column for tiered pricing. If a model string lacks a date suffix, the calculator
-          uses <em>today’s date</em> and selects the latest pricing row with <code>date ≤ today</code>.
-        </div>
-      </section>
-
-      <section id="pricing-sources">
-        <h2>Pricing sources &amp; cache</h2>
-        <ul>
-          <li><strong>Remote CSV</strong> (GitHub) is fetched at most once every 24 hours per process.</li>
-          <li><strong>Local overrides</strong> always take precedence over remote rows on key collision.</li>
-          <li><strong>Offline mode</strong> disables remote fetches — ideal for air-gapped or pinned deployments.</li>
-          <li><strong>Tier selection</strong> picks the highest matching tier where <code>minimum_tokens ≤ prompt_tokens</code>.</li>
-        </ul>
-<pre><button class="copy" data-copy>Copy</button><code class="language-python">from openai_cost_calculator import set_offline_mode, refresh_pricing
-set_offline_mode(False)  # allow using the remote CSV
-refresh_pricing()        # refresh the 24h cache now</code></pre>
-      </section>
-
-      <section id="streaming">
-        <h2>Streaming</h2>
-        <p>Pass the generator directly. The helper walks the stream and uses the <em>last</em> chunk that carries <code>.usage</code>.</p>
-<pre><button class="copy" data-copy>Copy</button><code class="language-python">stream = client.chat.completions.create(
-    model="gpt-4o-mini",
-    messages=[{"role":"user","content":"Hi!"}],
-    stream=True,
-    stream_options={"include_usage": True},
-)
-
-from openai_cost_calculator import estimate_cost_typed
-cost = estimate_cost_typed(stream)
-print(cost.total_cost)</code></pre>
-      </section>
-
-      <section id="errors">
-        <h2>Error handling</h2>
-        <p>All recoverable errors raise <code>CostEstimateError</code> with a clear message (e.g., missing pricing row, bad input).</p>
-<pre><button class="copy" data-copy>Copy</button><code class="language-python">from openai_cost_calculator import estimate_cost_typed, CostEstimateError
-try:
-    cost = estimate_cost_typed(resp)
-except CostEstimateError as e:
-    print("Could not estimate cost:", e)</code></pre>
-        <div class="note">
-          Azure OpenAI responses include the original model string (e.g., <code>gpt-4o-mini-2024-07-18</code>) — deployments names are ignored.
-        </div>
-      </section>
-
-      <section id="comparison">
-        <h2>Comparison: LiteLLM vs openai_cost_calculator</h2>
-      
-        <p class="lead">
-          There are multiple ways to estimate LLM usage costs. One alternative is LiteLLM’s
-          <code>completion_cost</code>, which is part of a broader multi-provider framework.
-        </p>
-      
+      <section id="pricing-updates">
+        <h2>Automated pricing updates</h2>
         <p>
-          This library takes a different approach: it focuses on being a
-          <strong>small, framework-independent cost estimation layer</strong>
-          that can be used anywhere.
+          Prices are data, not code. A weekly GitHub Actions job fetches every provider's official source, parses it,
+          validates it, diffs it against the checked-in catalog and applies <strong>only</strong> changes that pass every
+          safety check. Anything ambiguous is left unchanged and listed for review in the pull request it opens.
         </p>
-      
-        <h3>When to use openai_cost_calculator</h3>
         <ul>
-          <li><strong>Lightweight with minimal dependencies</strong> (no heavy frameworks)</li>
-          <li><strong>Simple and transparent</strong> (explicit pricing logic)</li>
-          <li><strong>Framework-independent</strong> (works with any pipeline)</li>
-          <li><strong>Easy to integrate</strong> into existing systems</li>
+          <li><strong>Extraction guard</strong>: a source that suddenly returns far fewer models is treated as broken.</li>
+          <li><strong>Validation</strong> and sanity checks catch unit errors and implausible values.</li>
+          <li><strong>Magnitude guard</strong>: price moves beyond 3× need review.</li>
+          <li><strong>Corroboration</strong>: an independent community table can hold a suspicious change back.</li>
+          <li><strong>Removals</strong> are never automatic; <strong>additions</strong> only from official sources.</li>
         </ul>
-        <div class="tip">
-          Best if you want a <strong>minimal, reliable cost estimation utility</strong>
-          without adopting a larger LLM framework.
-        </div>
-      
-        <h3>When to use LiteLLM</h3>
-        <ul>
-          <li>Supports <strong>multiple providers</strong> (OpenAI, Gemini, Anthropic, etc.)</li>
-          <li>Handles <strong>advanced request types</strong> (tools, audio/video, service tiers)</li>
-          <li>Integrates with a full <strong>LLM orchestration layer</strong></li>
-        </ul>
-        <div class="note">
-          Best if you are already using LiteLLM or need <strong>broad provider support</strong>.
-        </div>
-      
-        <h3>Key Tradeoffs</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Aspect</th>
-              <th>openai_cost_calculator</th>
-              <th>LiteLLM</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Dependencies</td>
-              <td>Minimal (<code>requests</code>)</td>
-              <td>Requires LiteLLM</td>
-            </tr>
-            <tr>
-              <td>Scope</td>
-              <td>Cost estimation only</td>
-              <td>Full LLM framework</td>
-            </tr>
-            <tr>
-              <td>Transparency</td>
-              <td>High (explicit logic)</td>
-              <td>Abstracted</td>
-            </tr>
-            <tr>
-              <td>Setup complexity</td>
-              <td>Minimal</td>
-              <td>Higher</td>
-            </tr>
-            <tr>
-              <td>Advanced features</td>
-              <td>Limited</td>
-              <td>Extensive</td>
-            </tr>
-          </tbody>
-        </table>
+        <p>Details: <a href="https://github.com/orkunkinay/openai_cost_calculator/blob/main/docs/PRICING_UPDATES.md">docs/PRICING_UPDATES.md</a>.</p>
+      </section>
+
+      <section id="cli">
+        <h2>Command line</h2>
+<pre><button class="copy" data-copy>Copy</button><code>openai-cost-calculator pricing cost bedrock us.anthropic.claude-opus-5-5 --input 12000 --output 800
+openai-cost-calculator pricing models anthropic
+openai-cost-calculator pricing providers
+openai-cost-calculator pricing sync --provider openai --dry-run   # maintainers
+openai-cost-calculator pricing stale --max-age-days 45
+openai-cost-calculator pricing validate</code></pre>
       </section>
 
       <section id="cookbook">
-        <h2>Cookbook — add pricing for <em>any</em> model</h2>
-        <p>
-          You can cost any provider’s response as long as you teach the calculator the price point for that
-          <code>(model_name, model_date)</code>. In <strong>offline mode</strong> the library won’t reach the network;
-          only your overrides are used.
-        </p>
-<pre><button class="copy" data-copy>Copy</button><code class="language-python">from litellm import completion
-from openai_cost_calculator import estimate_cost_typed, set_offline_mode, add_pricing_entry
+        <h2>Cookbook — custom model prices</h2>
+        <p>Price any model, including self-hosted ones, by passing your own catalog to the provider-agnostic API:</p>
+<pre><button class="copy" data-copy>Copy</button><code class="language-python">from decimal import Decimal
+from openai_cost_calculator import PricingCatalog, calculate_cost
+from openai_cost_calculator.catalog import ModelPricing, PriceSet, ProviderPricing, Source
 
-set_offline_mode(True)
-# Teach the library a new base price point:
-add_pricing_entry(
-    "ollama/qwen3:30b", "2025-08-01",
-    input_price=0.20,         # USD per 1M input tokens
-    output_price=0.60,        # USD per 1M output tokens
-    cached_input_price=0.04,  # optional
-    minimum_tokens=0,         # optional tier floor (default: 0)
+inhouse = ProviderPricing(
+    provider="openai",  # reuse OpenAI's identifier handling
+    sources=(Source(id="contract", kind="manual", url="https://example.com/contract"),),
+    models=(
+        ModelPricing(id="gpt-6-sol", source="contract", prices=(
+            PriceSet(rates={"input": Decimal("1.6"), "cached_input": Decimal("0.16"), "output": Decimal("8")}),
+            PriceSet(rates={"input": Decimal("3.2"), "cached_input": Decimal("0.32"), "output": Decimal("12")},
+                     min_input_tokens=272_000),
+        )),
+    ),
 )
+calculate_cost("openai", "gpt-6-sol", input_tokens=10_000, catalog=PricingCatalog([inhouse]))</code></pre>
+        <p>Or teach the OpenAI response API a price row:</p>
+<pre><button class="copy" data-copy>Copy</button><code class="language-python">from openai_cost_calculator import add_pricing_entry
 
-response = completion(
-    model="ollama/qwen3:30b",
-    messages=[{ "content": "respond in 20 words. who are you?","role": "user"}],
-    api_base="http://localhost:11434"
-)
+add_pricing_entry("ollama/qwen3.8:27b", "2026-09-01",
+                  input_price=0.20, output_price=0.60, cached_input_price=0.04)
+add_pricing_entry("my-gpt-6-sol-deployment", "2026-09-01",
+                  input_price=4.00, output_price=15.00, cached_input_price=0.40,
+                  minimum_tokens=272000)  # long-context tier</code></pre>
+      </section>
 
-print(estimate_cost_typed(response))</code></pre>
-<pre><button class="copy" data-copy>Copy</button><code class="language-python"># Example: add a higher tier for long contexts (same model/date, higher minimum_tokens)
-add_pricing_entry(
-    "gpt-5.4", "2026-01-01",
-    input_price=2.50, output_price=15.00, cached_input_price=0.25,
-    minimum_tokens=0,
-)
-add_pricing_entry(
-    "gpt-5.4", "2026-01-01",
-    input_price=5.00, output_price=22.50, cached_input_price=0.50,
-    minimum_tokens=272001,  # applies when prompt/input tokens exceed 272K
-)</code></pre>
-        <div class="tip">
-          <strong>Works for any model name:</strong> choose a stable identifier (e.g., your deployment name),
-          pick a date string (<code>YYYY-MM-DD</code>) you control, and supply the per-1M token prices.
-          Add more entries over time to reflect price changes by date, and use <code>minimum_tokens</code> tiers when pricing depends on context size.
-        </div>
+      <section id="limitations">
+        <h2>Limitations</h2>
+        <ul>
+          <li>Prices are list prices; negotiated discounts, credits and free tiers are not modelled.</li>
+          <li>Non-token billing (per image, per second, per character, provisioned throughput, storage) is out of scope.</li>
+          <li>Regional prices cover the configured regions (Bedrock: us-east-1, us-west-2, eu-central-1; Azure regional: eastus2); others raise <code>PricingUnavailableError</code>.</li>
+          <li>DeepSeek's off-peak calendar does not model Chinese public holidays.</li>
+          <li>Cross-provider comparison is exact for first-party models and best-effort for open-weight models.</li>
+        </ul>
       </section>
 
       <section id="troubleshooting">
         <h2>Troubleshooting</h2>
-        <h3>“Pricing not found” after a new model launch</h3>
+        <h3><code>UnknownModelError</code> after a new model launch</h3>
         <ol>
-          <li>Check that the model/date row exists in the project’s pricing CSV.</li>
-          <li>If it exists, call <code>refresh_pricing()</code> (24h cache).</li>
-          <li>Otherwise, temporarily add a local row with <code>add_pricing_entry()</code>. Then create an issue from <a href="https://github.com/orkunkinay/openai_cost_calculator/issues/new">here</a>.</li>
+          <li>Check <code>openai-cost-calculator pricing models PROVIDER</code>; the weekly sync adds new official models automatically.</li>
+          <li>Upgrade the package to pick up the latest catalog.</li>
+          <li>Meanwhile, pass a custom catalog (see the cookbook) or open an <a href="https://github.com/orkunkinay/openai_cost_calculator/issues/new">issue</a>.</li>
         </ol>
-
-        <h3>“cached_tokens = 0” even with caching</h3>
-        <p>Request usage details: classic API needs <code>include_usage_details=True</code>; streaming needs <code>stream_options={"include_usage": True}</code>.</p>
-
-        <h3>What if the model string has no date?</h3>
-        <p>The library uses today’s date and selects the latest CSV row with <code>date ≤ today</code>.</p>
-
-        <h3>How are token tiers applied?</h3>
-        <p>For a chosen model/date row set, the calculator picks the highest tier whose <code>minimum_tokens</code> is less than or equal to prompt/input tokens.</p>
+        <h3>The cost looks too high</h3>
+        <p>Check <code>cost.min_input_tokens</code> (a long-context tier may apply), <code>cost.conditions</code> (region or tier)
+          and <code>cost.items</code>. Remember that <code>input_tokens</code> excludes cached tokens.</p>
+        <h3><code>PricingUnavailableError</code></h3>
+        <p>The model exists but not under the requested conditions; the message lists the available tiers, regions and dates.</p>
+        <h3>Streaming usage is missing</h3>
+        <p>Request final usage with <code>stream_options={"include_usage": True}</code>.</p>
       </section>
 
       <section id="license">
         <h2>License &amp; contributions</h2>
-        <p>MIT License © 2025 Orkun Kınay &amp; Murat Barkın Kınay. PRs that enhance robustness (SDK changes, pricing formats) are welcome.</p>
+        <p>MIT License © 2025 Orkun Kınay &amp; Murat Barkın Kınay. Adding a provider is documented in
+          <a href="https://github.com/orkunkinay/openai_cost_calculator/blob/main/docs/ADDING_A_PROVIDER.md">docs/ADDING_A_PROVIDER.md</a>.</p>
       </section>
 
       <footer>
-        Built for accuracy and simplicity — refresh pricing, monitor spend, ship with confidence.
+        Official prices, exact arithmetic, every cost traceable to its source.
       </footer>
     </main>
   </div>
