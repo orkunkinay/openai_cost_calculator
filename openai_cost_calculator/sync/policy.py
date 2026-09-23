@@ -97,7 +97,7 @@ def decide(
     issues: Sequence[Issue] = (),
     corroborate: Optional[Corroborator] = None,
 ) -> List[Decision]:
-    flagged = {issue.model_id: issue.message for issue in issues if issue.model_id}
+    flagged = {issue.model_id: issue.message for issue in issues if issue.model_id and issue.blocking}
     decisions: List[Decision] = []
     for diff in diffs:
         if diff.kind == "unchanged":

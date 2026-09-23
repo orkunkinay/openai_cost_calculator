@@ -74,12 +74,15 @@ class FixtureFetcher:
 class Issue:
     """Something a parser could not interpret confidently.
 
-    Issues never block unrelated updates; they are surfaced for human review
-    and, when tied to a model, prevent that model from being auto-updated.
+    Blocking issues are surfaced for human review and, when tied to a model,
+    prevent that model from being auto-updated.  Non-blocking issues are notes
+    about input the parser deliberately handled conservatively (for example a
+    footnoted price it ignored); they appear in the report only.
     """
 
     message: str
     model_id: Optional[str] = None
+    blocking: bool = True
 
 
 @dataclass
@@ -92,6 +95,9 @@ class SourceResult:
 
     def issue(self, message: str, model_id: Optional[str] = None) -> None:
         self.issues.append(Issue(message, model_id))
+
+    def note(self, message: str, model_id: Optional[str] = None) -> None:
+        self.issues.append(Issue(message, model_id, blocking=False))
 
 
 class PricingSource(Protocol):
@@ -106,8 +112,10 @@ class PricingSource(Protocol):
 def merge_duplicate_models(result: SourceResult) -> SourceResult:
     """Combine entries a parser emitted more than once for the same id.
 
-    Price sets are concatenated; aliases unioned.  Parsers can then emit one
-    entry per table row (standard, batch, flex...) without bookkeeping.
+    Price sets are concatenated (exact duplicates dropped, e.g. a model listed
+    in two tables at the same price); aliases are unioned.  Parsers can then
+    emit one entry per table row (standard, batch, flex...) without
+    bookkeeping.  *Conflicting* duplicates are kept so validation rejects them.
     """
     merged: Dict[str, ModelPricing] = {}
     order: List[str] = []
@@ -120,7 +128,7 @@ def merge_duplicate_models(result: SourceResult) -> SourceResult:
         aliases: Tuple[str, ...] = tuple(dict.fromkeys(existing.aliases + model.aliases))
         merged[model.id] = ModelPricing(
             id=existing.id,
-            prices=existing.prices + model.prices,
+            prices=existing.prices + tuple(p for p in model.prices if p not in existing.prices),
             source=existing.source,
             vendor=existing.vendor or model.vendor,
             canonical_id=existing.canonical_id or model.canonical_id,

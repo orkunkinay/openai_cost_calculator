@@ -41,6 +41,14 @@ class ProviderOutcome:
     def needs_review(self) -> List[Decision]:
         return [d for d in self.decisions if not d.apply]
 
+    @property
+    def blocking_issues(self) -> List[Issue]:
+        return [i for i in self.issues if i.blocking]
+
+    @property
+    def notes(self) -> List[Issue]:
+        return [i for i in self.issues if not i.blocking]
+
 
 def _merge(
     current: Optional[ProviderPricing],
@@ -125,7 +133,7 @@ def sync_provider(
         outcome.status, outcome.error = "failed", f"merged data is invalid, nothing written: {exc}"
         return outcome
     outcome.data = data
-    if outcome.needs_review or outcome.issues:
+    if outcome.needs_review or outcome.blocking_issues:
         outcome.status = "needs_review"
     elif outcome.applied:
         outcome.status = "updated"

@@ -38,7 +38,7 @@ def render_markdown(outcomes: Sequence[ProviderOutcome], *, today: date) -> str:
     for o in outcomes:
         lines.append(
             f"| {o.provider} | {_STATUS_LABEL[o.status]} | {o.fetched_models} | {len(o.applied)} | "
-            f"{len(o.needs_review) + len(o.issues)} | [{o.source_id}]({o.source_url}) |"
+            f"{len(o.needs_review) + len(o.blocking_issues)} | [{o.source_id}]({o.source_url}) |"
         )
     for o in outcomes:
         if o.status == "unchanged":
@@ -58,15 +58,21 @@ def render_markdown(outcomes: Sequence[ProviderOutcome], *, today: date) -> str:
                 lines += [f"  - {change}" for change in decision.diff.metadata_changes]
                 lines += [f"  - _{note}_" for note in decision.notes]
             lines.append("")
-        if o.needs_review or o.issues:
+        if o.needs_review or o.blocking_issues:
             lines += ["### Needs review (not applied)", ""]
             for decision in o.needs_review:
                 lines.append(f"- **{decision.diff.model_id}** ({decision.diff.kind})")
                 lines += [f"  - reason: {reason}" for reason in decision.reasons]
                 lines += [f"  - {change}" for change in decision.diff.rate_changes]
-            for issue in o.issues:
+            for issue in o.blocking_issues:
                 target = f"**{issue.model_id}**: " if issue.model_id else ""
                 lines.append(f"- parser: {target}{issue.message}")
+            lines.append("")
+        if o.notes:
+            lines += ["### Parser notes (handled conservatively)", ""]
+            for issue in o.notes:
+                target = f"**{issue.model_id}**: " if issue.model_id else ""
+                lines.append(f"- {target}{issue.message}")
             lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
@@ -94,7 +100,7 @@ def render_json(outcomes: Sequence[ProviderOutcome], *, today: date) -> str:
                 "fetched_models": o.fetched_models,
                 "written": o.written,
                 "decisions": [decision(d) for d in o.decisions],
-                "issues": [{"model": i.model_id, "message": i.message} for i in o.issues],
+                "issues": [{"model": i.model_id, "message": i.message, "blocking": i.blocking} for i in o.issues],
             }
             for o in outcomes
         ],
