@@ -13,3 +13,8 @@ openai-cost-calculator pricing sync --provider <id> --dry-run
 
 Trimmed fixtures keep only the entries the tests assert on, to keep the
 repository small; trimming preserves the upstream structure exactly.
+
+Pages can embed the site's own browser API keys (for example in navigation
+config). Strip site chrome such as headers, navigation and footers before
+committing a fixture; `tests/test_fixture_hygiene.py` fails if anything that
+looks like a credential remains.
