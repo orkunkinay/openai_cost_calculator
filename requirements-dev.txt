@@ -3,6 +3,3 @@ requests
 fastapi
 httpx
 websockets>=13
-types-requests
-ruff
-mypy

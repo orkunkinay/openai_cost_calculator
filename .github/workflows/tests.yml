@@ -22,6 +22,44 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  quality:
+    name: lint, types and pricing data
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Set Up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements*.txt
+            pyproject.toml
+
+      - name: Install Dependencies
+        run: python -m pip install -e . ruff mypy types-requests
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Format (provider-agnostic core)
+        run: >-
+          ruff format --check openai_cost_calculator/catalog openai_cost_calculator/providers
+          openai_cost_calculator/sync openai_cost_calculator/api.py openai_cost_calculator/usage.py
+          openai_cost_calculator/legacy.py openai_cost_calculator/pricing_cli.py
+
+      - name: Type Check
+        run: mypy
+
+      - name: Validate Pricing Catalog
+        run: openai-cost-calculator pricing validate
+
+      - name: Legacy CSV Matches Catalog
+        run: openai-cost-calculator pricing export-legacy --check
+
   test:
     name: test (${{ matrix.os }}, py${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
@@ -30,7 +68,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.11"]' || '["3.9", "3.10", "3.11", "3.12"]') }}
+        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.9", "3.12"]' || '["3.9", "3.10", "3.11", "3.12"]') }}
 
     steps:
       - name: Checkout Code

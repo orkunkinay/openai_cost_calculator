@@ -1,0 +1,88 @@
+name: Sync Model Pricing
+
+# Weekly, fetch every provider's official pricing, apply only changes that pass
+# the fail-closed policy (see docs/PRICING_UPDATES.md) and open a pull request.
+# Anything that needs a human is listed in the PR body and the job summary; a
+# source that cannot be fetched or parsed fails the run after the PR step so
+# maintainers are notified while other providers still update.
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: pricing-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Set Up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements*.txt
+            pyproject.toml
+
+      - name: Install Dependencies
+        run: python -m pip install -r requirements-dev.txt -e .
+
+      - name: Sync Pricing From Official Sources
+        id: sync
+        run: |
+          set +e
+          openai-cost-calculator pricing sync --report-md pricing_report.md --report-json pricing_report.json
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          cat pricing_report.md >> "$GITHUB_STEP_SUMMARY"
+          # 0 = ok, 2 = needs review, 3 = a source failed; anything else is a crash.
+          if [ "$code" -ne 0 ] && [ "$code" -ne 2 ] && [ "$code" -ne 3 ]; then exit "$code"; fi
+
+      - name: Regenerate Legacy CSV
+        run: openai-cost-calculator pricing export-legacy
+
+      - name: Verify Updated Data
+        run: pytest -q
+
+      - name: Label For Review
+        id: labels
+        run: |
+          if [ "${{ steps.sync.outputs.exit_code }}" = "0" ]; then
+            printf 'labels<<EOF\npricing\nautomated\nEOF\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'labels<<EOF\npricing\nautomated\nneeds-review\nEOF\n' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open Pricing Update PR
+        uses: peter-evans/create-pull-request@v8
+        with:
+          branch: automated/pricing-update
+          title: Update model pricing from official sources
+          commit-message: Update model pricing from official sources
+          body-path: pricing_report.md
+          labels: ${{ steps.labels.outputs.labels }}
+          add-paths: |
+            openai_cost_calculator/data/pricing/*.json
+            data/gpt_pricing_data.csv
+
+      - name: Fail On Source Errors
+        if: steps.sync.outputs.exit_code == '3'
+        run: |
+          echo "::error::At least one pricing source failed; its checked-in data was kept. See the job summary."
+          exit 1
+
+      - name: Check Data Freshness
+        run: openai-cost-calculator pricing stale --max-age-days 45
