@@ -107,9 +107,7 @@ def provider_from_dict(raw: Any, *, where: str = "pricing data") -> ProviderPric
         raise CatalogValidationError(f"{where}: top level must be an object")
     version = raw.get("schema_version")
     if version != SCHEMA_VERSION:
-        raise CatalogValidationError(
-            f"{where}: unsupported schema_version {version!r} (expected {SCHEMA_VERSION})"
-        )
+        raise CatalogValidationError(f"{where}: unsupported schema_version {version!r} (expected {SCHEMA_VERSION})")
     provider = _require(raw, "provider", str, where)
     sources = tuple(
         Source(
@@ -120,9 +118,7 @@ def provider_from_dict(raw: Any, *, where: str = "pricing data") -> ProviderPric
         )
         for s in _require(raw, "sources", list, where)
     )
-    models = tuple(
-        _parse_model(m, f"{where}.models[{i}]") for i, m in enumerate(_require(raw, "models", list, where))
-    )
+    models = tuple(_parse_model(m, f"{where}.models[{i}]") for i, m in enumerate(_require(raw, "models", list, where)))
     data = ProviderPricing(
         provider=provider,
         sources=sources,

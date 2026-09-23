@@ -67,9 +67,7 @@ def _validation_reasons(model: ModelPricing, provider: str) -> List[str]:
     return sanity_warnings(model, provider=provider)
 
 
-def _corroboration(
-    diff: ModelDiff, provider: str, corroborate: Optional[Corroborator]
-) -> Dict[str, List[str]]:
+def _corroboration(diff: ModelDiff, provider: str, corroborate: Optional[Corroborator]) -> Dict[str, List[str]]:
     result: Dict[str, List[str]] = {"reasons": [], "notes": []}
     if corroborate is None or diff.new is None:
         return result

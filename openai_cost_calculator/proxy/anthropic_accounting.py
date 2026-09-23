@@ -21,7 +21,6 @@ from openai_cost_calculator.anthropic.usage import (
 )
 from openai_cost_calculator.proxy.registry import TrackerRegistry
 
-
 UNATTRIBUTED_TURN = "unattributed"
 
 

@@ -33,7 +33,11 @@ def _rates(model, **conditions):
     minimum = conditions.pop("min_input_tokens", 0)
     on = conditions.pop("on", None)
     for price in model.prices:
-        if dict(price.conditions) == conditions and price.min_input_tokens == minimum and (on is None or price.is_effective(on)):
+        if (
+            dict(price.conditions) == conditions
+            and price.min_input_tokens == minimum
+            and (on is None or price.is_effective(on))
+        ):
             return {k: v for k, v in price.rates.items()}
     raise AssertionError(f"no price set {conditions} >= {minimum} for {model.id}")
 
@@ -51,14 +55,23 @@ def openai_models():
 def test_openai_flagship_rates_with_cache_writes_and_long_context(openai_models):
     sol = openai_models["gpt-6-sol"]
     assert _rates(sol) == {"input": D("2"), "cached_input": D("0.2"), "cache_write": D("2.5"), "output": D("10")}
-    assert _rates(sol, min_input_tokens=272_000) == {"input": D("4"), "cached_input": D("0.4"), "cache_write": D("5"), "output": D("15")}
+    assert _rates(sol, min_input_tokens=272_000) == {
+        "input": D("4"),
+        "cached_input": D("0.4"),
+        "cache_write": D("5"),
+        "output": D("15"),
+    }
     assert sol.canonical_id == "openai/gpt-6-sol" and sol.vendor == "openai"
 
 
 def test_openai_service_tiers(openai_models):
     assert _rates(openai_models["gpt-5.4"], service_tier="batch")["input"] == D("1.25")
     assert _rates(openai_models["gpt-5-mini"], service_tier="flex")["output"] == D("1")
-    assert _rates(openai_models["gpt-4o"], service_tier="priority") == {"input": D("4.25"), "cached_input": D("2.125"), "output": D("17")}
+    assert _rates(openai_models["gpt-4o"], service_tier="priority") == {
+        "input": D("4.25"),
+        "cached_input": D("2.125"),
+        "output": D("17"),
+    }
 
 
 def test_openai_snapshots_and_legacy_models(openai_models):
@@ -112,7 +125,12 @@ def test_anthropic_published_cache_prices_are_used_verbatim(anthropic_models):
     # Fable 5.1 cache reads are 0.025x and Opus 5.5 0.05x: not derivable from 0.1x.
     assert _rates(anthropic_models["claude-fable-5-1"])["cached_input"] == D("0.25")
     assert _rates(anthropic_models["claude-opus-5-5"]) == {
-        "input": D("4"), "cache_write": D("5"), "cache_write_1h": D("8"), "cached_input": D("0.2"), "output": D("20"), "web_search": D("0.01"),
+        "input": D("4"),
+        "cache_write": D("5"),
+        "cache_write_1h": D("8"),
+        "cached_input": D("0.2"),
+        "output": D("20"),
+        "web_search": D("0.01"),
     }
 
 
@@ -188,8 +206,14 @@ def test_gemini_non_token_and_footnoted_prices_are_not_misread(gemini_models):
 @pytest.mark.parametrize(
     "cell,expected",
     [
-        ("$1.25, prompts \\<= 200k tokens $2.50, prompts \\> 200k tokens", [("input", "1.25", 0), ("input", "2.50", 200_001)]),
-        ("$0.30 (text / image / video) $1.00 (audio)", [("input", "0.30", None), ("input_image", "0.30", None), ("input_audio", "1.00", None)]),
+        (
+            "$1.25, prompts \\<= 200k tokens $2.50, prompts \\> 200k tokens",
+            [("input", "1.25", 0), ("input", "2.50", 200_001)],
+        ),
+        (
+            "$0.30 (text / image / video) $1.00 (audio)",
+            [("input", "0.30", None), ("input_image", "0.30", None), ("input_audio", "1.00", None)],
+        ),
         ("$3.50 or $0.005/min^\\*^ (audio)", [("input_audio", "3.50", None)]),
     ],
 )
@@ -204,3 +228,15 @@ def test_gemini_unknown_phrasing_blocks_the_model():
     result = gemini.parse(page)
     assert result.models == []
     assert result.issues[0].model_id == "gemini-x" and "early adopters" in result.issues[0].message
+
+
+def test_gemini_not_available_paid_cells_do_not_break_parsing():
+    # Regression: early returns in parse_cell once returned two values instead of three.
+    page = (
+        "## Gemini Y\n*[`gemini-y`](u)*\n### Batch\n|   | Free Tier | Paid Tier, per 1M tokens in USD |\n|---|---|---|\n"
+        "| Input price | Not available | Not available |\n| Output price | Not available | Not available |\n"
+        "### Standard\n|   | Free Tier | Paid Tier, per 1M tokens in USD |\n|---|---|---|\n"
+        "| Input price | Free of charge | $1.00 |\n| Output price | Free of charge | $2.00 |\n"
+    )
+    result = gemini.parse(page)
+    assert [m.id for m in result.models] == ["gemini-y"] and result.issues == []

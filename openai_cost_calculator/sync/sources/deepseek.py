@@ -20,16 +20,20 @@ from typing import Dict, List
 from ...catalog.model import ModelPricing, Source
 from ..base import Fetcher, SourceResult
 from ..text import html_tables, html_text, parse_money
-from .common import price_set
+from .common import present, price_set
 
 URL = "https://api-docs.deepseek.com/quick_start/pricing"
-SOURCE = Source(id="deepseek-pricing-docs", kind="official_docs", url=URL, description="DeepSeek API pricing documentation")
+SOURCE = Source(
+    id="deepseek-pricing-docs", kind="official_docs", url=URL, description="DeepSeek API pricing documentation"
+)
 
 #: The schedule implemented by ``providers.registry.deepseek_period``.
 EXPECTED_PEAK_HOURS = "Peak hours are 01:00 - 04:00 and 06:00 - 10:00 UTC, Monday through Friday"
 
 _ROW_DIMENSIONS = (("CACHE HIT", "cached_input"), ("CACHE MISS", "input"), ("OUTPUT TOKENS", "output"))
-_LEGACY = re.compile(r"Use (?P<model>[a-z0-9.\-]+) as the model name\. The legacy names (?P<names>.+?) are still accepted")
+_LEGACY = re.compile(
+    r"Use (?P<model>[a-z0-9.\-]+) as the model name\. The legacy names (?P<names>.+?) are still accepted"
+)
 
 
 def parse(document: str) -> SourceResult:
@@ -59,7 +63,7 @@ def parse(document: str) -> SourceResult:
         period = "off_peak" if "OFF-PEAK" in label else "peak" if "PEAK" in label else None
         if period is None or dimension is None or not models:
             continue
-        prices = row[-len(models):]
+        prices = row[-len(models) :]
         for model, cell in zip(models, prices):
             try:
                 value = parse_money(cell)
@@ -72,18 +76,19 @@ def parse(document: str) -> SourceResult:
     legacy = _LEGACY.search(re.sub(r"\s+", " ", text))
     aliases = {}
     if legacy:
-        aliases[legacy.group("model")] = tuple(n.strip() for n in re.split(r",| and ", legacy.group("names")) if n.strip())
+        aliases[legacy.group("model")] = tuple(
+            n.strip() for n in re.split(r",| and ", legacy.group("names")) if n.strip()
+        )
     for model in models:
         periods = rates.get(model, {})
-        sets = [price_set(r, period=p) for p, r in sorted(periods.items())]
-        sets = [s for s in sets if s is not None]
+        sets = present(price_set(r, period=p) for p, r in sorted(periods.items()))
         if len(sets) != 2:
             result.issue("expected peak and off-peak prices", model)
             continue
         result.add(
             ModelPricing(
                 id=model,
-                prices=tuple(sets),
+                prices=sets,
                 source=SOURCE.id,
                 vendor="deepseek",
                 canonical_id=f"deepseek/{model}",

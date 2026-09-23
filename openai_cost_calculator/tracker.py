@@ -1,16 +1,15 @@
 from __future__ import annotations
 
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from decimal import Decimal
-import time
 from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 
 from .core import calculate_cost_typed
 from .estimate import _find_rates, estimate_cost_typed
 from .parser import extract_model_details, extract_usage
 from .types import CostBreakdown
-
 
 _WRAPPED_SENTINEL = "_openai_cost_calculator_wrapped"
 
@@ -124,7 +123,7 @@ class _TrackedStream:
                 self._last_usage_chunk = None
             raise
 
-        if hasattr(chunk, "usage") and getattr(chunk, "usage") is not None:
+        if hasattr(chunk, "usage") and chunk.usage is not None:
             self._last_usage_chunk = chunk
         return chunk
 
@@ -305,7 +304,7 @@ class CostTracker:
             return response
 
         setattr(wrapped_create, _WRAPPED_SENTINEL, True)
-        setattr(owner, "create", wrapped_create)
+        owner.create = wrapped_create
 
     def _record_safely(self, response: Any) -> Optional[CallRecord]:
         try:

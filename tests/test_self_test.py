@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from pathlib import Path
 import subprocess
+from pathlib import Path
 
 import pytest
-
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "self_test_codex_integration.py"
 SPEC = importlib.util.spec_from_file_location("occ_self_test", SCRIPT)

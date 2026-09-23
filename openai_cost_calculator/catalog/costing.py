@@ -7,9 +7,9 @@ from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Dict, Iterator, Mapping, Optional, Tuple
 
+from ..types import CostBreakdown
 from .dimensions import DIMENSIONS, get_dimension
 from .errors import MissingRateError, UsageError
-from ..types import CostBreakdown
 from .model import PriceSet
 
 #: Usage field name for every pricing dimension.
@@ -181,8 +181,7 @@ def price_usage(usage: Usage, price_set: PriceSet, *, where: str) -> Tuple[Decim
         if found is None:
             priced = ", ".join(sorted(price_set.rates))
             raise MissingRateError(
-                f"{where}: usage has {quantity} {dimension} units but the price set only "
-                f"prices: {priced}"
+                f"{where}: usage has {quantity} {dimension} units but the price set only prices: {priced}"
             )
         rate_dimension, unit_price = found
         spec = DIMENSIONS[dimension]

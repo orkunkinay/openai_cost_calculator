@@ -15,7 +15,6 @@ from typing import Any, Optional
 
 from openai_cost_calculator.anthropic.pricing import (
     MILLION,
-    AnthropicPricingError,
     AnthropicRate,
     resolve_anthropic_rate,
 )

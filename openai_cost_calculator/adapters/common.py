@@ -8,7 +8,6 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Optional
 
-
 MONEY = "\U0001f4b0"
 SEP = "\u00b7"
 

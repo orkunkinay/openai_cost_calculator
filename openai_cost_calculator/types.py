@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
-from decimal     import Decimal
-from typing      import Dict
+from dataclasses import asdict, dataclass
+from decimal import Decimal
+from typing import Dict
 
 
 @dataclass(frozen=True)

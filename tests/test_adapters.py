@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import json
-from decimal import Decimal
 from pathlib import Path
 
 import httpx
 import pytest
-
 from asgi_client import ASGITestClient
 
 from openai_cost_calculator.adapters.claude_code import (
     statusline_text as claude_statusline_text,
+)
+from openai_cost_calculator.adapters.claude_code import (
     stop_hook_output,
 )
 from openai_cost_calculator.adapters.codex import (
@@ -18,6 +18,8 @@ from openai_cost_calculator.adapters.codex import (
     checkpoint_text,
     notifier_diagnostics,
     notify_main,
+)
+from openai_cost_calculator.adapters.codex import (
     statusline_text as codex_statusline_text,
 )
 from openai_cost_calculator.adapters.install import (

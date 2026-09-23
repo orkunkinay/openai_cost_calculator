@@ -58,8 +58,7 @@ def parse_bedrock_model(model: str) -> ModelHints:
     elif _BEDROCK_VENDOR_ID.match(text):
         preferences["region"] = (BEDROCK_DEFAULT_REGION, "global")
         notes["region"] = (
-            f"in-region model id billed at the {BEDROCK_DEFAULT_REGION} rate; "
-            "pass region=... for another region"
+            f"in-region model id billed at the {BEDROCK_DEFAULT_REGION} rate; pass region=... for another region"
         )
     # Anything else (a canonical "vendor/model" id) gets the provider defaults.
 

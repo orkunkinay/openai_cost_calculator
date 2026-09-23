@@ -5,7 +5,6 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-
 CSV_PATH = Path(__file__).resolve().parents[1] / "data" / "gpt_pricing_data.csv"
 EXPECTED_COLUMNS = [
     "Model Name",
@@ -26,7 +25,7 @@ def _assert_price(value: str, *, field: str, line_num: int, allow_empty: bool = 
     try:
         price = Decimal(value)
     except InvalidOperation:
-        raise AssertionError(f"{field} must be a decimal number on CSV line {line_num}: {value!r}")
+        raise AssertionError(f"{field} must be a decimal number on CSV line {line_num}: {value!r}") from None
 
     assert price >= 0, f"{field} must be non-negative on CSV line {line_num}: {value!r}"
 
@@ -45,7 +44,7 @@ def _assert_model_date(value: str, *, line_num: int) -> None:
     try:
         datetime.strptime(value, "%Y-%m-%d")
     except ValueError:
-        raise AssertionError(f"Model Date must be YYYY-MM-DD or empty on CSV line {line_num}: {value!r}")
+        raise AssertionError(f"Model Date must be YYYY-MM-DD or empty on CSV line {line_num}: {value!r}") from None
 
 
 def _assert_minimum_tokens(value: str, *, line_num: int) -> int:

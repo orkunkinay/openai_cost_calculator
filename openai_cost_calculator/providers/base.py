@@ -54,7 +54,7 @@ def generic_candidates(model: str, strip_prefixes: Sequence[str] = ()) -> Tuple[
     current = model
     for prefix in strip_prefixes:
         if current.startswith(prefix):
-            current = current[len(prefix):]
+            current = current[len(prefix) :]
             candidates.append(current)
     if "/" in current:
         candidates.append(current.rsplit("/", 1)[-1])

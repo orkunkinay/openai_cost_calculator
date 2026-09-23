@@ -22,7 +22,7 @@ from typing import Dict, List, Optional, Tuple
 from ...catalog.model import ModelPricing, PriceSet, Source
 from ..base import Fetcher, SourceResult
 from ..text import Table, clean_cell, markdown_tables, parse_money, slugify
-from .common import price_set, scale
+from .common import present, price_set, scale
 
 URL = "https://platform.claude.com/docs/en/about-claude/pricing.md"
 SOURCE = Source(
@@ -119,9 +119,7 @@ def parse(text: str) -> SourceResult:
         result.issue("data-residency pricing sentence not found; region='us' prices were not generated")
     web_search = _WEB_SEARCH.search(text)
     web_search_price = (
-        Decimal(web_search.group("price")) / Decimal(web_search.group("count").replace(",", ""))
-        if web_search
-        else None
+        Decimal(web_search.group("price")) / Decimal(web_search.group("count").replace(",", "")) if web_search else None
     )
 
     columns = {dim: model_table.column(header) for dim, header in _MODEL_COLUMNS.items()}
@@ -158,7 +156,7 @@ def parse(text: str) -> SourceResult:
         result.add(
             ModelPricing(
                 id=mid,
-                prices=tuple(s for s in sets if s is not None),
+                prices=present(sets),
                 source=SOURCE.id,
                 vendor="anthropic",
                 canonical_id=f"anthropic/{mid}",

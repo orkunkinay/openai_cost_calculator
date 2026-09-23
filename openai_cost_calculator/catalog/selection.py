@@ -4,8 +4,9 @@ Selection is provider-agnostic.  A request supplies, for each condition key,
 an ordered tuple of acceptable values (the caller's explicit choice, or the
 provider's defaults with fallbacks).  A price set matches when each of its
 conditions is acceptable; a set that does not mention a key applies to every
-value of it (except ``service_tier``, whose absence means ``standard``).  Among matching condition groups the one whose values rank
-earliest wins; within that group the long-context tier with the greatest
+value of it (except ``service_tier``, whose absence means ``standard``).
+Among matching condition groups the one whose values rank earliest wins;
+within that group the long-context tier with the greatest
 ``min_input_tokens`` not exceeding the request's input size applies.
 """
 
@@ -56,9 +57,7 @@ def _rank(condition_key: ConditionKey, request: RequestConditions) -> Optional[T
 
 
 def _describe(condition_keys: List[ConditionKey]) -> str:
-    rendered = sorted(
-        ", ".join(f"{k}={v}" for k, v in key) or "default conditions" for key in condition_keys
-    )
+    rendered = sorted(", ".join(f"{k}={v}" for k, v in key) or "default conditions" for key in condition_keys)
     return "; ".join(rendered)
 
 
@@ -72,9 +71,7 @@ def select_price_set(
 ) -> Selection:
     effective = [s for s in model.prices if s.is_effective(on)]
     if not effective:
-        raise PricingUnavailableError(
-            f"{provider}/{model.id} has no price in effect on {on.isoformat()}"
-        )
+        raise PricingUnavailableError(f"{provider}/{model.id} has no price in effect on {on.isoformat()}")
 
     groups: Dict[ConditionKey, List[PriceSet]] = {}
     for price_set in effective:
@@ -87,20 +84,15 @@ def select_price_set(
             # More specific groups win ties against wildcard groups.
             ranked.append((rank, -len(condition_key), condition_key))
     if not ranked:
-        wanted = ", ".join(
-            f"{k}={'|'.join(v)}" for k, v in sorted(request.preferences.items()) if v
-        )
+        wanted = ", ".join(f"{k}={'|'.join(v)}" for k, v in sorted(request.preferences.items()) if v)
         raise PricingUnavailableError(
-            f"{provider}/{model.id} has no price for {wanted}; "
-            f"available: {_describe(list(groups))}"
+            f"{provider}/{model.id} has no price for {wanted}; available: {_describe(list(groups))}"
         )
     ranked.sort()
     best_rank, best_specificity, best_key = ranked[0]
     ties = [key for rank, spec, key in ranked if rank == best_rank and spec == best_specificity]
     if len(ties) > 1:
-        raise PricingUnavailableError(
-            f"{provider}/{model.id} has ambiguous prices for the request: {_describe(ties)}"
-        )
+        raise PricingUnavailableError(f"{provider}/{model.id} has ambiguous prices for the request: {_describe(ties)}")
 
     tiers = sorted(groups[best_key], key=lambda s: s.min_input_tokens)
     chosen = tiers[0]

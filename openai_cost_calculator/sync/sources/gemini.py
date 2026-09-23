@@ -39,7 +39,8 @@ SOURCE = Source(
 _TIERS = {"standard": "standard", "batch": "batch", "flex": "flex", "priority": "priority"}
 _CLAUSE = re.compile(r"\$(?P<amount>\d+(?:\.\d+)?)(?P<rest>[^$]*)")
 _NON_TOKEN_UNIT = re.compile(
-    r"^\s*(/\s*min|/\s*[\d,]+\s*tokens per hour|per (image|song|second|frame|hour|[\d.]+k)|/\s*[\d,]+ (grounded|search))",
+    r"^\s*(/\s*min|/\s*[\d,]+\s*tokens per hour"
+    r"|per (image|song|second|frame|hour|[\d.]+k)|/\s*[\d,]+ (grounded|search))",
     re.I,
 )
 _MODALITY = re.compile(r"^\s*\(([a-z ,/]+)\)", re.I)
@@ -49,7 +50,7 @@ _STARTING = re.compile(r"^\s*starting (?P<date>[A-Z][a-z]+ \d{1,2}, \d{4})\.?", 
 _EQUIVALENT = re.compile(r"(,\s*)?equivalent to .*$", re.I | re.S)
 _IDS = re.compile(r"`([a-z0-9][a-z0-9.\-]*)`")
 
-_ROW_KINDS = (
+_ROW_KINDS: Tuple[Tuple[str, str, FrozenSet[str]], ...] = (
     ("context caching price", "cache", frozenset()),
     ("audio input price", "input", frozenset({"audio"})),
     ("image input price", "input", frozenset({"image"})),
@@ -96,9 +97,7 @@ def _modalities(text: str) -> FrozenSet[str]:
 _FOOTNOTE = "\u2020"
 
 
-def parse_cell(
-    cell: str, kind: str, default_modalities: FrozenSet[str]
-) -> Tuple[List[Clause], List[str], List[str]]:
+def parse_cell(cell: str, kind: str, default_modalities: FrozenSet[str]) -> Tuple[List[Clause], List[str], List[str]]:
     """Parse one paid-tier cell into ``(clauses, problems, notes)``.
 
     A price immediately followed by a footnote marker is quoted in a unit the
@@ -108,10 +107,10 @@ def parse_cell(
     text = clean_cell(cell)
     text = re.sub(r"\^[^^]*\^", _FOOTNOTE, text).replace("Same as Standard", "").strip()
     if not text or text.lower() in {"not available", "free of charge"}:
-        return [], []
+        return [], [], []
     raw = list(_CLAUSE.finditer(text))
     if not raw or text[: raw[0].start()].strip():
-        return [], [f"unrecognized cell {cell!r}"]
+        return [], [f"unrecognized cell {cell!r}"], []
     parsed: List[Tuple[Decimal, str]] = [(Decimal(m.group("amount")), m.group("rest")) for m in raw]
 
     clauses: List[Clause] = []
@@ -125,8 +124,8 @@ def parse_cell(
         rest = _EQUIVALENT.sub("", rest).replace("*", "")
         if _NON_TOKEN_UNIT.match(rest):
             closes_parenthetical = rest.replace(_FOOTNOTE, "").rstrip(" ,.").endswith(")")
-            modality = re.search(r"\(([a-z ,/]+)\)[\s" + _FOOTNOTE + r"]*$", rest, re.I)
-            carried_modalities = _modalities(modality.group(1)) if modality else None
+            trailing = re.search(r"\(([a-z ,/]+)\)[\s" + _FOOTNOTE + r"]*$", rest, re.I)
+            carried_modalities = _modalities(trailing.group(1)) if trailing else None
             continue
         if re.match(r"^\s*(\([a-z ,/]+\))?\s*" + _FOOTNOTE, rest, re.I):
             notes.append(f"ignored footnoted price ${amount} in {clean_cell(cell)!r}")
@@ -143,20 +142,20 @@ def parse_cell(
         while progress:
             progress = False
             for pattern in (_MODALITY, _CONTEXT, _THROUGH, _STARTING):
-                match = pattern.match(remaining)
-                if not match:
+                found = pattern.match(remaining)
+                if not found:
                     continue
                 progress = True
-                remaining = remaining[match.end():]
+                remaining = remaining[found.end() :]
                 if pattern is _MODALITY:
-                    modalities = _modalities(match.group(1))
+                    modalities = _modalities(found.group(1))
                 elif pattern is _CONTEXT:
-                    k = int(match.group("k")) * 1000
-                    min_tokens = 0 if match.group("op") == "<=" else k + 1
+                    k = int(found.group("k")) * 1000
+                    min_tokens = 0 if found.group("op") == "<=" else k + 1
                 elif pattern is _THROUGH:
-                    end = _date(match.group("date")) + timedelta(days=1)
+                    end = _date(found.group("date")) + timedelta(days=1)
                 else:
-                    start = _date(match.group("date"))
+                    start = _date(found.group("date"))
         leftover = remaining.strip(" .,;")
         if leftover.lower() == "or" and carried_modalities is not None:
             modalities, leftover = carried_modalities, ""
@@ -191,8 +190,12 @@ def build_price_sets(clauses: List[Clause], tier: str) -> List[PriceSet]:
                 applies = clause.min_input_tokens is None or clause.min_input_tokens == minimum
                 if active and applies:
                     rates[clause.dimension] = clause.amount
-            built = price_set(rates, service_tier=tier, min_input_tokens=minimum, effective_from=start, effective_until=end)
-            if built is not None and ("input" in built.rates or "output" in built.rates or "input_audio" in built.rates):
+            built = price_set(
+                rates, service_tier=tier, min_input_tokens=minimum, effective_from=start, effective_until=end
+            )
+            if built is not None and (
+                "input" in built.rates or "output" in built.rates or "input_audio" in built.rates
+            ):
                 sets.append(built)
     return sets
 

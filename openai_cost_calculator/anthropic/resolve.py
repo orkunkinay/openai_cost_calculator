@@ -14,10 +14,9 @@ function of its inputs and performs no network or filesystem I/O.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from typing import Mapping, Optional
 from urllib.parse import urlparse
-
 
 ANTHROPIC_API_UPSTREAM = "https://api.anthropic.com"
 

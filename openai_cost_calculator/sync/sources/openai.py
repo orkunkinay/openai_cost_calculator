@@ -17,12 +17,12 @@ from __future__ import annotations
 
 import re
 from decimal import Decimal
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
-from ...catalog.model import ModelPricing, Source
+from ...catalog.model import ModelPricing, PriceSet, Source
 from ..base import Fetcher, SourceResult
 from ..text import clean_cell, parse_money
-from .common import price_set
+from .common import present, price_set
 
 URL = "https://developers.openai.com/api/docs/pricing.md"
 SOURCE = Source(
@@ -58,7 +58,13 @@ KNOWN_SNAPSHOTS = {
     "o4-mini": ("o4-mini-2025-04-16",),
 }
 
-_TIER_LABELS = {"standard": "standard", "batch": "batch", "flex": "flex", "fast mode": "priority", "priority": "priority"}
+_TIER_LABELS = {
+    "standard": "standard",
+    "batch": "batch",
+    "flex": "flex",
+    "fast mode": "priority",
+    "priority": "priority",
+}
 _SKIPPED_SECTIONS = ("finetuning", "fine-tuning", "video generation", "transcription", "tools", "gpt-live")
 _MODEL_CELL = re.compile(r"^(?P<id>[a-z0-9][a-z0-9.\-:]*)\s*(?:\((?P<note>[^)]*)\))?$")
 _THRESHOLD_NOTE = re.compile(r"<\s*(\d+)\s*K", re.I)
@@ -82,7 +88,7 @@ _MODALITY_DIMENSIONS = {
 }
 
 
-def _split_tables(text: str):
+def _split_tables(text: str) -> Iterator[Tuple[str, str, List[str], List[List[str]]]]:
     """Yield (section, tier, header, rows) for every table, tracking plain-text labels."""
     section, tier = "", "standard"
     lines = text.splitlines()
@@ -104,12 +110,16 @@ def _split_tables(text: str):
             tier = _TIER_LABELS[lowered]
         elif re.match(r"^###\s+(standard|batch|flex|fast)\s+pricing data$", raw, re.I):
             tier = _TIER_LABELS[raw.split()[1].lower().replace("fast", "fast mode")]
-        elif plain and not raw.startswith("#") and (lowered.endswith(" models") or lowered.endswith("sessions") or lowered in {"tools", "finetuning"}):
+        elif (
+            plain
+            and not raw.startswith("#")
+            and (lowered.endswith(" models") or lowered.endswith("sessions") or lowered in {"tools", "finetuning"})
+        ):
             section, tier = lowered, "standard"
         i += 1
 
 
-def _column(header: List[str], names) -> Optional[int]:
+def _column(header: List[str], names: Sequence[str]) -> Optional[int]:
     lowered = [h.lower() for h in header]
     for name in names:
         if name in lowered:
@@ -121,10 +131,10 @@ def _money(cells: List[str], index: Optional[int]) -> Optional[Decimal]:
     return parse_money(cells[index]) if index is not None and index < len(cells) else None
 
 
-def _model(model_id: str, prices, display: Optional[str] = None) -> ModelPricing:
+def _model(model_id: str, prices: Iterable[Optional[PriceSet]], display: Optional[str] = None) -> ModelPricing:
     return ModelPricing(
         id=model_id,
-        prices=tuple(p for p in prices if p is not None),
+        prices=present(prices),
         source=SOURCE.id,
         vendor="openai",
         canonical_id=f"openai/{model_id}",
@@ -172,6 +182,9 @@ def _parse_modality_table(tier: str, header: List[str], rows: List[List[str]], r
     cached_col = _column(header, ("cached input",))
     output_col = _column(header, ("output / cost", "output"))
     rates: Dict[str, Dict[str, Decimal]] = {}
+    if model_col is None or modality_col is None:
+        result.issue(f"modality table without model/modality columns: {header}")
+        return
     for cells in rows:
         model_id = clean_cell(cells[model_col])
         modality = clean_cell(cells[modality_col]).lower()

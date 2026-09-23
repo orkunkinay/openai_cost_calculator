@@ -25,11 +25,12 @@ import csv
 import io
 import logging
 import math
-import time
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Tuple, Iterable, Mapping, Optional, List
+from typing import Dict, Iterable, List, Mapping, Optional, Tuple
+
 import requests
 
 logger = logging.getLogger(__name__)

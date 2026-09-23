@@ -102,7 +102,7 @@ def render_legacy_csv(catalog: Optional[PricingCatalog] = None, *, on: Optional[
     buffer = io.StringIO()
     writer = csv.writer(buffer, lineterminator="\n")
     writer.writerow(HEADER)
-    for (name, model_date) in sorted(tiered):
+    for name, model_date in sorted(tiered):
         for row in tiered[(name, model_date)]:
             writer.writerow(
                 [
@@ -117,9 +117,7 @@ def render_legacy_csv(catalog: Optional[PricingCatalog] = None, *, on: Optional[
     return buffer.getvalue()
 
 
-def anthropic_legacy_entries(
-    catalog: Optional[PricingCatalog] = None, *, on: Optional[date] = None
-) -> Iterable[tuple]:
+def anthropic_legacy_entries(catalog: Optional[PricingCatalog] = None, *, on: Optional[date] = None) -> Iterable[tuple]:
     """``(model, date, input, output, cached)`` tuples for ``add_pricing_entries``."""
     catalog = catalog or bundled_catalog()
     on = on or date.today()
@@ -133,6 +131,13 @@ def anthropic_legacy_entries(
         for row in rows:
             for identifier in model.identifiers:
                 entries.append(
-                    (identifier, on.isoformat(), row["input_price"], row["output_price"], row["cached_input_price"], row["minimum_tokens"])
+                    (
+                        identifier,
+                        on.isoformat(),
+                        row["input_price"],
+                        row["output_price"],
+                        row["cached_input_price"],
+                        row["minimum_tokens"],
+                    )
                 )
     return entries

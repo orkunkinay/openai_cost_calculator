@@ -7,11 +7,11 @@ Public façade – import **one function** and you're done:
 
 from __future__ import annotations
 
-from typing import Iterable, Any, Dict, Tuple, List
+from typing import Any, Dict, Iterable, List, Tuple
 
+from . import pricing as pricing_store
 from .core import calculate_cost_typed
 from .parser import extract_model_details, extract_usage
-from . import pricing as pricing_store
 from .types import CostBreakdown
 
 
@@ -30,7 +30,9 @@ def _pick_last_chunk(response: Iterable[Any]) -> Any:
     return last
 
 
-def _pick_rates_for_prompt(tiers_or_row: Dict[str, float] | List[Dict[str, float]], prompt_tokens: int) -> Dict[str, float]:
+def _pick_rates_for_prompt(
+    tiers_or_row: Dict[str, float] | List[Dict[str, float]], prompt_tokens: int
+) -> Dict[str, float]:
     # Backward compatibility: allow a legacy flat row.
     if isinstance(tiers_or_row, dict):
         return tiers_or_row
@@ -80,7 +82,7 @@ def _find_rates(model_name: str, model_date: str, prompt_tokens: int) -> Dict[st
 def estimate_cost_typed(response: Any) -> CostBreakdown:
     """
     Estimate costs and return a strongly-typed CostBreakdown dataclass.
-    
+
     Parameters
     ----------
     response
@@ -93,7 +95,7 @@ def estimate_cost_typed(response: Any) -> CostBreakdown:
     CostBreakdown
         Strongly-typed dataclass with Decimal fields containing:
         - prompt_cost_uncached: Decimal
-        - prompt_cost_cached: Decimal  
+        - prompt_cost_cached: Decimal
         - completion_cost: Decimal
         - total_cost: Decimal
 
@@ -101,7 +103,7 @@ def estimate_cost_typed(response: Any) -> CostBreakdown:
     ------
     CostEstimateError
         for every recoverable problem (bad input, missing attrs, …)
-        
+
     Examples
     --------
     >>> cost = estimate_cost_typed(response)
@@ -151,7 +153,7 @@ def estimate_cost(response: Any) -> Dict[str, str]:
     ------
     CostEstimateError
         for every recoverable problem (bad input, missing attrs, …)
-        
+
     Note
     ----
     This function is maintained for backward compatibility. For new code,

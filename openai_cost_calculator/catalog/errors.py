@@ -24,9 +24,7 @@ class UnknownProviderError(PricingError):
     def __init__(self, provider: str, known: Iterable[str]) -> None:
         self.provider = provider
         self.known = tuple(sorted(known))
-        super().__init__(
-            f"unknown provider {provider!r}; supported providers: {', '.join(self.known)}"
-        )
+        super().__init__(f"unknown provider {provider!r}; supported providers: {', '.join(self.known)}")
 
 
 class UnknownModelError(PricingError):
@@ -44,8 +42,7 @@ class AmbiguousModelError(PricingError):
         self.model = model
         self.candidates = tuple(candidates)
         super().__init__(
-            f"model {model!r} on provider {provider!r} is ambiguous; "
-            f"use one of: {', '.join(self.candidates)}"
+            f"model {model!r} on provider {provider!r} is ambiguous; use one of: {', '.join(self.candidates)}"
         )
 
 

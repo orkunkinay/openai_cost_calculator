@@ -42,9 +42,7 @@ class HttpFetcher:
         last: Optional[Exception] = None
         for attempt in range(self.attempts):
             try:
-                response = requests.get(
-                    url, params=params, timeout=self.timeout, headers={"User-Agent": USER_AGENT}
-                )
+                response = requests.get(url, params=params, timeout=self.timeout, headers={"User-Agent": USER_AGENT})
                 response.raise_for_status()
                 return response.text
             except requests.RequestException as exc:
@@ -111,7 +109,10 @@ class PricingSource(Protocol):
 
 def _same_slot(a: PriceSet, b: PriceSet) -> bool:
     return (a.condition_key, a.min_input_tokens, a.effective_from, a.effective_until) == (
-        b.condition_key, b.min_input_tokens, b.effective_from, b.effective_until
+        b.condition_key,
+        b.min_input_tokens,
+        b.effective_from,
+        b.effective_until,
     )
 
 

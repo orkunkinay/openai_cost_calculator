@@ -91,7 +91,9 @@ def test_usage_addition_is_fieldwise():
 
 def test_price_usage_is_exact_and_itemized():
     price_set = _set(input="3", cached_input="0.3", cache_write="3.75", output="15", web_search="0.01")
-    usage = Usage(input_tokens=1_000, cached_input_tokens=2_000, cache_write_tokens=400, output_tokens=500, web_search_calls=2)
+    usage = Usage(
+        input_tokens=1_000, cached_input_tokens=2_000, cache_write_tokens=400, output_tokens=500, web_search_calls=2
+    )
     total, items = price_usage(usage, price_set, where="t")
     expected = D("0.003") + D("0.0006") + D("0.0015") + D("0.0075") + D("0.02")
     assert total == expected
@@ -100,7 +102,9 @@ def test_price_usage_is_exact_and_itemized():
 
 
 def test_fallbacks_charge_cache_reads_and_writes_at_input_rate():
-    total, items = price_usage(Usage(cached_input_tokens=1_000_000, cache_write_tokens=1_000_000), _set(input="2", output="4"), where="t")
+    total, items = price_usage(
+        Usage(cached_input_tokens=1_000_000, cache_write_tokens=1_000_000), _set(input="2", output="4"), where="t"
+    )
     assert total == D("4")
     assert [i.rate_dimension for i in items] == ["input", "input"]
 
@@ -122,7 +126,9 @@ def test_missing_rate_without_safe_fallback_is_an_explicit_error():
 
 def test_cost_projects_onto_legacy_breakdown():
     price_set = _set(input="1", cached_input="0.5", cache_write="2", output="4")
-    usage = Usage(input_tokens=1_000_000, cached_input_tokens=1_000_000, cache_write_tokens=1_000_000, output_tokens=1_000_000)
+    usage = Usage(
+        input_tokens=1_000_000, cached_input_tokens=1_000_000, cache_write_tokens=1_000_000, output_tokens=1_000_000
+    )
     total, items = price_usage(usage, price_set, where="t")
     breakdown = Cost(provider="acme", model="m", resolved_model="m", total=total, items=items).to_breakdown()
     assert breakdown.prompt_cost_uncached == D("3")
@@ -136,7 +142,10 @@ def test_cost_projects_onto_legacy_breakdown():
 
 def test_long_context_tier_threshold_is_inclusive():
     model = _model("m", _set(input="1", output="2"), _set(min_input_tokens=200_001, input="2", output="4"))
-    pick = lambda n: select_price_set(model, _request(), total_input_tokens=n, on=date(2026, 1, 1), provider="acme").price_set
+
+    def pick(n):
+        return select_price_set(model, _request(), total_input_tokens=n, on=date(2026, 1, 1), provider="acme").price_set
+
     assert pick(200_000).rates["input"] == D("1")
     assert pick(200_001).rates["input"] == D("2")
 
@@ -149,29 +158,55 @@ def test_service_tier_and_region_preferences_choose_matching_group():
         _set({"region": "us-east-1"}, input="1.1", output="2.2"),
     )
     on = date(2026, 1, 1)
-    batch = select_price_set(model, _request(explicit={"service_tier"}, service_tier="batch"), total_input_tokens=0, on=on, provider="acme")
+    batch = select_price_set(
+        model, _request(explicit={"service_tier"}, service_tier="batch"), total_input_tokens=0, on=on, provider="acme"
+    )
     assert batch.price_set.rates["input"] == D("0.5")
     regional = select_price_set(model, _request(region="us-east-1"), total_input_tokens=0, on=on, provider="acme")
     assert regional.price_set.rates["input"] == D("1.1")
 
 
 def test_region_fallback_order_and_assumption_is_reported():
-    model = _model("m", _set({"region": "global"}, input="1", output="2"), _set({"region": "us-east-1"}, input="1.1", output="2.2"))
-    selection = select_price_set(model, _request(region=("global", "us-east-1")), total_input_tokens=0, on=date(2026, 1, 1), provider="acme")
+    model = _model(
+        "m", _set({"region": "global"}, input="1", output="2"), _set({"region": "us-east-1"}, input="1.1", output="2.2")
+    )
+    selection = select_price_set(
+        model, _request(region=("global", "us-east-1")), total_input_tokens=0, on=date(2026, 1, 1), provider="acme"
+    )
     assert selection.conditions == {"service_tier": "standard", "region": "global"}
     assert any("region=global" in a for a in selection.assumptions)
 
     only_regional = _model("m", _set({"region": "us-east-1"}, input="1.1", output="2.2"))
-    fallback = select_price_set(only_regional, _request(region=("global", "us-east-1")), total_input_tokens=0, on=date(2026, 1, 1), provider="acme")
+    fallback = select_price_set(
+        only_regional,
+        _request(region=("global", "us-east-1")),
+        total_input_tokens=0,
+        on=date(2026, 1, 1),
+        provider="acme",
+    )
     assert fallback.conditions == {"service_tier": "standard", "region": "us-east-1"}
 
 
 def test_unavailable_conditions_list_the_alternatives():
-    model = _model("m", _set({"region": "global"}, input="1", output="2"), _set({"region": "us-east-1"}, input="1.1", output="2.2"))
+    model = _model(
+        "m", _set({"region": "global"}, input="1", output="2"), _set({"region": "us-east-1"}, input="1.1", output="2.2")
+    )
     with pytest.raises(PricingUnavailableError, match="available: region=global; region=us-east-1"):
-        select_price_set(model, _request(explicit={"region"}, region="eu-west-1"), total_input_tokens=0, on=date(2026, 1, 1), provider="acme")
+        select_price_set(
+            model,
+            _request(explicit={"region"}, region="eu-west-1"),
+            total_input_tokens=0,
+            on=date(2026, 1, 1),
+            provider="acme",
+        )
     with pytest.raises(PricingUnavailableError, match="service_tier=flex"):
-        select_price_set(model, _request(explicit={"service_tier"}, service_tier="flex"), total_input_tokens=0, on=date(2026, 1, 1), provider="acme")
+        select_price_set(
+            model,
+            _request(explicit={"service_tier"}, service_tier="flex"),
+            total_input_tokens=0,
+            on=date(2026, 1, 1),
+            provider="acme",
+        )
 
 
 def test_effective_dates_select_scheduled_price_changes():
@@ -180,7 +215,12 @@ def test_effective_dates_select_scheduled_price_changes():
         _set(end=date(2027, 1, 1), input="0.75", output="3.75"),
         _set(start=date(2027, 1, 1), input="1.5", output="7.5"),
     )
-    pick = lambda on: select_price_set(model, _request(), total_input_tokens=0, on=on, provider="acme").price_set.rates["input"]
+
+    def pick(on):
+        return select_price_set(model, _request(), total_input_tokens=0, on=on, provider="acme").price_set.rates[
+            "input"
+        ]
+
     assert pick(date(2026, 12, 31)) == D("0.75")
     assert pick(date(2027, 1, 1)) == D("1.5")
     expired = _model("m", _set(end=date(2020, 1, 1), input="1", output="1"))
@@ -193,7 +233,13 @@ def test_explicit_conditions_are_not_reported_as_assumptions():
     assumed = select_price_set(model, _request(), total_input_tokens=0, on=date(2026, 1, 1), provider="acme")
     assert assumed.conditions == {"service_tier": "standard"}
     assert assumed.assumptions == ()  # the standard tier is not worth reporting
-    explicit = select_price_set(model, _request(explicit={"service_tier"}, service_tier="batch"), total_input_tokens=0, on=date(2026, 1, 1), provider="acme")
+    explicit = select_price_set(
+        model,
+        _request(explicit={"service_tier"}, service_tier="batch"),
+        total_input_tokens=0,
+        on=date(2026, 1, 1),
+        provider="acme",
+    )
     assert explicit.assumptions == ()
 
 
@@ -219,7 +265,9 @@ def test_validation_rejects_structural_errors():
 
 
 def test_non_overlapping_date_windows_are_valid():
-    validate_provider(_provider(_model("m", _set(end=date(2027, 1, 1), input="1"), _set(start=date(2027, 1, 1), input="2"))))
+    validate_provider(
+        _provider(_model("m", _set(end=date(2027, 1, 1), input="1"), _set(start=date(2027, 1, 1), input="2")))
+    )
 
 
 def test_sanity_warnings_flag_implausible_prices():
@@ -230,7 +278,12 @@ def test_sanity_warnings_flag_implausible_prices():
 
 def test_serialization_is_deterministic_and_round_trips():
     data = _provider(
-        _model("zeta", _set({"service_tier": "batch"}, output="1", input="0.5"), _set(output="2.50", input="1.0"), aliases=("z2", "z1")),
+        _model(
+            "zeta",
+            _set({"service_tier": "batch"}, output="1", input="0.5"),
+            _set(output="2.50", input="1.0"),
+            aliases=("z2", "z1"),
+        ),
         _model("alpha", _set(input="3", output="15"), canonical_id="acme/alpha", vendor="acme"),
     )
     text = dump_provider(data)
@@ -254,7 +307,9 @@ def test_loader_rejects_floats_and_wrong_schema_version():
         provider_from_dict(raw)
 
 
-@pytest.mark.parametrize("value,text", [("2.50", "2.5"), ("10", "10"), ("1E+1", "10"), ("0.000", "0"), ("0.0000001", "0.0000001")])
+@pytest.mark.parametrize(
+    "value,text", [("2.50", "2.5"), ("10", "10"), ("1E+1", "10"), ("0.000", "0"), ("0.0000001", "0.0000001")]
+)
 def test_format_decimal_is_plain_and_minimal(value, text):
     assert format_decimal(D(value)) == text
 
@@ -265,7 +320,9 @@ def test_format_decimal_is_plain_and_minimal(value, text):
 def test_model_index_lookup_order_and_suggestions():
     index = ModelIndex(
         _provider(
-            _model("claude-sonnet-4-5", aliases=("claude-sonnet-4-5-20250929",), canonical_id="anthropic/claude-sonnet-4-5"),
+            _model(
+                "claude-sonnet-4-5", aliases=("claude-sonnet-4-5-20250929",), canonical_id="anthropic/claude-sonnet-4-5"
+            ),
             _model("claude-haiku-4-5", canonical_id="anthropic/claude-haiku-4-5"),
         )
     )

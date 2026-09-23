@@ -28,7 +28,9 @@ D = Decimal
 
 
 def _ps(conditions=None, min_input_tokens=0, **rates):
-    return PriceSet(rates={k: D(v) for k, v in rates.items()}, conditions=conditions or {}, min_input_tokens=min_input_tokens)
+    return PriceSet(
+        rates={k: D(v) for k, v in rates.items()}, conditions=conditions or {}, min_input_tokens=min_input_tokens
+    )
 
 
 def _provider(pid, *models):
@@ -56,14 +58,25 @@ CATALOG = PricingCatalog(
                 canonical_id="anthropic/claude-sonnet-4-5",
                 vendor="anthropic",
             ),
-            _m("meta.llama3-3-70b-instruct", _ps({"region": "us-east-1"}, input="0.72", output="0.72"), canonical_id="meta/llama-3.3-70b-instruct"),
+            _m(
+                "meta.llama3-3-70b-instruct",
+                _ps({"region": "us-east-1"}, input="0.72", output="0.72"),
+                canonical_id="meta/llama-3.3-70b-instruct",
+            ),
         ),
         _provider(
             "anthropic",
             _m(
                 "claude-sonnet-4-5",
                 _ps(input="3", cache_write="3.75", cache_write_1h="6", cached_input="0.3", output="15"),
-                _ps({"region": "us"}, input="3.3", cache_write="4.125", cache_write_1h="6.6", cached_input="0.33", output="16.5"),
+                _ps(
+                    {"region": "us"},
+                    input="3.3",
+                    cache_write="4.125",
+                    cache_write_1h="6.6",
+                    cached_input="0.33",
+                    output="16.5",
+                ),
                 aliases=("claude-sonnet-4-5-20250929",),
                 canonical_id="anthropic/claude-sonnet-4-5",
             ),
@@ -119,7 +132,10 @@ def test_generic_candidates_strip_prefixes_namespaces_and_snapshots():
         ("global.anthropic.claude-sonnet-4-5-20250929-v1:0", ("global",)),
         ("us.anthropic.claude-sonnet-4-5-20250929-v1:0", ("us-east-1",)),
         ("anthropic.claude-sonnet-4-5-20250929-v1:0", ("us-east-1", "global")),
-        ("arn:aws:bedrock:us-west-2:123456789012:inference-profile/us.anthropic.claude-sonnet-4-5-20250929-v1:0", ("us-west-2",)),
+        (
+            "arn:aws:bedrock:us-west-2:123456789012:inference-profile/us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            ("us-west-2",),
+        ),
     ],
 )
 def test_bedrock_model_strings_imply_endpoint_pricing(model, region):
@@ -149,7 +165,9 @@ def test_deepseek_peak_hours(moment, period):
 
 
 def test_bedrock_canonical_model_prefers_global_endpoint():
-    cost = calculate_cost("aws-bedrock", "anthropic/claude-sonnet-4-5", input_tokens=1_000_000, output_tokens=100_000, catalog=CATALOG)
+    cost = calculate_cost(
+        "aws-bedrock", "anthropic/claude-sonnet-4-5", input_tokens=1_000_000, output_tokens=100_000, catalog=CATALOG
+    )
     assert cost.resolved_model == "anthropic.claude-sonnet-4-5"
     assert cost.total == D("4.5")
     assert cost.conditions["region"] == "global"
@@ -158,10 +176,18 @@ def test_bedrock_canonical_model_prefers_global_endpoint():
 
 
 def test_bedrock_geo_profile_uses_regional_rate_and_explains_it():
-    cost = calculate_cost("bedrock", "us.anthropic.claude-sonnet-4-5-20250929-v1:0", input_tokens=1_000_000, catalog=CATALOG)
+    cost = calculate_cost(
+        "bedrock", "us.anthropic.claude-sonnet-4-5-20250929-v1:0", input_tokens=1_000_000, catalog=CATALOG
+    )
     assert cost.total == D("3.3")
     assert any("us-east-1 regional rate" in a for a in cost.assumptions)
-    batch = calculate_cost("bedrock", "us.anthropic.claude-sonnet-4-5-20250929-v1:0", input_tokens=1_000_000, service_tier="batch", catalog=CATALOG)
+    batch = calculate_cost(
+        "bedrock",
+        "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+        input_tokens=1_000_000,
+        service_tier="batch",
+        catalog=CATALOG,
+    )
     assert batch.total == D("1.65")
 
 
@@ -194,14 +220,30 @@ def test_anthropic_cache_dimensions_and_data_residency():
 
 
 def test_deepseek_period_from_request_time_and_conservative_default():
-    peak = calculate_cost("deepseek", "deepseek-v4-flash", input_tokens=1_000_000, at=datetime(2026, 9, 21, 7, 0, tzinfo=timezone.utc), catalog=CATALOG)
-    off = calculate_cost("deepseek", "deepseek-flash", input_tokens=1_000_000, at=datetime(2026, 9, 21, 12, 0, tzinfo=timezone.utc), catalog=CATALOG)
+    peak = calculate_cost(
+        "deepseek",
+        "deepseek-v4-flash",
+        input_tokens=1_000_000,
+        at=datetime(2026, 9, 21, 7, 0, tzinfo=timezone.utc),
+        catalog=CATALOG,
+    )
+    off = calculate_cost(
+        "deepseek",
+        "deepseek-flash",
+        input_tokens=1_000_000,
+        at=datetime(2026, 9, 21, 12, 0, tzinfo=timezone.utc),
+        catalog=CATALOG,
+    )
     assert (peak.total, off.total) == (D("0.3"), D("0.15"))
     assert any("derived from request time" in a for a in off.assumptions)
-    unknown_time = calculate_cost("deepseek", "deepseek-flash", input_tokens=1_000_000, at=date(2026, 9, 21), catalog=CATALOG)
+    unknown_time = calculate_cost(
+        "deepseek", "deepseek-flash", input_tokens=1_000_000, at=date(2026, 9, 21), catalog=CATALOG
+    )
     assert unknown_time.total == D("0.3")
     assert any("assumed period=peak" in a for a in unknown_time.assumptions)
-    explicit = calculate_cost("deepseek", "deepseek-flash", input_tokens=1_000_000, period="off_peak", at=date(2026, 9, 21), catalog=CATALOG)
+    explicit = calculate_cost(
+        "deepseek", "deepseek-flash", input_tokens=1_000_000, period="off_peak", at=date(2026, 9, 21), catalog=CATALOG
+    )
     assert explicit.total == D("0.15") and explicit.assumptions == ()
 
 
@@ -238,7 +280,9 @@ def test_error_messages_are_actionable():
 
 def test_listing_and_cross_provider_comparison():
     assert {m.id for _, m in list_models("anthropic", catalog=CATALOG)} == {"claude-sonnet-4-5"}
-    assert get_model_pricing("bedrock", "global.anthropic.claude-sonnet-4-5-v1:0", catalog=CATALOG).vendor == "anthropic"
+    assert (
+        get_model_pricing("bedrock", "global.anthropic.claude-sonnet-4-5-v1:0", catalog=CATALOG).vendor == "anthropic"
+    )
     costs = compare_costs("anthropic/claude-sonnet-4-5", usage=Usage(input_tokens=1_000_000), catalog=CATALOG)
     assert [(c.provider, c.total) for c in costs] == [("anthropic", D("3")), ("bedrock", D("3"))]
 

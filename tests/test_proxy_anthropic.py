@@ -4,8 +4,6 @@ import json
 from decimal import Decimal
 
 import httpx
-import pytest
-
 from asgi_client import ASGITestClient
 
 from openai_cost_calculator.anthropic.usage import (

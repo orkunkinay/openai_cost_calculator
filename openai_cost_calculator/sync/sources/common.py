@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from typing import Dict, Mapping, Optional
+from typing import Dict, Iterable, Mapping, Optional, Tuple
 
 from ...catalog.model import PriceSet
 
@@ -42,6 +42,11 @@ def price_set(
         effective_from=effective_from,
         effective_until=effective_until,
     )
+
+
+def present(sets: Iterable[Optional[PriceSet]]) -> Tuple[PriceSet, ...]:
+    """The price sets that were actually built (``price_set`` returns None when nothing is priced)."""
+    return tuple(s for s in sets if s is not None)
 
 
 def scale(rates: Mapping[str, Decimal], factor: Decimal) -> Dict[str, Decimal]:

@@ -4,13 +4,13 @@ import argparse
 import ipaddress
 import json
 import os
-from pathlib import Path
 import stat
 import sys
-from typing import Optional, Sequence
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
+from typing import Optional, Sequence
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:

@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 import asyncio
-from decimal import Decimal
 import re
-from threading import RLock
 import time
+from decimal import Decimal
 from pathlib import Path
+from threading import RLock
 from typing import Any, Dict, Iterable, Optional
 
+from openai_cost_calculator.proxy.ledger import DurableLedger, LedgerError, SQLiteLedger
 from openai_cost_calculator.tracker import CallRecord, CostTracker
 from openai_cost_calculator.types import CostBreakdown
-from openai_cost_calculator.proxy.ledger import DurableLedger, LedgerError, SQLiteLedger
-
 
 _MAX_ERRORS_PER_SESSION = 100
 _MAX_DIAGNOSTIC_LENGTH = 500

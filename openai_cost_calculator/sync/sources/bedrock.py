@@ -28,7 +28,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 from ...catalog.model import ModelPricing, Source
 from ..base import Fetcher, SourceResult, get_json
 from ..text import slugify
-from .common import price_set
+from .common import present, price_set
 
 OFFER_URL = "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/{offer}/current/{region}/index.json"
 REGIONS: Tuple[str, ...] = ("us-east-1", "us-west-2", "eu-central-1")
@@ -41,15 +41,43 @@ SOURCE = Source(
 )
 
 _VENDORS = {
-    "amazon": "amazon", "meta": "meta", "mistral ai": "mistral", "mistral": "mistral", "deepseek": "deepseek",
-    "openai": "openai", "google": "google", "moonshot ai": "moonshotai", "qwen": "qwen", "minimax": "minimax",
-    "nvidia": "nvidia", "writer": "writer", "z ai": "zai", "xai": "xai", "cohere": "cohere", "ai21 labs": "ai21",
+    "amazon": "amazon",
+    "meta": "meta",
+    "mistral ai": "mistral",
+    "mistral": "mistral",
+    "deepseek": "deepseek",
+    "openai": "openai",
+    "google": "google",
+    "moonshot ai": "moonshotai",
+    "qwen": "qwen",
+    "minimax": "minimax",
+    "nvidia": "nvidia",
+    "writer": "writer",
+    "z ai": "zai",
+    "xai": "xai",
+    "cohere": "cohere",
+    "ai21 labs": "ai21",
 }
 #: Usage-type codes without a vendor or ``provider`` attribute.
 _CODE_VENDORS = (("nova", "amazon"), ("titan", "amazon"))
 _QUALIFIED_CODE = re.compile(r"^[a-z][a-z0-9-]*\.[a-z]")
-_SKIP_WORDS = {"custom", "customization", "provisionedthroughput", "provisioned", "reserved", "latencyoptimized",
-               "video", "second", "image", "created", "storage", "training", "search", "units", "embed"}
+_SKIP_WORDS = {
+    "custom",
+    "customization",
+    "provisionedthroughput",
+    "provisioned",
+    "reserved",
+    "latencyoptimized",
+    "video",
+    "second",
+    "image",
+    "created",
+    "storage",
+    "training",
+    "search",
+    "units",
+    "embed",
+}
 
 
 def _tier_and_scope(words: Iterable[str]) -> Tuple[str, bool]:
@@ -138,7 +166,7 @@ def parse_general(offer: Dict[str, Any], region: str, result: SourceResult) -> D
         code = _model_code(usagetype)
         if code is None:
             continue
-        tail = usagetype[usagetype.index(code) + len(code):].lower()
+        tail = usagetype[usagetype.index(code) + len(code) :].lower()
         words = [w for w in re.split(r"[-\s]+", tail) if w]
         words += re.split(r"[\s-]+", str(attributes.get("inferenceType") or "").lower())
         words += re.split(r"[\s-]+", str(attributes.get("service_tier") or "").lower())
@@ -181,19 +209,18 @@ def build(prices: Dict[Tuple, Decimal], result: SourceResult) -> None:
         grouped.setdefault(model, {}).setdefault((region, tier), {})[dimension] = amount
         displays.setdefault(model, display)
     for model, groups in sorted(grouped.items()):
-        sets = [
+        sets = present(
             price_set(rates, service_tier=tier, region=region)
             for (region, tier), rates in sorted(groups.items())
             if "input" in rates and "output" in rates
-        ]
-        sets = [s for s in sets if s is not None]
+        )
         if not sets:
             continue
         vendor, _, rest = model.partition(".")
         result.add(
             ModelPricing(
                 id=model,
-                prices=tuple(sets),
+                prices=sets,
                 source=SOURCE.id,
                 vendor=vendor,
                 canonical_id=f"{vendor}/{rest}",

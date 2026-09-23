@@ -33,7 +33,11 @@ def _models(result, provider="test"):
 
 def _rates(model, min_input_tokens=0, on=None, **conditions):
     for price in model.prices:
-        if dict(price.conditions) == conditions and price.min_input_tokens == min_input_tokens and (on is None or price.is_effective(on)):
+        if (
+            dict(price.conditions) == conditions
+            and price.min_input_tokens == min_input_tokens
+            and (on is None or price.is_effective(on))
+        ):
             return dict(price.rates)
     raise AssertionError(f"no price {conditions} for {model.id}")
 

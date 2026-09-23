@@ -1,14 +1,15 @@
+import importlib
 from datetime import datetime, timezone
 from decimal import Decimal
-import importlib
+
 import pytest
 
 import openai_cost_calculator as occ
-
 from openai_cost_calculator.core import calculate_cost, calculate_cost_typed
-from openai_cost_calculator.estimate import estimate_cost, estimate_cost_typed, CostEstimateError
+from openai_cost_calculator.estimate import CostEstimateError, estimate_cost, estimate_cost_typed
 from openai_cost_calculator.parser import extract_model_details, extract_usage
 from openai_cost_calculator.types import CostBreakdown
+
 
 class _Struct:
     """Tiny helper to build ad-hoc objects with attributes."""
@@ -103,13 +104,13 @@ def test_calculate_cost_typed_basic():
 
     # Verify the result is a CostBreakdown instance
     assert isinstance(cost_breakdown, CostBreakdown)
-    
+
     # Verify all fields are Decimal objects
     assert isinstance(cost_breakdown.prompt_cost_uncached, Decimal)
     assert isinstance(cost_breakdown.prompt_cost_cached, Decimal)
     assert isinstance(cost_breakdown.completion_cost, Decimal)
     assert isinstance(cost_breakdown.total_cost, Decimal)
-    
+
     # Verify correct values
     assert cost_breakdown.prompt_cost_uncached == Decimal("0.0008")   # 800 / 1M * $1
     assert cost_breakdown.prompt_cost_cached == Decimal("0.0001")     # 200 / 1M * $0.5
@@ -121,14 +122,14 @@ def test_calculate_cost_compatibility():
     """Test that old and new calculate_cost functions return equivalent results."""
     usage  = {"prompt_tokens": 1_000, "completion_tokens": 2_000, "cached_tokens": 200}
     rates  = {"input_price": 1.0, "cached_input_price": 0.5, "output_price": 2.0}
-    
+
     # Get results from both functions
     old_result = calculate_cost(usage, rates)
     new_result = calculate_cost_typed(usage, rates)
-    
+
     # Convert typed result to dict with strings
     typed_as_dict = new_result.as_dict(stringify=True)
-    
+
     # They should be identical
     assert old_result == typed_as_dict
 
@@ -138,13 +139,13 @@ def test_cost_breakdown_as_dict():
     usage  = {"prompt_tokens": 1_000, "completion_tokens": 2_000, "cached_tokens": 200}
     rates  = {"input_price": 1.0, "cached_input_price": 0.5, "output_price": 2.0}
     cost_breakdown = calculate_cost_typed(usage, rates)
-    
+
     # Test stringify=True (default)
     string_dict = cost_breakdown.as_dict(stringify=True)
     assert all(isinstance(v, str) for v in string_dict.values())
     assert string_dict["total_cost"] == "0.00490000"
-    
-    # Test stringify=False  
+
+    # Test stringify=False
     decimal_dict = cost_breakdown.as_dict(stringify=False)
     assert all(isinstance(v, Decimal) for v in decimal_dict.values())
     assert decimal_dict["total_cost"] == Decimal("0.0049")
@@ -189,16 +190,16 @@ def test_estimate_cost_typed_single_response():
     """Test the new typed estimate function."""
     resp = _classic_response(1_000, 500, 100)
     cost = estimate_cost_typed(resp)
-    
+
     # Verify the result is a CostBreakdown instance
     assert isinstance(cost, CostBreakdown)
-    
+
     # Verify all fields are Decimal objects
     assert isinstance(cost.prompt_cost_uncached, Decimal)
     assert isinstance(cost.prompt_cost_cached, Decimal)
     assert isinstance(cost.completion_cost, Decimal)
     assert isinstance(cost.total_cost, Decimal)
-    
+
     # Verify total is sum of parts (with Decimal precision)
     expected_total = cost.prompt_cost_uncached + cost.prompt_cost_cached + cost.completion_cost
     assert cost.total_cost == expected_total
@@ -207,14 +208,14 @@ def test_estimate_cost_typed_single_response():
 def test_estimate_cost_compatibility():
     """Test that old and new estimate functions return equivalent results."""
     resp = _classic_response(1_000, 500, 100)
-    
+
     # Get results from both functions
     old_result = estimate_cost(resp)
     new_result = estimate_cost_typed(resp)
-    
+
     # Convert typed result to dict with strings
     typed_as_dict = new_result.as_dict(stringify=True)
-    
+
     # They should be identical
     assert old_result == typed_as_dict
 
@@ -238,7 +239,7 @@ def test_estimate_cost_typed_stream():
         _classic_response(2_000, 0, 0),
     )
     cost = estimate_cost_typed(iter(dummy_chunks))
-    
+
     assert isinstance(cost, CostBreakdown)
     assert cost.completion_cost == Decimal("0")
     assert cost.total_cost > Decimal("0")
@@ -282,7 +283,7 @@ def test_public_api_imports():
     assert hasattr(occ, 'estimate_cost_typed')
     assert hasattr(occ, 'calculate_cost_typed')
     assert hasattr(occ, 'CostBreakdown')
-    
+
     # Test that legacy functions are still available
     assert hasattr(occ, 'estimate_cost')
     assert hasattr(occ, 'refresh_pricing')

@@ -5,8 +5,8 @@ import json
 
 import httpx
 import pytest
-
 from asgi_client import ASGITestClient
+from starlette.datastructures import URL, Headers
 
 from openai_cost_calculator.parser import extract_usage_from_payload
 from openai_cost_calculator.pricing import (
@@ -14,13 +14,12 @@ from openai_cost_calculator.pricing import (
     clear_local_pricing,
     set_offline_mode,
 )
-from openai_cost_calculator.proxy.app import create_app
 from openai_cost_calculator.proxy.app import (
-    _WebSocketAccountingObserver,
     _forward_websocket,
+    _WebSocketAccountingObserver,
+    create_app,
 )
 from openai_cost_calculator.proxy.registry import TrackerRegistry
-from starlette.datastructures import Headers, URL
 
 
 class AsyncChunkStream(httpx.AsyncByteStream):

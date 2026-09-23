@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import json
+import asyncio
 import codecs
-from collections import deque
 import hashlib
 import hmac
+import json
 import os
-import asyncio
+from collections import deque
 from typing import Any, AsyncIterator, Optional
 
 import httpx
@@ -35,7 +35,6 @@ from openai_cost_calculator.proxy.upstreams import (
     UpstreamSelection,
     classify_upstream,
 )
-
 
 ANTHROPIC_PROTOCOL = "anthropic-messages"
 OPENAI_PROTOCOL = "openai-responses"
@@ -612,7 +611,7 @@ async def _forward_websocket(app: FastAPI, path: str, websocket: WebSocket) -> N
     if connector is None:
         try:
             from websockets.asyncio.client import connect as connector
-        except ImportError as exc:  # pragma: no cover - optional dependency guard
+        except ImportError:  # pragma: no cover - optional dependency guard
             app.state.occ_registry.record_error(
                 session_id,
                 "websocket_dependency_missing",

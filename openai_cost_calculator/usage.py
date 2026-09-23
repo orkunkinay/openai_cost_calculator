@@ -142,7 +142,9 @@ def from_gemini(metadata: Any) -> Usage:
     def pick(camel: str, snake: str) -> int:
         return _int(metadata, camel) if _has(metadata, camel) else _int(metadata, snake)
 
-    prompt = pick("promptTokenCount", "prompt_token_count") + pick("toolUsePromptTokenCount", "tool_use_prompt_token_count")
+    prompt = pick("promptTokenCount", "prompt_token_count") + pick(
+        "toolUsePromptTokenCount", "tool_use_prompt_token_count"
+    )
     cached = pick("cachedContentTokenCount", "cached_content_token_count")
     prompt_details = _get(metadata, "promptTokensDetails") or _get(metadata, "prompt_tokens_details")
     cache_details = _get(metadata, "cacheTokensDetails") or _get(metadata, "cache_tokens_details")

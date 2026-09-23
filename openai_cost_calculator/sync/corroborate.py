@@ -36,7 +36,11 @@ PROVIDERS: Mapping[str, Tuple[Tuple[str, ...], str]] = {
     "deepinfra": (("deepinfra",), "deepinfra/"),
     "openrouter": (("openrouter",), "openrouter/"),
 }
-_FIELDS = {"input_cost_per_token": "input", "output_cost_per_token": "output", "cache_read_input_token_cost": "cached_input"}
+_FIELDS = {
+    "input_cost_per_token": "input",
+    "output_cost_per_token": "output",
+    "cache_read_input_token_cost": "cached_input",
+}
 _PER_MILLION = Decimal(1_000_000)
 
 
@@ -47,7 +51,7 @@ class LiteLLMCorroborator:
             for key, entry in table.items():
                 if not isinstance(entry, dict) or entry.get("litellm_provider") not in litellm_providers:
                     continue
-                name = key[len(prefix):] if prefix and key.startswith(prefix) else key
+                name = key[len(prefix) :] if prefix and key.startswith(prefix) else key
                 rates = self._rates(entry)
                 if rates:
                     self._index[(provider, compact_key(name))] = rates

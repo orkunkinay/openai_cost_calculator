@@ -30,7 +30,9 @@ LEGACY_SOURCE = Source(
     id="legacy-csv",
     kind="manual",
     url="https://github.com/orkunkinay/openai_cost_calculator/blob/main/data/gpt_pricing_data.csv",
-    description="Rows carried over from the pre-catalog pricing CSV; not listed by any official source at migration time",
+    description=(
+        "Rows carried over from the pre-catalog pricing CSV; not listed by any official source at migration time"
+    ),
 )
 
 
@@ -47,7 +49,7 @@ def main(csv_path: str) -> int:
     with open(csv_path, newline="", encoding="utf-8") as handle:
         for row in csv.DictReader(handle):
             name, model_date = row["Model Name"].strip(), row["Model Date"].strip()
-            provider, model = ("gemini", name[len("google/"):]) if name.startswith("google/") else ("openai", name)
+            provider, model = ("gemini", name[len("google/") :]) if name.startswith("google/") else ("openai", name)
             identifier = f"{model}-{model_date}" if model_date else model
             try:
                 resolve_model(provider, identifier, catalog=catalog)

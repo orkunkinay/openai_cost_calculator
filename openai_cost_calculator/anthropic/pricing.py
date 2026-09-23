@@ -29,7 +29,6 @@ from typing import Optional
 
 from ..catalog import PricingCatalog, PricingError, RequestConditions, select_price_set
 
-
 MILLION = Decimal(1_000_000)
 
 #: Anthropic's documented default for 1-hour cache writes (2x base input),

@@ -44,8 +44,12 @@ def test_openrouter_per_token_prices_and_long_context_overrides():
     models = _by_id(openrouter.parse(_json("openrouter_models.json")))
     sonnet = models["anthropic/claude-sonnet-4.5"]
     assert _rates(sonnet) == {
-        "input": D("3"), "output": D("15"), "cached_input": D("0.3"), "cache_write": D("3.75"),
-        "cache_write_1h": D("6"), "web_search": D("0.01"),
+        "input": D("3"),
+        "output": D("15"),
+        "cached_input": D("0.3"),
+        "cache_write": D("3.75"),
+        "cache_write_1h": D("6"),
+        "web_search": D("0.01"),
     }
     assert _rates(sonnet, min_input_tokens=200_000)["input"] == D("6")
     assert sonnet.aliases == ("anthropic/claude-4.5-sonnet-20250929",)
@@ -80,8 +84,11 @@ def test_deepinfra_discounts_multipliers_and_tiers():
     models = _by_id(deepinfra.parse(_json("deepinfra_models.json")))
     glm = models["zai-org/GLM-5.2"]  # list $0.75/$2.40 with 25% promotional discount
     assert _rates(glm) == {
-        "input": D("0.5625"), "output": D("1.8"), "cached_input": D("0.105"),
-        "cache_write": D("0.703125"), "cache_write_1h": D("1.125"),
+        "input": D("0.5625"),
+        "output": D("1.8"),
+        "cached_input": D("0.105"),
+        "cache_write": D("0.703125"),
+        "cache_write_1h": D("1.125"),
     }
     assert _rates(glm, service_tier="priority")["input"] == D("0.84375")
     assert _rates(glm, service_tier="flex")["output"] == D("1.44")
@@ -97,7 +104,9 @@ def test_deepinfra_discount_with_end_date_reverts_to_list_price():
     item = json.loads(json.dumps(item))
     item["pricing"]["discount_ends_at"] = "2026-10-01T00:00:00Z"
     [model] = deepinfra.parse([item]).models
-    windows = sorted((str(p.effective_from), str(p.effective_until), p.rates["input"]) for p in model.prices if not p.conditions)
+    windows = sorted(
+        (str(p.effective_from), str(p.effective_until), p.rates["input"]) for p in model.prices if not p.conditions
+    )
     assert windows == [("2026-10-01", "None", D("0.75")), ("None", "2026-10-01", D("0.5625"))]
 
 
@@ -127,7 +136,12 @@ def test_azure_meter_grammar(meter, expected):
 
 @pytest.mark.parametrize(
     "meter",
-    ["gpt 4.1 dev ft training glbl Tokens", "gpt-4o-rt-aud-0603 cchd Inp DZn Tokens", "gpt-35-trb16K-Batch-125-Inp-glbl", "5.4 mystery inp Gl"],
+    [
+        "gpt 4.1 dev ft training glbl Tokens",
+        "gpt-4o-rt-aud-0603 cchd Inp DZn Tokens",
+        "gpt-35-trb16K-Batch-125-Inp-glbl",
+        "5.4 mystery inp Gl",
+    ],
 )
 def test_azure_unsupported_or_unknown_meters_are_skipped(meter):
     assert azure.parse_meter(meter) is None
@@ -160,8 +174,12 @@ def test_azure_follows_pagination():
 def bedrock_models():
     fetcher = FixtureFetcher(
         {
-            bedrock.OFFER_URL.format(offer="AmazonBedrock", region="us-east-1"): (FIXTURES / "bedrock_general_use1.json").read_text(),
-            bedrock.OFFER_URL.format(offer="AmazonBedrockFoundationModels", region="us-east-1"): (FIXTURES / "bedrock_fm_use1.json").read_text(),
+            bedrock.OFFER_URL.format(offer="AmazonBedrock", region="us-east-1"): (
+                FIXTURES / "bedrock_general_use1.json"
+            ).read_text(),
+            bedrock.OFFER_URL.format(offer="AmazonBedrockFoundationModels", region="us-east-1"): (
+                FIXTURES / "bedrock_fm_use1.json"
+            ).read_text(),
         }
     )
     return _by_id(bedrock.BedrockSource(regions=("us-east-1",)).fetch(fetcher))
@@ -170,7 +188,11 @@ def bedrock_models():
 def test_bedrock_anthropic_global_regional_and_batch(bedrock_models):
     sonnet = bedrock_models["anthropic.claude-sonnet-4-5"]
     assert _rates(sonnet, region="global") == {
-        "input": D("3"), "output": D("15"), "cached_input": D("0.3"), "cache_write": D("3.75"), "cache_write_1h": D("6"),
+        "input": D("3"),
+        "output": D("15"),
+        "cached_input": D("0.3"),
+        "cache_write": D("3.75"),
+        "cache_write_1h": D("6"),
     }
     assert _rates(sonnet, region="us-east-1")["input"] == D("3.3")  # regional endpoints: +10%
     assert _rates(sonnet, service_tier="batch", region="us-east-1")["output"] == D("8.25")

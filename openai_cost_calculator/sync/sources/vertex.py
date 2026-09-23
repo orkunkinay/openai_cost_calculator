@@ -26,10 +26,12 @@ from typing import Dict, List, Optional, Tuple
 from ...catalog.model import ModelPricing, PriceSet, Source
 from ..base import Fetcher, SourceResult
 from ..text import Table, html_tables, html_text, parse_money, slugify
-from .common import price_set
+from .common import present, price_set
 
 URL = "https://cloud.google.com/vertex-ai/generative-ai/pricing"
-SOURCE = Source(id="vertex-pricing-page", kind="official_docs", url=URL, description="Vertex AI generative AI pricing page")
+SOURCE = Source(
+    id="vertex-pricing-page", kind="official_docs", url=URL, description="Vertex AI generative AI pricing page"
+)
 
 _CLAUDE_TYPES = {
     "input": ("standard", "input"),
@@ -91,10 +93,7 @@ def _claude_model_id(name: str) -> str:
 
 def parse_claude(tables: List[Table], labels: List[str], result: SourceResult) -> None:
     if len(tables) != len(labels):
-        result.issue(
-            f"found {len(tables)} Claude tables but {len(labels)} region tabs; "
-            "only the global table was used"
-        )
+        result.issue(f"found {len(tables)} Claude tables but {len(labels)} region tabs; only the global table was used")
         tables, labels = tables[:1], ["Global"]
     rates: Dict[str, Dict[Tuple, Dict[str, Decimal]]] = {}
     conflicted = set()  # (model, region, tier) groups with contradictory rows
@@ -130,19 +129,20 @@ def parse_claude(tables: List[Table], labels: List[str], result: SourceResult) -
                     model_id,
                 )
     for model_id, buckets in rates.items():
-        sets: List[Optional[PriceSet]] = []
-        for (region, tier, minimum), bucket in sorted(buckets.items()):
+        built: List[Optional[PriceSet]] = []
+        for (region, tier, minimum), tier_rates in sorted(buckets.items()):
             if (model_id, region, tier) in conflicted:
                 continue
             if minimum:
-                bucket = {**buckets.get((region, tier, 0), {}), **bucket}
-            sets.append(price_set(bucket, service_tier=tier, region=region, min_input_tokens=minimum))
-        if not any(s is not None for s in sets):
+                tier_rates = {**buckets.get((region, tier, 0), {}), **tier_rates}
+            built.append(price_set(tier_rates, service_tier=tier, region=region, min_input_tokens=minimum))
+        sets = present(built)
+        if not sets:
             continue
         result.add(
             ModelPricing(
                 id=model_id,
-                prices=tuple(s for s in sets if s is not None),
+                prices=sets,
                 source=SOURCE.id,
                 vendor="anthropic",
                 canonical_id=f"anthropic/{model_id}",
@@ -154,7 +154,7 @@ def parse_claude(tables: List[Table], labels: List[str], result: SourceResult) -
 
 
 def _model_slug(name: str) -> str:
-    """"DeepSeek R1 (0528)" -> "deepseek-r1"; keeps version dots ("gemini-2.5-pro")."""
+    """ "DeepSeek R1 (0528)" -> "deepseek-r1"; keeps version dots ("gemini-2.5-pro")."""
     name = re.sub(r"\([^)]*\)", "", name).strip()
     return re.sub(r"\s+", "-", name.lower())
 
@@ -211,7 +211,13 @@ def _gemini_columns(header: List[str]) -> Dict[str, int]:
 
 def parse_gemini_table(table: Table, result: SourceResult, rates: Dict[Tuple, Dict[str, Decimal]]) -> None:
     header = " ".join(table.header).lower()
-    tiers = ["priority"] if "with priority" in header else ["flex", "batch"] if "with flex/batch" in header else ["standard"]
+    tiers = (
+        ["priority"]
+        if "with priority" in header
+        else ["flex", "batch"]
+        if "with flex/batch" in header
+        else ["standard"]
+    )
     columns = _gemini_columns(table.header)
     region_col = table.column("Region")
     model = kind = ""
@@ -253,12 +259,21 @@ def build_gemini(rates: Dict[Tuple, Dict[str, Decimal]], result: SourceResult) -
             if bucket == {k: base[k] for k in bucket if k in base}:
                 continue  # long-context price identical to base: no tier
             bucket = {**base, **bucket}
-        built = price_set(bucket, service_tier=tier, region=region, min_input_tokens=minimum, effective_from=start, effective_until=end)
+        built = price_set(
+            bucket,
+            service_tier=tier,
+            region=region,
+            min_input_tokens=minimum,
+            effective_from=start,
+            effective_until=end,
+        )
         if built is not None and ("input" in built.rates or "output" in built.rates):
             by_model.setdefault(model_id, []).append(built)
     for model_id, sets in by_model.items():
         result.add(
-            ModelPricing(id=model_id, prices=tuple(sets), source=SOURCE.id, vendor="google", canonical_id=f"google/{model_id}")
+            ModelPricing(
+                id=model_id, prices=tuple(sets), source=SOURCE.id, vendor="google", canonical_id=f"google/{model_id}"
+            )
         )
 
 
@@ -277,7 +292,12 @@ def parse_partner_table(table: Table, vendor: str, result: SourceResult) -> None
             continue
         model = row[0] or model
         kind = row[1].strip().lower()
-        dimension = {"input": "input", "output": "output", "cache read": "cached_input", "cached input": "cached_input"}.get(kind)
+        dimension = {
+            "input": "input",
+            "output": "output",
+            "cache read": "cached_input",
+            "cached input": "cached_input",
+        }.get(kind)
         if not model or dimension is None:
             continue
         model_id = _model_slug(model)
@@ -291,22 +311,34 @@ def parse_partner_table(table: Table, vendor: str, result: SourceResult) -> None
         if long is not None and long != value:
             _add(bucket, (_LONG_CONTEXT,), dimension, long)
     for model_id, buckets in rates.items():
-        sets = []
-        for (minimum,), bucket in sorted(buckets.items()):
+        built = []
+        for (minimum,), tier_rates in sorted(buckets.items()):
             if minimum:
-                bucket = {**buckets.get((0,), {}), **bucket}
-            sets.append(price_set(bucket, min_input_tokens=minimum))
-        sets = [s for s in sets if s is not None and "input" in s.rates]
+                tier_rates = {**buckets.get((0,), {}), **tier_rates}
+            built.append(price_set(tier_rates, min_input_tokens=minimum))
+        sets = [s for s in present(built) if "input" in s.rates]
         if sets:
             result.add(
-                ModelPricing(id=model_id, prices=tuple(sets), source=SOURCE.id, vendor=vendor, canonical_id=f"{vendor}/{model_id}")
+                ModelPricing(
+                    id=model_id,
+                    prices=tuple(sets),
+                    source=SOURCE.id,
+                    vendor=vendor,
+                    canonical_id=f"{vendor}/{model_id}",
+                )
             )
 
 
 _PARTNER_SECTIONS = {
-    "xai's grok models": "xai", "deepseek's models": "deepseek", "minimax's models": "minimax",
-    "moonshot's models": "moonshotai", "qwen's models": "qwen", "glm's models": "zai",
-    "openai's models": "openai", "meta's llama models": "meta", "mistral ai’s models": "mistral",
+    "xai's grok models": "xai",
+    "deepseek's models": "deepseek",
+    "minimax's models": "minimax",
+    "moonshot's models": "moonshotai",
+    "qwen's models": "qwen",
+    "glm's models": "zai",
+    "openai's models": "openai",
+    "meta's llama models": "meta",
+    "mistral ai’s models": "mistral",
 }
 
 
@@ -315,7 +347,9 @@ def parse(document: str) -> SourceResult:
     tables = html_tables(document)
     text = html_text(document)
 
-    claude_tables = [t for t in tables if t.headings and "Claude models" in t.headings[-1] and t.column("Type") is not None]
+    claude_tables = [
+        t for t in tables if t.headings and "Claude models" in t.headings[-1] and t.column("Type") is not None
+    ]
     labels_line = next((line for line in text.splitlines() if line.startswith("Global") and "Multi-Region" in line), "")
     labels = _TAB_LABEL.findall(labels_line)
     if claude_tables:
@@ -327,7 +361,13 @@ def parse(document: str) -> SourceResult:
     for table in tables:
         section = table.headings[-1] if table.headings else ""
         header = " ".join(table.header)
-        if section.startswith("Gemini") and table.column("Model") is not None and table.column("Type") is not None and "/1M" in header or "Token Price" in header:
+        if (
+            section.startswith("Gemini")
+            and table.column("Model") is not None
+            and table.column("Type") is not None
+            and "/1M" in header
+            or "Token Price" in header
+        ):
             if "$/M char" in " ".join(r[1] for r in table.rows if len(r) > 1):
                 continue  # character-priced legacy table
             parse_gemini_table(table, result, gemini_rates)

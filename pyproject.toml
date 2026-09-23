@@ -44,3 +44,49 @@ openai_cost_calculator = ["data/pricing/*.json", "py.typed"]
 Homepage = "https://github.com/orkunkinay/openai_cost_calculator"
 Repository = "https://github.com/orkunkinay/openai_cost_calculator"
 Issues = "https://github.com/orkunkinay/openai_cost_calculator/issues"
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+extend-exclude = ["build", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["openai_cost_calculator"]
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+
+# The provider-agnostic core is fully typed and checked strictly.
+[[tool.mypy.overrides]]
+module = [
+    "openai_cost_calculator.catalog.*",
+    "openai_cost_calculator.providers.*",
+    "openai_cost_calculator.sync.*",
+    "openai_cost_calculator.api",
+    "openai_cost_calculator.usage",
+    "openai_cost_calculator.legacy",
+]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+
+# Pre-existing integration modules predate type checking; their findings are
+# tracked for follow-up rather than silenced piecemeal.
+[[tool.mypy.overrides]]
+module = [
+    "openai_cost_calculator.adapters.*",
+    "openai_cost_calculator.proxy.*",
+    "openai_cost_calculator.cli",
+    "openai_cost_calculator.estimate",
+    "openai_cost_calculator.pricing",
+]
+ignore_errors = true

@@ -19,7 +19,7 @@ from typing import Any, Dict, Mapping, Optional
 
 from ...catalog.model import ModelPricing, Source
 from ..base import Fetcher, SourceResult, get_json
-from .common import per_token_to_per_million, price_set
+from .common import per_token_to_per_million, present, price_set
 
 URL = "https://openrouter.ai/api/v1/models"
 SOURCE = Source(
@@ -97,7 +97,7 @@ def parse(payload: Any) -> SourceResult:
         result.add(
             ModelPricing(
                 id=model_id,
-                prices=tuple(s for s in sets if s is not None),
+                prices=present(sets),
                 source=SOURCE.id,
                 vendor=vendor,
                 canonical_id=model_id.split(":", 1)[0],

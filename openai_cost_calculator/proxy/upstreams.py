@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
-
 
 PLATFORM_UPSTREAM = "https://api.openai.com/v1"
 CHATGPT_CODEX_UPSTREAM = "https://chatgpt.com/backend-api/codex"

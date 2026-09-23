@@ -7,7 +7,6 @@ import tempfile
 from pathlib import Path
 from typing import Any, Optional, Tuple
 
-
 OCC_STATUSLINE = {"type": "command", "command": "occ-cc-statusline"}
 OCC_STOP_HOOK = {"type": "command", "command": "occ-cc-stop-hook", "timeout": 5}
 

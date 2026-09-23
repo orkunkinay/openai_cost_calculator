@@ -13,7 +13,7 @@ from typing import List, Optional
 from ...catalog.model import ModelPricing, Source
 from ..base import Fetcher, SourceResult
 from ..text import clean_cell, markdown_tables, parse_money
-from .common import price_set, scale
+from .common import present, price_set, scale
 
 # --------------------------------------------------------------------------- Together AI
 
@@ -192,7 +192,7 @@ def parse_fireworks(text: str) -> SourceResult:
             result.add(
                 ModelPricing(
                     id=model,
-                    prices=tuple(s for s in sets if s is not None),
+                    prices=present(sets),
                     source=FIREWORKS_SOURCE.id,
                     canonical_id=f"{link.group('account')}/{link.group('slug')}",
                     display_name=base_name,

@@ -3,7 +3,8 @@ Pure cost arithmetic – no OpenAI–specific code lives here.
 All numbers are BIGINT-safe (ints in Python are arbitrary precision).
 """
 
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+
 from .types import CostBreakdown
 
 
@@ -16,7 +17,7 @@ def _calculate_cost_typed(usage: dict, rates: dict) -> CostBreakdown:
     """
     Internal function that performs cost calculation using Decimal arithmetic
     and returns a strongly-typed CostBreakdown dataclass.
-    
+
     Parameters
     ----------
     usage
@@ -58,7 +59,7 @@ def _calculate_cost_typed(usage: dict, rates: dict) -> CostBreakdown:
         raise ValueError("usage cached_tokens cannot exceed prompt_tokens")
 
     million = Decimal("1000000")
-    
+
     uncached_prompt = (
         normalized_usage["prompt_tokens"] - normalized_usage["cached_tokens"]
     )
@@ -88,7 +89,7 @@ def _calculate_cost_typed(usage: dict, rates: dict) -> CostBreakdown:
     completion_cost = (
         Decimal(normalized_usage["completion_tokens"]) / million
     ) * output_price
-    
+
     total = prompt_uncached_cost + prompt_cached_cost + completion_cost
 
     return CostBreakdown(
@@ -102,7 +103,7 @@ def _calculate_cost_typed(usage: dict, rates: dict) -> CostBreakdown:
 def calculate_cost_typed(usage: dict, rates: dict) -> CostBreakdown:
     """
     Calculate costs and return a strongly-typed CostBreakdown dataclass.
-    
+
     Parameters
     ----------
     usage
@@ -125,10 +126,10 @@ def calculate_cost_typed(usage: dict, rates: dict) -> CostBreakdown:
     CostBreakdown
         Strongly-typed dataclass with Decimal fields containing:
         - prompt_cost_uncached: Decimal
-        - prompt_cost_cached: Decimal  
+        - prompt_cost_cached: Decimal
         - completion_cost: Decimal
         - total_cost: Decimal
-        
+
     Examples
     --------
     >>> usage = {"prompt_tokens": 1000, "completion_tokens": 500, "cached_tokens": 100}
@@ -167,7 +168,7 @@ def calculate_cost(usage: dict, rates: dict) -> dict:
             "completion_cost"     : "...",
             "total_cost"          : "..."
         }
-        
+
     Note
     ----
     This function is maintained for backward compatibility. For new code,

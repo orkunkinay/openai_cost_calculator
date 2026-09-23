@@ -9,8 +9,8 @@ from typing import Iterable, List, Optional, Sequence
 
 from ..catalog.errors import CatalogValidationError
 from ..catalog.io import dump_provider, load_provider_file
-from ..catalog.validation import validate_provider
 from ..catalog.model import ModelPricing, ProviderPricing
+from ..catalog.validation import validate_provider
 from .base import Fetcher, Issue, PricingSource, SourceError, merge_duplicate_models
 from .diff import diff_models
 from .policy import Corroborator, Decision, coverage_problem, decide
@@ -79,7 +79,11 @@ def sync_provider(
     corroborate: Optional[Corroborator] = None,
 ) -> ProviderOutcome:
     outcome = ProviderOutcome(
-        provider=source.provider, source_id=source.source.id, source_url=source.source.url, status="unchanged", data=current
+        provider=source.provider,
+        source_id=source.source.id,
+        source_url=source.source.url,
+        status="unchanged",
+        data=current,
     )
     owned = [m for m in (current.models if current else ()) if m.source == source.source.id]
     try:
@@ -100,8 +104,14 @@ def sync_provider(
 
     fetched = [
         ModelPricing(
-            id=m.id, prices=m.prices, source=source.source.id, vendor=m.vendor, canonical_id=m.canonical_id,
-            display_name=m.display_name, aliases=m.aliases, status=m.status,
+            id=m.id,
+            prices=m.prices,
+            source=source.source.id,
+            vendor=m.vendor,
+            canonical_id=m.canonical_id,
+            display_name=m.display_name,
+            aliases=m.aliases,
+            status=m.status,
         )
         for m in result.models
     ]

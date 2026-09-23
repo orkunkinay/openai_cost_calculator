@@ -9,7 +9,7 @@ from decimal import Decimal
 import pytest
 
 from openai_cost_calculator.catalog import ModelPricing, PriceSet, ProviderPricing, Source
-from openai_cost_calculator.catalog.io import dump_provider, load_provider_file, write_provider_file
+from openai_cost_calculator.catalog.io import load_provider_file, write_provider_file
 from openai_cost_calculator.sync.base import FixtureFetcher, SourceError, SourceResult
 from openai_cost_calculator.sync.report import overall_status, render_json, render_markdown
 from openai_cost_calculator.sync.runner import REVERIFY_DAYS, run_sync, sync_provider
@@ -43,7 +43,9 @@ class FakeSource:
 
 
 def _current(*models, verified_at=date(2026, 9, 1), extra_sources=()):
-    return ProviderPricing(provider="acme", sources=(SOURCE, *extra_sources), models=tuple(models), verified_at=verified_at)
+    return ProviderPricing(
+        provider="acme", sources=(SOURCE, *extra_sources), models=tuple(models), verified_at=verified_at
+    )
 
 
 def _sync(result, current, **kw):
@@ -99,7 +101,9 @@ def test_non_official_sources_cannot_add_models():
     class Aggregator(FakeSource):
         source = Source(id="acme-api", kind="aggregator", url="https://agg.example")
 
-    outcome = sync_provider(Aggregator(SourceResult([_m("a"), _m("new")])), _current(_m("a")), FixtureFetcher({}), today=TODAY)
+    outcome = sync_provider(
+        Aggregator(SourceResult([_m("a"), _m("new")])), _current(_m("a")), FixtureFetcher({}), today=TODAY
+    )
     assert outcome.needs_review[0].reasons == ["new model from a non-official source"]
 
 
@@ -110,7 +114,11 @@ def test_corroboration_blocks_changes_an_independent_source_disputes():
     outcome = _sync(SourceResult([_m("a", "1.2"), _m("b")]), _current(_m("a"), _m("b")), corroborate=still_old)
     assert "independent source still reports the old price" in outcome.needs_review[0].reasons[0]
 
-    agrees = _sync(SourceResult([_m("a", "1.2"), _m("b")]), _current(_m("a"), _m("b")), corroborate=lambda p, m: {"input": D("1.2")})
+    agrees = _sync(
+        SourceResult([_m("a", "1.2"), _m("b")]),
+        _current(_m("a"), _m("b")),
+        corroborate=lambda p, m: {"input": D("1.2")},
+    )
     assert agrees.status == "updated"
     assert "corroborated" in agrees.applied[0].notes[0]
 
@@ -149,10 +157,14 @@ def test_run_sync_writes_only_real_changes_and_reports(tmp_path):
     assert unchanged[0].status == "unchanged" and not unchanged[0].written
     assert (tmp_path / "acme.json").read_text() == before
 
-    dry = run_sync([FakeSource(SourceResult([_m("a", "1.2")]))], tmp_path, FixtureFetcher({}), today=TODAY, dry_run=True)
+    dry = run_sync(
+        [FakeSource(SourceResult([_m("a", "1.2")]))], tmp_path, FixtureFetcher({}), today=TODAY, dry_run=True
+    )
     assert dry[0].status == "updated" and not dry[0].written
 
-    outcomes = run_sync([FakeSource(SourceResult([_m("a", "1.2"), _m("z", "99", "99")]))], tmp_path, FixtureFetcher({}), today=TODAY)
+    outcomes = run_sync(
+        [FakeSource(SourceResult([_m("a", "1.2"), _m("z", "99", "99")]))], tmp_path, FixtureFetcher({}), today=TODAY
+    )
     assert outcomes[0].written
     assert load_provider_file(tmp_path / "acme.json").models_by_id()["a"].prices[0].rates["input"] == D("1.2")
 
@@ -162,7 +174,12 @@ def test_run_sync_writes_only_real_changes_and_reports(tmp_path):
     report = json.loads(render_json(outcomes, today=TODAY))
     assert report["status"] == "updated"
     assert report["providers"][0]["decisions"][0]["applied"] is True
-    assert overall_status([*outcomes, sync_provider(FakeSource(error=SourceError("x")), None, FixtureFetcher({}), today=TODAY)]) == "failed"
+    assert (
+        overall_status(
+            [*outcomes, sync_provider(FakeSource(error=SourceError("x")), None, FixtureFetcher({}), today=TODAY)]
+        )
+        == "failed"
+    )
 
 
 def test_fixture_fetcher_reports_missing_fixture():
@@ -175,7 +192,15 @@ def test_fixture_fetcher_reports_missing_fixture():
 
 @pytest.mark.parametrize(
     "cell,value",
-    [("$1.25", D("1.25")), ("\\$0.075", D("0.075")), ("$3 / MTok", D("3")), ("Free", D(0)), ("-", None), ("—", None), ("$1,000.50", D("1000.50"))],
+    [
+        ("$1.25", D("1.25")),
+        ("\\$0.075", D("0.075")),
+        ("$3 / MTok", D("3")),
+        ("Free", D(0)),
+        ("-", None),
+        ("—", None),
+        ("$1,000.50", D("1000.50")),
+    ],
 )
 def test_parse_money(cell, value):
     assert parse_money(cell) == value

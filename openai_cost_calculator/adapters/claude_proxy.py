@@ -35,7 +35,6 @@ from openai_cost_calculator.adapters.common import (
     record_jsonl_diagnostic,
 )
 
-
 DEFAULT_PROXY_URL = "http://127.0.0.1:8100"
 UNAVAILABLE = f"{MONEY} OCC cost unavailable {SEP} inspect diagnostics"
 

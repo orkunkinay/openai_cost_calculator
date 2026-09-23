@@ -34,9 +34,7 @@ def validate_price_set(price_set: PriceSet, *, where: str) -> None:
             )
     for key, value in price_set.conditions.items():
         if key not in CONDITION_KEYS:
-            raise CatalogValidationError(
-                f"{where}: unknown condition {key!r}; allowed: {', '.join(CONDITION_KEYS)}"
-            )
+            raise CatalogValidationError(f"{where}: unknown condition {key!r}; allowed: {', '.join(CONDITION_KEYS)}")
         if not isinstance(value, str) or not value:
             raise CatalogValidationError(f"{where}: condition {key!r} must be a non-empty string")
     if (
@@ -78,8 +76,7 @@ def validate_model(model: ModelPricing, *, provider: str) -> None:
             for second in sets[i + 1 :]:
                 if first.min_input_tokens == second.min_input_tokens and _windows_overlap(first, second):
                     raise CatalogValidationError(
-                        f"{where}: {label} has overlapping price sets at "
-                        f"min_input_tokens={first.min_input_tokens}"
+                        f"{where}: {label} has overlapping price sets at min_input_tokens={first.min_input_tokens}"
                     )
 
 
@@ -87,9 +84,7 @@ def validate_provider(data: ProviderPricing) -> None:
     source_ids: Set[str] = set()
     for source in data.sources:
         if source.kind not in SOURCE_KINDS:
-            raise CatalogValidationError(
-                f"{data.provider}: source {source.id!r} kind must be one of {SOURCE_KINDS}"
-            )
+            raise CatalogValidationError(f"{data.provider}: source {source.id!r} kind must be one of {SOURCE_KINDS}")
         if source.id in source_ids:
             raise CatalogValidationError(f"{data.provider}: duplicate source id {source.id!r}")
         source_ids.add(source.id)
@@ -98,9 +93,7 @@ def validate_provider(data: ProviderPricing) -> None:
     for model in data.models:
         validate_model(model, provider=data.provider)
         if model.source not in source_ids:
-            raise CatalogValidationError(
-                f"{data.provider}/{model.id}: unknown source {model.source!r}"
-            )
+            raise CatalogValidationError(f"{data.provider}/{model.id}: unknown source {model.source!r}")
         keys = [identifier.lower() for identifier in model.identifiers]
         if len(set(keys)) != len(keys):
             raise CatalogValidationError(f"{data.provider}/{model.id}: duplicate alias")
@@ -108,8 +101,7 @@ def validate_provider(data: ProviderPricing) -> None:
             owner = seen.get(key)
             if owner is not None:
                 raise CatalogValidationError(
-                    f"{data.provider}: identifier {identifier!r} is used by both "
-                    f"{owner!r} and {model.id!r}"
+                    f"{data.provider}: identifier {identifier!r} is used by both {owner!r} and {model.id!r}"
                 )
             seen[key] = model.id
 

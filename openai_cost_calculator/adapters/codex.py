@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -12,7 +13,6 @@ import urllib.request
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Optional
-import re
 
 from openai_cost_calculator.adapters.common import (
     MONEY,

@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ...catalog.model import ModelPricing, Source
 from ..base import Fetcher, SourceResult, get_json
-from .common import price_set
+from .common import present, price_set
 
 URL = "https://prices.azure.com/api/retail/prices"
 REGION = "eastus2"
@@ -39,24 +39,84 @@ SOURCE = Source(
 LONG_CONTEXT_THRESHOLD = 272_000
 
 _DEPLOYMENT = {
-    "gl": "global", "glb": "global", "glbl": "global", "global": "global",
-    "dz": "data-zone", "dzn": "data-zone", "dzone": "data-zone", "datazone": "data-zone",
-    "regn": "regional", "regnl": "regional", "rgnl": "regional", "regional": "regional",
+    "gl": "global",
+    "glb": "global",
+    "glbl": "global",
+    "global": "global",
+    "dz": "data-zone",
+    "dzn": "data-zone",
+    "dzone": "data-zone",
+    "datazone": "data-zone",
+    "regn": "regional",
+    "regnl": "regional",
+    "rgnl": "regional",
+    "regional": "regional",
 }
-_DIRECTION = {"inp": "input", "inpt": "input", "input": "input", "in": "input",
-              "outp": "output", "opt": "output", "out": "output", "output": "output", "outpt": "output"}
+_DIRECTION = {
+    "inp": "input",
+    "inpt": "input",
+    "input": "input",
+    "in": "input",
+    "outp": "output",
+    "opt": "output",
+    "out": "output",
+    "output": "output",
+    "outpt": "output",
+}
 _CACHED = {"cd", "cached", "cchd", "ccchd", "cched"}
 _WRITE = {"wr"}
-_TIER = {"batch": "batch", "pp": "priority", "priority": "priority", "fl": "flex", "flex": "flex",
-         "std": "standard", "standard": "standard"}
+_TIER = {
+    "batch": "batch",
+    "pp": "priority",
+    "priority": "priority",
+    "fl": "flex",
+    "flex": "flex",
+    "std": "standard",
+    "standard": "standard",
+}
 _CONTEXT = {"longco": "long", "loco": "long", "lngco": "long", "shortco": "short", "shco": "short"}
 _NOISE = {"tokens", "token", "1m", "1k"}
 #: Tokens that identify meters outside the text-token catalog.
 _UNSUPPORTED = {
-    "ft", "dev", "training", "trng", "grader", "grdr", "mdl", "mdel", "model", "rft", "aud", "audio",
-    "rt", "realtime", "rtime", "realtimeprvw", "prvw", "preview", "txt", "text", "transcribe", "tts", "img",
-    "image", "embedding", "embed", "computer", "use", "search", "file", "tool", "calls", "deep", "research",
-    "tkn", "hosting", "provisioned", "data", "zone",
+    "ft",
+    "dev",
+    "training",
+    "trng",
+    "grader",
+    "grdr",
+    "mdl",
+    "mdel",
+    "model",
+    "rft",
+    "aud",
+    "audio",
+    "rt",
+    "realtime",
+    "rtime",
+    "realtimeprvw",
+    "prvw",
+    "preview",
+    "txt",
+    "text",
+    "transcribe",
+    "tts",
+    "img",
+    "image",
+    "embedding",
+    "embed",
+    "computer",
+    "use",
+    "search",
+    "file",
+    "tool",
+    "calls",
+    "deep",
+    "research",
+    "tkn",
+    "hosting",
+    "provisioned",
+    "data",
+    "zone",
 }
 _NAME_WORDS = {"mini", "nano", "pro", "chat", "codex", "max", "luna", "sol", "terra", "astra", "cyber", "latest"}
 _GPT_VERSION = re.compile(r"^(?P<major>\d)(?:\.(?P<minor>\d))?$|^(?P<glued>[56])(?P<gminor>\d)(?P<word>[a-z]*)$")
@@ -182,13 +242,13 @@ def parse(items: List[Dict[str, Any]]) -> SourceResult:
     for (model, region, tier, context, dimension), (_, amount) in latest.items():
         grouped.setdefault(model, {}).setdefault((region, tier, context), {})[dimension] = amount
     for model, groups in sorted(grouped.items()):
-        sets = []
+        built = []
         for (region, tier, context), rates in sorted(groups.items()):
             if "input" not in rates or "output" not in rates:
                 continue  # incomplete meter family: not enough to price a request
             minimum = LONG_CONTEXT_THRESHOLD if context == "long" else 0
-            sets.append(price_set(rates, service_tier=tier, region=region, min_input_tokens=minimum))
-        sets = [s for s in sets if s is not None]
+            built.append(price_set(rates, service_tier=tier, region=region, min_input_tokens=minimum))
+        sets = list(present(built))
         # A long-context tier needs its short-context base for the same conditions.
         bases = {s.condition_key for s in sets if s.min_input_tokens == 0}
         sets = [s for s in sets if s.min_input_tokens == 0 or s.condition_key in bases]

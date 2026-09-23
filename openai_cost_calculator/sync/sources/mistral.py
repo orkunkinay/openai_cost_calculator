@@ -26,7 +26,7 @@ from typing import Dict, List, Optional
 from ...catalog.model import ModelPricing, Source
 from ..base import Fetcher, SourceResult
 from ..text import html_text, slugify
-from .common import price_set, scale
+from .common import present, price_set, scale
 
 URL = "https://mistral.ai/pricing/api/"
 SOURCE = Source(id="mistral-pricing-page", kind="official_docs", url=URL, description="Mistral AI API pricing page")
@@ -84,7 +84,7 @@ def _card_name(lines: List[str], price_index: int) -> Optional[str]:
 
 
 def model_id(display_name: str) -> str:
-    """"Ministral 3 (8B)" -> "ministral-3-8b"."""
+    """ "Ministral 3 (8B)" -> "ministral-3-8b"."""
     return slugify(display_name)
 
 
@@ -134,7 +134,9 @@ def parse(document: str) -> SourceResult:
         if regional:
             factor = 1 + Decimal(regional.group("pct")) / 100
             sets += [
-                price_set(scale(dict(s.rates), factor), service_tier=s.conditions.get("service_tier", "standard"), region="eu")
+                price_set(
+                    scale(dict(s.rates), factor), service_tier=s.conditions.get("service_tier", "standard"), region="eu"
+                )
                 for s in list(sets)
                 if s is not None
             ]
@@ -142,7 +144,7 @@ def parse(document: str) -> SourceResult:
         result.add(
             ModelPricing(
                 id=mid,
-                prices=tuple(s for s in sets if s is not None),
+                prices=present(sets),
                 source=SOURCE.id,
                 vendor="mistral" if first_party else None,
                 canonical_id=f"mistral/{mid}" if first_party else None,

@@ -27,7 +27,12 @@ def test_openai_chat_completions_subtracts_cached_and_audio():
     extracted = extract_usage(payload)
     assert extracted.format == "openai" and extracted.model == "gpt-4o-2024-08-06"
     assert extracted.usage == Usage(
-        input_tokens=700, input_audio_tokens=100, cached_input_tokens=200, output_tokens=210, reasoning_tokens=50, output_audio_tokens=40
+        input_tokens=700,
+        input_audio_tokens=100,
+        cached_input_tokens=200,
+        output_tokens=210,
+        reasoning_tokens=50,
+        output_audio_tokens=40,
     )
 
 
@@ -48,13 +53,26 @@ def test_openai_responses_api_objects_with_cache_writes():
 
 
 def test_openrouter_reported_cost_is_preserved():
-    extracted = extract_usage({"model": "anthropic/claude-sonnet-4.5", "usage": {"prompt_tokens": 10, "completion_tokens": 5, "cost": 0.000105}})
+    extracted = extract_usage(
+        {
+            "model": "anthropic/claude-sonnet-4.5",
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "cost": 0.000105},
+        }
+    )
     assert extracted.reported_cost == Decimal("0.000105")
 
 
 def test_deepseek_cache_hit_and_miss():
     usage = extract_usage(
-        {"model": "deepseek-flash", "usage": {"prompt_tokens": 100, "completion_tokens": 7, "prompt_cache_hit_tokens": 64, "prompt_cache_miss_tokens": 36}}
+        {
+            "model": "deepseek-flash",
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 7,
+                "prompt_cache_hit_tokens": 64,
+                "prompt_cache_miss_tokens": 36,
+            },
+        }
     )
     assert usage.format == "deepseek"
     assert usage.usage == Usage(input_tokens=36, cached_input_tokens=64, output_tokens=7)
@@ -77,7 +95,12 @@ def test_anthropic_messages_cache_ttl_split_and_web_search():
     assert extracted.format == "anthropic"
     # 100 unattributed write tokens are billed at the default 5-minute rate.
     assert extracted.usage == Usage(
-        input_tokens=50, cached_input_tokens=1_000, cache_write_tokens=300, cache_write_1h_tokens=400, output_tokens=90, web_search_calls=2
+        input_tokens=50,
+        cached_input_tokens=1_000,
+        cache_write_tokens=300,
+        cache_write_1h_tokens=400,
+        output_tokens=90,
+        web_search_calls=2,
     )
 
 
@@ -97,12 +120,19 @@ def test_gemini_usage_metadata_reports_thoughts_and_splits_audio():
     extracted = extract_usage(payload)
     assert extracted.format == "gemini" and extracted.model == "gemini-2.5-flash"
     assert extracted.usage == Usage(
-        input_tokens=410, input_audio_tokens=200, cached_input_tokens=300, cached_input_audio_tokens=100, output_tokens=120, reasoning_tokens=80
+        input_tokens=410,
+        input_audio_tokens=200,
+        cached_input_tokens=300,
+        cached_input_audio_tokens=100,
+        output_tokens=120,
+        reasoning_tokens=80,
     )
 
 
 def test_bedrock_converse_usage():
-    extracted = extract_usage({"usage": {"inputTokens": 20, "outputTokens": 5, "cacheReadInputTokens": 100, "cacheWriteInputTokens": 30}})
+    extracted = extract_usage(
+        {"usage": {"inputTokens": 20, "outputTokens": 5, "cacheReadInputTokens": 100, "cacheWriteInputTokens": 30}}
+    )
     assert extracted.format == "bedrock-converse"
     assert extracted.usage == Usage(input_tokens=20, cached_input_tokens=100, cache_write_tokens=30, output_tokens=5)
 
@@ -111,7 +141,10 @@ def test_bedrock_converse_usage():
     "payload,message",
     [
         ({"model": "x"}, "no usage"),
-        ({"usage": {"prompt_tokens": 10, "completion_tokens": 1, "prompt_tokens_details": {"cached_tokens": 11}}}, "exceeds"),
+        (
+            {"usage": {"prompt_tokens": 10, "completion_tokens": 1, "prompt_tokens_details": {"cached_tokens": 11}}},
+            "exceeds",
+        ),
         ({"usage": {"prompt_tokens": -1, "completion_tokens": 1}}, "non-negative"),
         ({"usage": {"prompt_tokens": "10", "completion_tokens": 1}}, "integer"),
         ({"usage": {"weird": 1}}, "unrecognized"),

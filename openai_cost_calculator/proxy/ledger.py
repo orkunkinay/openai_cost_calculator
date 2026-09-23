@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import sqlite3
 import tempfile
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
-
 
 SCHEMA_VERSION = 1
 

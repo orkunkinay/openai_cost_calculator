@@ -97,7 +97,7 @@ def _validate(args: argparse.Namespace) -> int:
 
     try:
         catalog = _catalog(args.data_dir)
-        models = sum(len(catalog.get(p).models) for p in catalog.provider_ids())  # type: ignore[union-attr]
+        models = sum(len(data.models) for data in map(catalog.get, catalog.provider_ids()) if data)
         rows = validate_pricing_file(args.file)
     except (OSError, ValueError, PricingError) as exc:
         print(f"pricing validation failed: {exc}", file=sys.stderr)
@@ -129,20 +129,28 @@ def _cost(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     if args.json:
-        print(json.dumps({
-            "provider": cost.provider,
-            "model": cost.resolved_model,
-            "total_usd": format_decimal(cost.total),
-            "conditions": dict(cost.conditions),
-            "items": {i.dimension: format_decimal(i.cost) for i in cost.items},
-            "assumptions": list(cost.assumptions),
-            "source": cost.source_url,
-            "verified_at": cost.verified_at.isoformat() if cost.verified_at else None,
-        }, indent=2))
+        print(
+            json.dumps(
+                {
+                    "provider": cost.provider,
+                    "model": cost.resolved_model,
+                    "total_usd": format_decimal(cost.total),
+                    "conditions": dict(cost.conditions),
+                    "items": {i.dimension: format_decimal(i.cost) for i in cost.items},
+                    "assumptions": list(cost.assumptions),
+                    "source": cost.source_url,
+                    "verified_at": cost.verified_at.isoformat() if cost.verified_at else None,
+                },
+                indent=2,
+            )
+        )
         return 0
     print(f"{cost.provider} / {cost.resolved_model}: ${cost.rounded(8)}")
     for item in cost.items:
-        print(f"  {item.dimension:<18} {item.quantity:>12,} x ${format_decimal(item.unit_price)}/{item.unit} = ${format_decimal(item.cost)}")
+        print(
+            f"  {item.dimension:<18} {item.quantity:>12,} x "
+            f"${format_decimal(item.unit_price)}/{item.unit} = ${format_decimal(item.cost)}"
+        )
     conditions = ", ".join(f"{k}={v}" for k, v in cost.conditions.items())
     print(f"  conditions: {conditions}")
     for assumption in cost.assumptions:
@@ -209,7 +217,8 @@ def _sync(args: argparse.Namespace) -> int:
         detail = f" - {outcome.error}" if outcome.error else ""
         print(
             f"{outcome.provider:<11} {outcome.status:<13} fetched={outcome.fetched_models:<4} "
-            f"applied={len(outcome.applied):<3} review={len(outcome.needs_review) + len(outcome.blocking_issues)}{detail}"
+            f"applied={len(outcome.applied):<3} "
+            f"review={len(outcome.needs_review) + len(outcome.blocking_issues)}{detail}"
         )
     status = overall_status(outcomes)
     return {"failed": EXIT_SOURCE_FAILED, "needs_review": EXIT_REVIEW}.get(status, 0)

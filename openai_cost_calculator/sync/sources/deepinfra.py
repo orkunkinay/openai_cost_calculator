@@ -115,7 +115,9 @@ def _sets_for(model: str, pricing: Dict[str, Any], result: SourceResult) -> List
             (tier, scale(effective, multiplier)) for tier, multiplier in tier_multipliers.items() if multiplier
         ]
         for tier, tier_rates in variants:
-            sets.append(price_set(_quantize(tier_rates), service_tier=tier, min_input_tokens=minimum, effective_until=until))
+            sets.append(
+                price_set(_quantize(tier_rates), service_tier=tier, min_input_tokens=minimum, effective_until=until)
+            )
             if until is not None and discount:
                 list_rates = _quantize(scale(tier_rates, 1 / (1 - discount)))
                 sets.append(price_set(list_rates, service_tier=tier, min_input_tokens=minimum, effective_from=until))
