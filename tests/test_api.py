@@ -241,3 +241,18 @@ def test_listing_and_cross_provider_comparison():
     assert get_model_pricing("bedrock", "global.anthropic.claude-sonnet-4-5-v1:0", catalog=CATALOG).vendor == "anthropic"
     costs = compare_costs("anthropic/claude-sonnet-4-5", usage=Usage(input_tokens=1_000_000), catalog=CATALOG)
     assert [(c.provider, c.total) for c in costs] == [("anthropic", D("3")), ("bedrock", D("3"))]
+
+
+def test_estimate_response_cost_separates_wire_format_from_billing_provider():
+    from openai_cost_calculator.api import estimate_response_cost
+
+    anthropic_message = {
+        "type": "message",
+        "model": "claude-sonnet-4-5-20250929",
+        "usage": {"input_tokens": 1_000_000, "cache_read_input_tokens": 0, "output_tokens": 0},
+    }
+    first_party = estimate_response_cost(anthropic_message, provider="anthropic", catalog=CATALOG)
+    on_bedrock = estimate_response_cost(anthropic_message, provider="bedrock", region="us-east-1", catalog=CATALOG)
+    assert (first_party.total, on_bedrock.total) == (D("3"), D("3.3"))
+    with pytest.raises(PricingError, match="pass model="):
+        estimate_response_cost({"usage": {"inputTokens": 1, "outputTokens": 1}}, provider="bedrock", catalog=CATALOG)

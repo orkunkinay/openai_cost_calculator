@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
-from typing import Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Any, Iterable, List, Optional, Sequence, Tuple, Union
 
 from .catalog import (
     Cost,
@@ -34,6 +34,7 @@ from .catalog import (
 )
 from .catalog.errors import UnknownProviderError
 from .providers import ProviderSpec, get_provider, iter_providers
+from .usage import extract_usage
 
 When = Union[datetime, date, None]
 
@@ -215,3 +216,37 @@ def compare_costs(
         except PricingError:
             continue
     return sorted(results, key=lambda cost: cost.total)
+
+
+def estimate_response_cost(
+    response: Any,
+    *,
+    provider: str,
+    model: Optional[str] = None,
+    service_tier: Optional[str] = None,
+    region: Optional[str] = None,
+    period: Optional[str] = None,
+    at: When = None,
+    catalog: Optional[PricingCatalog] = None,
+) -> Cost:
+    """Price a provider response (SDK object or JSON dict) in any supported usage format.
+
+    ``provider`` is the *billing* provider: the same Anthropic-format response
+    costs differently on ``anthropic``, ``bedrock`` and ``vertex``.  ``model``
+    overrides the response's model field (useful when an Azure deployment name
+    or a proxy hides the underlying model).
+    """
+    extracted = extract_usage(response)
+    model_id = model or extracted.model
+    if not model_id:
+        raise PricingError("response does not name its model; pass model=...")
+    return calculate_cost(
+        provider,
+        model_id,
+        usage=extracted.usage,
+        service_tier=service_tier,
+        region=region,
+        period=period,
+        at=at,
+        catalog=catalog,
+    )
