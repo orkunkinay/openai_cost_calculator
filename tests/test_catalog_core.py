@@ -334,6 +334,17 @@ def test_model_index_lookup_order_and_suggestions():
         index.resolve("claude-sonet-4-5", ["claude-sonet-4-5"])
 
 
+def test_model_index_prefers_the_base_offering_over_variants_sharing_a_canonical_id():
+    index = ModelIndex(
+        _provider(
+            _model("anthropic/claude-sonnet-4.5", canonical_id="anthropic/claude-sonnet-4.5"),
+            _model("anthropic/claude-sonnet-4.5:batch", canonical_id="anthropic/claude-sonnet-4.5"),
+        )
+    )
+    assert index.find(["anthropic/claude-sonnet-4-5"]).id == "anthropic/claude-sonnet-4.5"
+    assert index.find(["anthropic/claude-sonnet-4.5:batch"]).id == "anthropic/claude-sonnet-4.5:batch"
+
+
 def test_model_index_refuses_to_guess_between_models():
     index = ModelIndex(_provider(_model("gpt-4-1", canonical_id="x/a"), _model("gpt-41", canonical_id="x/b")))
     with pytest.raises(AmbiguousModelError):

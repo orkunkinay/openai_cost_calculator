@@ -70,7 +70,7 @@ message = {  # an Anthropic Messages API response (dict or SDK object)
 }
 estimate_response_cost(message, provider="anthropic").total                   # Decimal('3')
 estimate_response_cost(message, provider="bedrock").total                     # Decimal('3')    global endpoint
-estimate_response_cost(message, provider="vertex", region="us-east5").total  # Decimal('6.60') regional, >200K tier
+estimate_response_cost(message, provider="vertex", region="us-east5").total  # Decimal('6.6')  regional, >200K tier
 ```
 
 ---
@@ -114,6 +114,17 @@ If you have an OpenAI-style total that *includes* cached tokens, convert it expl
 
 ```python
 Usage.from_totals(total_input_tokens=prompt_tokens, cached_input_tokens=cached, output_tokens=completion)
+```
+
+### Long-context tiers
+
+Several providers charge a higher rate for *every* token once a request's input crosses a
+threshold (OpenAI ≥272K, Gemini and Vertex >200K). Cached and cache-write tokens count toward
+the threshold. `cost.min_input_tokens` shows which tier applied:
+
+```python
+cost = calculate_cost("openai", "gpt-5.5", input_tokens=300_000)
+cost.total, cost.min_input_tokens   # (Decimal('3'), 272000) — $10/1M instead of $5/1M
 ```
 
 ### Conditions: tiers, regions, time

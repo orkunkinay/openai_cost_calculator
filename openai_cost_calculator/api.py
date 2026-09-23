@@ -192,7 +192,12 @@ def list_models(
     """``(provider_id, model)`` pairs, optionally for one provider."""
     cat = _catalog(catalog)
     ids: Iterable[str] = [get_provider(provider).id] if provider else cat.provider_ids()
-    return [(pid, model) for pid in ids if cat.get(pid) for model in cat.get(pid).models]  # type: ignore[union-attr]
+    pairs: List[Tuple[str, ModelPricing]] = []
+    for pid in ids:
+        data = cat.get(pid)
+        if data is not None:
+            pairs.extend((pid, model) for model in data.models)
+    return pairs
 
 
 def compare_costs(

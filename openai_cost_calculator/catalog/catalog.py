@@ -57,17 +57,28 @@ class ModelIndex:
                 return model
         for candidate in candidates:
             matches = self._canonical.get(candidate.lower(), [])
-            if len(matches) == 1:
-                return matches[0]
-            if len(matches) > 1:
-                raise AmbiguousModelError(self.provider, candidate, sorted(m.id for m in matches))
+            if matches:
+                return self._one(candidate, matches)
         for candidate in candidates:
             ids = self._compact.get(compact_key(candidate), set())
-            if len(ids) == 1:
-                return self._by_id[next(iter(ids))]
-            if len(ids) > 1:
-                raise AmbiguousModelError(self.provider, candidate, sorted(ids))
+            if ids:
+                return self._one(candidate, [self._by_id[i] for i in ids])
         return None
+
+    def _one(self, candidate: str, matches: List[ModelPricing]) -> ModelPricing:
+        """Pick the single offering for ``candidate`` or raise.
+
+        Variants often share a base model's canonical id (OpenRouter's
+        ``x`` and ``x:batch``); the entry whose own identifier matches the
+        query is then the intended one.
+        """
+        if len(matches) == 1:
+            return matches[0]
+        key = compact_key(candidate.split("/", 1)[-1])
+        own = [m for m in matches if any(compact_key(i.split("/", 1)[-1]) == key for i in m.identifiers)]
+        if len(own) == 1:
+            return own[0]
+        raise AmbiguousModelError(self.provider, candidate, sorted(m.id for m in matches))
 
     def resolve(self, model: str, candidates: Sequence[str]) -> ModelPricing:
         found = self.find(candidates)
