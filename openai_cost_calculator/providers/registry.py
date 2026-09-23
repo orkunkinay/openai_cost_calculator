@@ -130,6 +130,8 @@ PROVIDERS: Tuple[ProviderSpec, ...] = (
         id="openai",
         display_name="OpenAI",
         pricing_url="https://developers.openai.com/api/docs/pricing",
+        # Priority processing was renamed Fast mode; the API accepts both names.
+        service_tier_aliases={"fast": "priority"},
     ),
     ProviderSpec(
         id="anthropic",
@@ -156,6 +158,7 @@ PROVIDERS: Tuple[ProviderSpec, ...] = (
         pricing_url="https://prices.azure.com/api/retail/prices",
         aliases=("azure-openai", "azure-ai", "azure-foundry"),
         default_regions=("global",),
+        service_tier_aliases={"fast": "priority"},
         parse_model=parse_azure_model,
         notes="region is the deployment type: 'global', 'data-zone', or an Azure region for regional deployments.",
     ),

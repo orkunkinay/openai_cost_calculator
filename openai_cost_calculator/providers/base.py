@@ -97,6 +97,8 @@ class ProviderSpec:
     parse_model: Optional[Callable[[str], ModelHints]] = None
     #: Conditions implied by the request time (e.g. peak/off-peak).
     time_conditions: Optional[Callable[[datetime], Tuple[Preferences, Mapping[str, str]]]] = None
+    #: Provider vocabulary for service tiers (OpenAI: "fast" is "priority").
+    service_tier_aliases: Mapping[str, str] = field(default_factory=dict)
     #: Acceptable region values for a caller-chosen region, most specific first
     #: (Vertex: ``us-central1`` falls back to the "regional" price).
     expand_region: Optional[Callable[[str], Tuple[str, ...]]] = None

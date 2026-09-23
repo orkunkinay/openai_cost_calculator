@@ -141,6 +141,8 @@ def calculate_cost(
         preferences.update(derived)
         notes.update(time_notes)
 
+    if service_tier is not None:
+        service_tier = spec.service_tier_aliases.get(service_tier, service_tier)
     explicit = set()
     for key, value in (("service_tier", service_tier), ("region", region), ("period", period)):
         if value is not None:

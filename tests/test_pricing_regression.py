@@ -177,6 +177,12 @@ def test_documented_prices_end_to_end(catalog, provider, model, kwargs, expected
     assert cost.total == expected
 
 
+def test_openai_fast_mode_is_the_priority_tier(catalog):
+    fast = calculate_cost("openai", "gpt-4o", input_tokens=1_000_000, service_tier="fast", catalog=catalog, at=ON)
+    priority = calculate_cost("openai", "gpt-4o", input_tokens=1_000_000, service_tier="priority", catalog=catalog, at=ON)
+    assert fast.total == priority.total == D("4.25")
+
+
 def test_vertex_regional_gemini_uses_non_global_price(catalog):
     cost = calculate_cost(
         "vertex", "gemini-3.8-flash", input_tokens=1_000_000, region="us-central1", catalog=catalog, at=ON
