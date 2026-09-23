@@ -73,6 +73,23 @@ def parse_bedrock_model(model: str) -> ModelHints:
     return ModelHints(candidates=tuple(dict.fromkeys(candidates)), preferences=preferences, notes=notes)
 
 
+# --------------------------------------------------------------------------- Azure
+
+_ISO_SNAPSHOT = re.compile(r"^(?P<base>.+)-\d{4}-(?P<month>\d{2})-(?P<day>\d{2})$")
+
+
+def parse_azure_model(model: str) -> ModelHints:
+    """Azure prices snapshots as ``gpt-4o-0806``; APIs report ``gpt-4o-2024-08-06``."""
+    candidates: List[str] = []
+    for candidate in generic_candidates(model):
+        candidates.append(candidate)
+        snapshot = _ISO_SNAPSHOT.match(candidate)
+        if snapshot:
+            candidates.append(f"{snapshot.group('base')}-{snapshot.group('month')}{snapshot.group('day')}")
+    # The MMDD form precedes the undated family, so a priced snapshot wins.
+    return ModelHints(candidates=tuple(dict.fromkeys(candidates)))
+
+
 # --------------------------------------------------------------------------- DeepSeek
 
 
@@ -121,6 +138,7 @@ PROVIDERS: Tuple[ProviderSpec, ...] = (
         pricing_url="https://prices.azure.com/api/retail/prices",
         aliases=("azure-openai", "azure-ai", "azure-foundry"),
         default_regions=("global",),
+        parse_model=parse_azure_model,
         notes="region is the deployment type: 'global', 'data-zone', or an Azure region for regional deployments.",
     ),
     ProviderSpec(
