@@ -4,14 +4,21 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openai_cost_calculator"
-version = "1.2.0"
-description = "A library to estimate OpenAI API costs based on token usage."
+version = "1.3.0"
+description = "Exact, auditable LLM API cost calculation across 13 providers, with prices synced from official sources."
 authors = [
     { name = "Orkun Kınay, Murat Barkın Kınay", email = "orkunkinay@sabanciuniv.edu" }
 ]
 license = { text = "MIT" }
 readme = "README.md"
 requires-python = ">=3.9"
+keywords = ["llm", "pricing", "cost", "openai", "anthropic", "gemini", "bedrock", "vertex", "azure", "openrouter"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Typing :: Typed",
+]
 dependencies = [
     "requests",
     "tomli; python_version < '3.11'",
