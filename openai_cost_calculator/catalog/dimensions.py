@@ -71,8 +71,6 @@ _ALL: Tuple[Dimension, ...] = (
 )
 
 DIMENSIONS: Dict[str, Dimension] = {dimension.name: dimension for dimension in _ALL}
-TOKEN_DIMENSIONS: Tuple[str, ...] = tuple(d.name for d in _ALL if d.unit_size == PER_MILLION)
-INPUT_DIMENSIONS: Tuple[str, ...] = tuple(d.name for d in _ALL if d.side == "input")
 
 
 def get_dimension(name: str) -> Dimension:

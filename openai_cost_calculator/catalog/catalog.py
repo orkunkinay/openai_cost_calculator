@@ -115,12 +115,6 @@ class PricingCatalog:
     def get(self, provider: str) -> Optional[ProviderPricing]:
         return self._providers.get(provider)
 
-    def replace(self, data: ProviderPricing) -> "PricingCatalog":
-        """Return a new catalog with ``data`` replacing that provider's pricing."""
-        merged = dict(self._providers)
-        merged[data.provider] = data
-        return PricingCatalog(merged.values())
-
     def index(self, provider: str) -> ModelIndex:
         with self._lock:
             index = self._indexes.get(provider)

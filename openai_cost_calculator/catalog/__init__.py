@@ -21,7 +21,6 @@ from .errors import (
 )
 from .model import (
     CONDITION_KEYS,
-    DEFAULT_CONDITIONS,
     ModelPricing,
     PriceSet,
     ProviderPricing,
@@ -32,7 +31,6 @@ from .selection import RequestConditions, Selection, select_price_set
 __all__ = [
     "BUNDLED_DATA_DIR",
     "CONDITION_KEYS",
-    "DEFAULT_CONDITIONS",
     "DIMENSIONS",
     "USAGE_FIELDS",
     "AmbiguousModelError",

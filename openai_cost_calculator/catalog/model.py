@@ -28,10 +28,6 @@ from typing import Dict, Mapping, Optional, Tuple
 #: regions or scopes, and DeepSeek-style peak/off-peak periods.
 CONDITION_KEYS: Tuple[str, ...] = ("service_tier", "region", "period")
 
-#: Values assumed for a condition when neither the caller nor the provider
-#: specifies one.
-DEFAULT_CONDITIONS: Mapping[str, str] = {"service_tier": "standard", "region": "global"}
-
 #: Conditions whose *absence* from a price set means a specific value rather
 #: than "any value".  A set without a service tier is the standard tier: it must
 #: not silently price a batch or flex request.  A set without a region, by
@@ -115,12 +111,3 @@ class ProviderPricing:
 
     def models_by_id(self) -> Dict[str, ModelPricing]:
         return {model.id: model for model in self.models}
-
-
-def to_decimal(value: object) -> Decimal:
-    """Convert an int/str/Decimal to ``Decimal`` without float rounding."""
-    if isinstance(value, Decimal):
-        return value
-    if isinstance(value, bool) or not isinstance(value, (int, str)):
-        raise TypeError(f"prices must be int, str or Decimal, not {type(value).__name__}")
-    return Decimal(value)
