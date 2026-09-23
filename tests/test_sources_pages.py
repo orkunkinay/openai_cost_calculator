@@ -155,9 +155,9 @@ def test_vertex_gemini_global_regional_and_scheduled_prices(vertex_result):
     assert _rates(flash, region="global", on=date(2026, 12, 1))["input"] == D("0.75")
     assert _rates(flash, region="global", on=date(2027, 2, 1))["input"] == D("1.5")
     assert _rates(flash, region="regional", on=date(2026, 12, 1))["input"] == D("0.825")
-    pro = models["gemini-2.5-pro"]
-    assert _rates(pro, region="global", min_input_tokens=200_001)["output"] == D("15")
-    assert _rates(pro, region="global", service_tier="priority")["input"] == D("2.25")
+    pro = models["gemini-2.5-pro"]  # its table has no Region column: region-agnostic prices
+    assert _rates(pro, min_input_tokens=200_001)["output"] == D("15")
+    assert _rates(pro, service_tier="priority")["input"] == D("2.25")
 
 
 def test_vertex_partner_models(vertex_result):

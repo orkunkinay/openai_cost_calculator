@@ -183,6 +183,11 @@ def test_openai_fast_mode_is_the_priority_tier(catalog):
     assert fast.total == priority.total == D("4.25")
 
 
+def test_vertex_region_agnostic_gemini_prices_any_region(catalog):
+    cost = calculate_cost("vertex", "gemini-2.5-pro", input_tokens=100_000, region="europe-west4", catalog=catalog, at=ON)
+    assert cost.total == D("0.125")
+
+
 def test_vertex_regional_gemini_uses_non_global_price(catalog):
     cost = calculate_cost(
         "vertex", "gemini-3.8-flash", input_tokens=1_000_000, region="us-central1", catalog=catalog, at=ON

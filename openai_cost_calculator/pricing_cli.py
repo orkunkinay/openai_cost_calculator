@@ -61,6 +61,11 @@ def add_pricing_parser(subparsers: argparse._SubParsersAction) -> None:
     sync.add_argument("--report-md", help="write a Markdown report to this path")
     sync.add_argument("--report-json", help="write a JSON report to this path")
     sync.add_argument("--no-corroborate", action="store_true", help="skip the LiteLLM cross-check")
+    sync.add_argument(
+        "--accept-review",
+        action="store_true",
+        help="after reading a report: apply changes held for review (never invalid data, never removals)",
+    )
     sync.add_argument("--today", type=date.fromisoformat, default=None, help=argparse.SUPPRESS)
 
     stale = sub.add_parser("stale", help="Report providers whose data was not verified recently")
@@ -207,7 +212,15 @@ def _sync(args: argparse.Namespace) -> int:
     except KeyError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    outcomes = run_sync(sources, data_dir, fetcher, today=today, dry_run=args.dry_run, corroborate=corroborate)
+    outcomes = run_sync(
+        sources,
+        data_dir,
+        fetcher,
+        today=today,
+        dry_run=args.dry_run,
+        corroborate=corroborate,
+        accept_review=args.accept_review,
+    )
     markdown = render_markdown(outcomes, today=today)
     if args.report_md:
         Path(args.report_md).write_text(markdown, encoding="utf-8")

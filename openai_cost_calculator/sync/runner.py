@@ -77,6 +77,7 @@ def sync_provider(
     *,
     today: date,
     corroborate: Optional[Corroborator] = None,
+    accept_review: bool = False,
 ) -> ProviderOutcome:
     outcome = ProviderOutcome(
         provider=source.provider,
@@ -122,6 +123,7 @@ def sync_provider(
         official=kind.startswith("official"),
         issues=result.issues,
         corroborate=corroborate,
+        accept_review=accept_review,
     )
 
     models = _merge(current, source, outcome.decisions, owned)
@@ -158,12 +160,15 @@ def run_sync(
     today: date,
     dry_run: bool = False,
     corroborate: Optional[Corroborator] = None,
+    accept_review: bool = False,
 ) -> List[ProviderOutcome]:
     outcomes = []
     for source in sources:
         path = data_dir / f"{source.provider}.json"
         current = load_provider_file(path) if path.exists() else None
-        outcome = sync_provider(source, current, fetcher, today=today, corroborate=corroborate)
+        outcome = sync_provider(
+            source, current, fetcher, today=today, corroborate=corroborate, accept_review=accept_review
+        )
         if outcome.data is not None and outcome.status != "failed" and not dry_run:
             text = dump_provider(outcome.data)
             if not path.exists() or path.read_text(encoding="utf-8") != text:

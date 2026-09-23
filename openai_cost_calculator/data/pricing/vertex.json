@@ -1187,9 +1187,6 @@
       "source": "vertex-pricing-page",
       "prices": [
         {
-          "conditions": {
-            "region": "global"
-          },
           "rates": {
             "input": "0.15",
             "input_audio": "1",
@@ -1198,7 +1195,6 @@
         },
         {
           "conditions": {
-            "region": "global",
             "service_tier": "batch"
           },
           "rates": {
@@ -1216,9 +1212,6 @@
       "source": "vertex-pricing-page",
       "prices": [
         {
-          "conditions": {
-            "region": "global"
-          },
           "rates": {
             "input": "0.15",
             "input_audio": "1",
@@ -1234,9 +1227,6 @@
       "source": "vertex-pricing-page",
       "prices": [
         {
-          "conditions": {
-            "region": "global"
-          },
           "rates": {
             "input": "0.075",
             "input_audio": "0.075",
@@ -1245,7 +1235,6 @@
         },
         {
           "conditions": {
-            "region": "global",
             "service_tier": "batch"
           },
           "rates": {
@@ -1263,9 +1252,6 @@
       "source": "vertex-pricing-page",
       "prices": [
         {
-          "conditions": {
-            "region": "global"
-          },
           "rates": {
             "input": "0.5",
             "input_audio": "3",
@@ -1282,9 +1268,6 @@
       "source": "vertex-pricing-page",
       "prices": [
         {
-          "conditions": {
-            "region": "global"
-          },
           "rates": {
             "input": "0.3",
             "cached_input": "0.03",
@@ -1295,9 +1278,6 @@
           }
         },
         {
-          "conditions": {
-            "region": "global"
-          },
           "min_input_tokens": 200001,
           "rates": {
             "input": "0.3",
@@ -1310,7 +1290,6 @@
         },
         {
           "conditions": {
-            "region": "global",
             "service_tier": "batch"
           },
           "rates": {
@@ -1322,7 +1301,6 @@
         },
         {
           "conditions": {
-            "region": "global",
             "service_tier": "flex"
           },
           "rates": {
@@ -1334,7 +1312,6 @@
         },
         {
           "conditions": {
-            "region": "global",
             "service_tier": "priority"
           },
           "rates": {
@@ -1355,9 +1332,6 @@
       "source": "vertex-pricing-page",
       "prices": [
         {
-          "conditions": {
-            "region": "global"
-          },
           "rates": {
             "input": "0.3",
             "input_image": "0.3",
@@ -1366,7 +1340,6 @@
         },
         {
           "conditions": {
-            "region": "global",
             "service_tier": "batch"
           },
           "rates": {
@@ -1377,7 +1350,6 @@
         },
         {
           "conditions": {
-            "region": "global",
             "service_tier": "flex"
           },
           "rates": {
@@ -1395,9 +1367,6 @@
       "source": "vertex-pricing-page",
       "prices": [
         {
-          "conditions": {
-            "region": "global"
-          },
           "rates": {
             "input": "0.1",
             "cached_input": "0.01",
@@ -1409,7 +1378,6 @@
         },
         {
           "conditions": {
-            "region": "global",
             "service_tier": "batch"
           },
           "rates": {
@@ -1421,7 +1389,6 @@
         },
         {
           "conditions": {
-            "region": "global",
             "service_tier": "flex"
           },
           "rates": {
@@ -1433,7 +1400,6 @@
         },
         {
           "conditions": {
-            "region": "global",
             "service_tier": "priority"
           },
           "rates": {
@@ -1454,9 +1420,6 @@
       "source": "vertex-pricing-page",
       "prices": [
         {
-          "conditions": {
-            "region": "global"
-          },
           "rates": {
             "input": "0.5",
             "input_audio": "3",
@@ -1473,9 +1436,6 @@
       "source": "vertex-pricing-page",
       "prices": [
         {
-          "conditions": {
-            "region": "global"
-          },
           "rates": {
             "input": "1.25",
             "cached_input": "0.125",
@@ -1486,9 +1446,6 @@
           }
         },
         {
-          "conditions": {
-            "region": "global"
-          },
           "min_input_tokens": 200001,
           "rates": {
             "input": "2.5",
@@ -1501,7 +1458,6 @@
         },
         {
           "conditions": {
-            "region": "global",
             "service_tier": "batch"
           },
           "rates": {
@@ -1513,7 +1469,6 @@
         },
         {
           "conditions": {
-            "region": "global",
             "service_tier": "batch"
           },
           "min_input_tokens": 200001,
@@ -1526,7 +1481,6 @@
         },
         {
           "conditions": {
-            "region": "global",
             "service_tier": "flex"
           },
           "rates": {
@@ -1538,7 +1492,6 @@
         },
         {
           "conditions": {
-            "region": "global",
             "service_tier": "flex"
           },
           "min_input_tokens": 200001,
@@ -1551,7 +1504,6 @@
         },
         {
           "conditions": {
-            "region": "global",
             "service_tier": "priority"
           },
           "rates": {
@@ -1565,7 +1517,6 @@
         },
         {
           "conditions": {
-            "region": "global",
             "service_tier": "priority"
           },
           "min_input_tokens": 200001,
@@ -1587,9 +1538,6 @@
       "source": "vertex-pricing-page",
       "prices": [
         {
-          "conditions": {
-            "region": "global"
-          },
           "rates": {
             "input": "1.25",
             "input_audio": "1.25",
@@ -1598,9 +1546,6 @@
           }
         },
         {
-          "conditions": {
-            "region": "global"
-          },
           "min_input_tokens": 200001,
           "rates": {
             "input": "2.5",
@@ -3225,9 +3170,6 @@
       "source": "vertex-pricing-page",
       "prices": [
         {
-          "conditions": {
-            "region": "global"
-          },
           "rates": {
             "input": "1.5",
             "input_audio": "1.5",
@@ -3244,9 +3186,6 @@
       "source": "vertex-pricing-page",
       "prices": [
         {
-          "conditions": {
-            "region": "global"
-          },
           "rates": {
             "input": "1.5",
             "input_audio": "1.5",

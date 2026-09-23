@@ -228,7 +228,10 @@ def parse_gemini_table(table: Table, result: SourceResult, rates: Dict[Tuple, Di
         kind = row[1] or kind
         if not model:
             continue
-        region = "global" if region_col is None or row[region_col].startswith("Global") else "regional"
+        # Tables without a Region column price every region the same.
+        region: Optional[str] = None
+        if region_col is not None:
+            region = "global" if row[region_col].startswith("Global") else "regional"
         dims, cached_dims = _gemini_dimensions(kind)
         if not dims:
             continue

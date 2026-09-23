@@ -73,6 +73,17 @@ def test_large_change_needs_review_and_keeps_old_price():
     assert outcome.data.models_by_id()["a"].prices[0].rates["input"] == D("1")
 
 
+def test_maintainer_can_accept_held_changes_but_not_invalid_data_or_removals():
+    current = _current(_m("a"), _m("b"), _m("gone"))
+    result = SourceResult([_m("a", "10", "2"), _m("b", "-1", "2")])
+    outcome = sync_provider(FakeSource(result), current, FixtureFetcher({}), today=TODAY, accept_review=True)
+    models = outcome.data.models_by_id()
+    assert models["a"].prices[0].rates["input"] == D("10")  # large change accepted
+    assert models["b"].prices[0].rates["input"] == D("1")  # invalid price still rejected
+    assert "gone" in models  # removals are never automatic
+    assert any("accepted by maintainer" in n for d in outcome.applied for n in d.notes)
+
+
 def test_removed_models_are_kept_and_reported():
     outcome = _sync(SourceResult([_m("a"), _m("b"), _m("c")]), _current(_m("a"), _m("b"), _m("c"), _m("gone")))
     assert [d.diff.model_id for d in outcome.needs_review] == ["gone"]

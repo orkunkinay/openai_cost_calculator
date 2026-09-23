@@ -94,7 +94,11 @@ def decide(
     official: bool,
     issues: Sequence[Issue] = (),
     corroborate: Optional[Corroborator] = None,
+    accept_review: bool = False,
 ) -> List[Decision]:
+    """Decide each diff.  ``accept_review`` is the maintainer override used after
+    reading a report: held changes are applied, but invalid data is still
+    rejected and removals are still never automatic."""
     flagged = {issue.model_id: issue.message for issue in issues if issue.model_id and issue.blocking}
     decisions: List[Decision] = []
     for diff in diffs:
@@ -112,15 +116,22 @@ def decide(
         decision.reasons += _validation_reasons(diff.new, provider)
         if diff.kind == "added" and not official:
             decision.reasons.append("new model from a non-official source")
+        disappeared = 0
         for change in diff.rate_changes:
             ratio = change.ratio
             if ratio is not None and (ratio > MAX_RATIO or ratio < 1 / MAX_RATIO):
                 decision.reasons.append(f"large change ({ratio:.2f}x) in {change}")
             elif diff.kind == "changed" and change.old is not None and change.new is None:
-                decision.reasons.append(f"price disappeared upstream: {change}")
+                disappeared += 1
+        if disappeared:
+            decision.reasons.append(f"{disappeared} existing price(s) no longer published (listed below)")
         corroboration = _corroboration(diff, provider, corroborate)
         decision.reasons += corroboration["reasons"]
         decision.notes += corroboration["notes"]
         decision.apply = not decision.reasons
+        if accept_review and decision.reasons and not any(r.startswith("invalid:") for r in decision.reasons):
+            decision.apply = True
+            decision.notes += [f"accepted by maintainer despite: {r}" for r in decision.reasons]
+            decision.reasons = []
         decisions.append(decision)
     return decisions
