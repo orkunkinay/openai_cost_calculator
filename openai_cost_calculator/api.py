@@ -144,7 +144,7 @@ def calculate_cost(
     explicit = set()
     for key, value in (("service_tier", service_tier), ("region", region), ("period", period)):
         if value is not None:
-            preferences[key] = (value,)
+            preferences[key] = spec.regions_for(value) if key == "region" else (value,)
             explicit.add(key)
             notes.pop(key, None)
 

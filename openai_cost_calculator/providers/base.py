@@ -97,7 +97,13 @@ class ProviderSpec:
     parse_model: Optional[Callable[[str], ModelHints]] = None
     #: Conditions implied by the request time (e.g. peak/off-peak).
     time_conditions: Optional[Callable[[datetime], Tuple[Preferences, Mapping[str, str]]]] = None
+    #: Acceptable region values for a caller-chosen region, most specific first
+    #: (Vertex: ``us-central1`` falls back to the "regional" price).
+    expand_region: Optional[Callable[[str], Tuple[str, ...]]] = None
     notes: str = ""
+
+    def regions_for(self, region: str) -> Tuple[str, ...]:
+        return self.expand_region(region) if self.expand_region is not None else (region,)
 
     def hints(self, model: str) -> ModelHints:
         if self.parse_model is not None:

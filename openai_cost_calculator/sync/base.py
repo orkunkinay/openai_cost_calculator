@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Protocol, Tuple
 
-from ..catalog.model import ModelPricing, Source
+from ..catalog.model import ModelPricing, PriceSet, Source
 
 USER_AGENT = "openai-cost-calculator-pricing-sync (+https://github.com/orkunkinay/openai_cost_calculator)"
 
@@ -109,13 +109,43 @@ class PricingSource(Protocol):
     def fetch(self, fetcher: Fetcher) -> SourceResult: ...
 
 
+def _same_slot(a: PriceSet, b: PriceSet) -> bool:
+    return (a.condition_key, a.min_input_tokens, a.effective_from, a.effective_until) == (
+        b.condition_key, b.min_input_tokens, b.effective_from, b.effective_until
+    )
+
+
+def _absorb_subsets(prices: Tuple[PriceSet, ...]) -> Tuple[PriceSet, ...]:
+    kept: List[PriceSet] = []
+    for candidate in prices:
+        absorbed = False
+        for index, existing in enumerate(kept):
+            if not _same_slot(existing, candidate):
+                continue
+            shared = set(existing.rates) & set(candidate.rates)
+            if any(existing.rates[d] != candidate.rates[d] for d in shared):
+                continue  # conflict: keep both so validation flags it
+            if set(candidate.rates) <= set(existing.rates):
+                absorbed = True
+            elif set(existing.rates) <= set(candidate.rates):
+                kept[index] = candidate
+                absorbed = True
+            if absorbed:
+                break
+        if not absorbed:
+            kept.append(candidate)
+    return tuple(kept)
+
+
 def merge_duplicate_models(result: SourceResult) -> SourceResult:
     """Combine entries a parser emitted more than once for the same id.
 
-    Price sets are concatenated (exact duplicates dropped, e.g. a model listed
-    in two tables at the same price); aliases are unioned.  Parsers can then
-    emit one entry per table row (standard, batch, flex...) without
-    bookkeeping.  *Conflicting* duplicates are kept so validation rejects them.
+    Price sets are concatenated and aliases unioned, so parsers can emit one
+    entry per table row (standard, batch, flex...) without bookkeeping.  When
+    a page lists a model twice under the same conditions (e.g. in a "chat" and
+    a "vision" table), a set whose rates agree with - and are a subset of -
+    another is absorbed.  *Conflicting* duplicates are kept so validation
+    rejects them and the model goes to review.
     """
     merged: Dict[str, ModelPricing] = {}
     order: List[str] = []
@@ -128,7 +158,7 @@ def merge_duplicate_models(result: SourceResult) -> SourceResult:
         aliases: Tuple[str, ...] = tuple(dict.fromkeys(existing.aliases + model.aliases))
         merged[model.id] = ModelPricing(
             id=existing.id,
-            prices=existing.prices + tuple(p for p in model.prices if p not in existing.prices),
+            prices=_absorb_subsets(existing.prices + model.prices),
             source=existing.source,
             vendor=existing.vendor or model.vendor,
             canonical_id=existing.canonical_id or model.canonical_id,

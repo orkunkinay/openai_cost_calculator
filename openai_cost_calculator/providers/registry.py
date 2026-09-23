@@ -90,6 +90,25 @@ def parse_azure_model(model: str) -> ModelHints:
     return ModelHints(candidates=tuple(dict.fromkeys(candidates)))
 
 
+# --------------------------------------------------------------------------- Vertex AI
+
+
+def parse_vertex_model(model: str) -> ModelHints:
+    """Vertex ids: ``claude-sonnet-4-5@20250929``, ``publishers/google/models/gemini-2.5-pro``,
+    partner models such as ``deepseek-ai/deepseek-v3.1-maas``."""
+    candidates: List[str] = []
+    for candidate in generic_candidates(model, ("projects/",)):
+        candidates.append(candidate)
+        if candidate.endswith("-maas"):
+            candidates.append(candidate[: -len("-maas")])
+    return ModelHints(candidates=tuple(dict.fromkeys(candidates)))
+
+
+def vertex_regions(region: str) -> Tuple[str, ...]:
+    """A concrete region or multi-region falls back to Gemini's "non-global" price."""
+    return ("global",) if region == "global" else (region, "regional")
+
+
 # --------------------------------------------------------------------------- DeepSeek
 
 
@@ -156,7 +175,8 @@ PROVIDERS: Tuple[ProviderSpec, ...] = (
         pricing_url="https://cloud.google.com/vertex-ai/generative-ai/pricing",
         aliases=("vertex-ai", "google-vertex", "gcp-vertex"),
         default_regions=("global",),
-        strip_prefixes=("projects/", "publishers/google/models/", "publishers/anthropic/models/"),
+        parse_model=parse_vertex_model,
+        expand_region=vertex_regions,
         notes="region is 'global', a multi-region ('us', 'eu') or a Google Cloud region.",
     ),
     ProviderSpec(
