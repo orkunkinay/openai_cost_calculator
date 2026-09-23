@@ -113,3 +113,22 @@ Entries with source kind `manual` (currently the `legacy-csv` entries: preview a
 OpenAI and Gemini models from the pre-catalog CSV) are never modified by the sync and are
 reported by `pricing stale` as not covered by an automated source. If an official source
 starts listing the same model, its entry replaces the manual one automatically.
+
+## Releasing
+
+A merged pricing PR updates the legacy CSV immediately (old releases download it from
+GitHub), but the catalog used by `calculate_cost` ships inside the package, so new prices
+reach those users only through a release. After merging pricing changes, cut a patch release:
+
+1. Bump `version` in `pyproject.toml` and add a `CHANGELOG.md` entry; merge to `main`.
+2. Tag the merge commit and push the tag:
+
+   ```bash
+   git tag -a v1.3.1 -m "v1.3.1" && git push origin v1.3.1
+   ```
+
+`.github/workflows/publish.yml` then checks that the tag matches the package version,
+validates the catalog, runs the tests, builds and `twine check`s the distributions, and
+publishes to PyPI through trusted publishing (OIDC), so no API token is stored anywhere.
+The publish job runs in the `pypi` GitHub environment, where required reviewers can be
+added as a final approval step.
