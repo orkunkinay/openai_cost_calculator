@@ -115,6 +115,19 @@ def test_mistral_cards_and_service_wide_modifiers():
     assert models["glm-5-2"].canonical_id is None  # third-party model hosted by Mistral
 
 
+@pytest.mark.parametrize("license_badge", ["Modified MIT", "Apache 2.0", "CC BY-NC 4.0"])
+def test_mistral_license_badges_are_not_model_names(license_badge):
+    page = (
+        f"<p>Mistral Medium 3.5</p><p>{license_badge}</p>"
+        "<p>Merged dense model unifying instruction, reasoning, and coding.</p>"
+        "<p>Text-to-text</p><p>Input (/M tokens)</p><p>$1.5</p>"
+        "<p>Output (/M tokens)</p><p>$7.5</p>"
+    )
+    models, _ = _models(mistral.parse(page))
+    assert set(models) == {"mistral-medium-3-5"}
+    assert _rates(models["mistral-medium-3-5"])["input"] == D("1.5")
+
+
 def test_mistral_missing_modifier_sentence_is_flagged_not_guessed():
     page = _text("mistral_pricing.html").replace("Regional inference", "Local processing")
     models, issues = _models(mistral.parse(page))
