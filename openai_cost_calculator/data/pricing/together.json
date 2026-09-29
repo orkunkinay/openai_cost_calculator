@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "together",
   "currency": "USD",
-  "verified_at": "2026-09-23",
+  "verified_at": "2026-09-29",
   "sources": [
     {
       "id": "together-models-docs",
@@ -258,6 +258,21 @@
             "input": "1",
             "cached_input": "0.17",
             "output": "4.05"
+          }
+        }
+      ]
+    },
+    {
+      "id": "together/Tev1-4B-experimental",
+      "display_name": "Tev1 4B Experimental",
+      "vendor": "together ai",
+      "canonical_id": "together/tev1-4b-experimental",
+      "source": "together-models-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.042",
+            "output": "0"
           }
         }
       ]

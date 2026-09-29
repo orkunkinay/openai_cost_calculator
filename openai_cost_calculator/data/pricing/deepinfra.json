@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "deepinfra",
   "currency": "USD",
-  "verified_at": "2026-09-23",
+  "verified_at": "2026-09-29",
   "sources": [
     {
       "id": "deepinfra-models-api",
@@ -1624,6 +1624,26 @@
             "cached_input": "0.0375",
             "output": "1.875"
           }
+        },
+        {
+          "conditions": {
+            "service_tier": "flex"
+          },
+          "rates": {
+            "input": "0.12",
+            "cached_input": "0.03",
+            "output": "1.5"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "priority"
+          },
+          "rates": {
+            "input": "0.225",
+            "cached_input": "0.05625",
+            "output": "2.8125"
+          }
         }
       ]
     },
@@ -1828,9 +1848,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.14",
-            "cached_input": "0.0028",
-            "output": "0.28"
+            "input": "0.119",
+            "cached_input": "0.00238",
+            "output": "0.238"
           }
         }
       ]
@@ -1843,7 +1863,7 @@
       "prices": [
         {
           "rates": {
-            "input": "0.435",
+            "input": "0.43",
             "cached_input": "0.0036",
             "output": "0.87"
           }
@@ -2052,6 +2072,21 @@
           "rates": {
             "input": "5",
             "output": "25"
+          }
+        }
+      ]
+    },
+    {
+      "id": "anthropic/claude-opus-5-5",
+      "vendor": "anthropic",
+      "canonical_id": "anthropic/claude-opus-5-5",
+      "source": "deepinfra-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "4",
+            "cached_input": "0.2",
+            "output": "20"
           }
         }
       ]
@@ -4856,6 +4891,21 @@
             "input": "0.104",
             "cached_input": "0.0264",
             "output": "0.424"
+          }
+        }
+      ]
+    },
+    {
+      "id": "tencent/Hy4-preview",
+      "vendor": "tencent",
+      "canonical_id": "tencent/hy4-preview",
+      "source": "deepinfra-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.834",
+            "cached_input": "0.042",
+            "output": "2.501"
           }
         }
       ]
