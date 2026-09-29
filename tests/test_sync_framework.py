@@ -233,6 +233,13 @@ def test_markdown_tables_keep_heading_context_and_escaped_pipes():
     assert table.column("input") == 1
 
 
+@pytest.mark.parametrize("separator", ["| - | - |", "| :- | -: |"])
+def test_markdown_tables_accept_compact_separators(separator):
+    [table] = markdown_tables(f"| Model | Input |\n{separator}\n| gpt-x | $1.00 |")
+    assert table.header == ["Model", "Input"]
+    assert table.rows == [["gpt-x", "$1.00"]]
+
+
 def test_html_tables_and_text():
     doc = "<h2>Claude</h2><table><tr><th>Model</th><th>Price</th></tr><tr><td>Sonnet<br>4.5</td><td>$3</td></tr></table><script>x=1</script><p>Note</p>"
     [table] = html_tables(doc)

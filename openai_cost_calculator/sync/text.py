@@ -76,7 +76,7 @@ def _split_row(line: str) -> List[str]:
     return [cell.replace("\\|", "|").strip() for cell in re.split(r"(?<!\\)\|", body)]
 
 
-_SEPARATOR = re.compile(r"^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$")
+_SEPARATOR = re.compile(r"^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$")
 
 
 def markdown_tables(text: str) -> List[Table]:
