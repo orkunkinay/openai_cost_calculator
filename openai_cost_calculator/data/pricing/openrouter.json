@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "openrouter",
   "currency": "USD",
-  "verified_at": "2026-09-23",
+  "verified_at": "2026-09-29",
   "sources": [
     {
       "id": "openrouter-models-api",
@@ -803,6 +803,47 @@
       ]
     },
     {
+      "id": "anthropic/claude-sonnet-5.5",
+      "display_name": "Anthropic: Claude Sonnet 5.5",
+      "vendor": "anthropic",
+      "canonical_id": "anthropic/claude-sonnet-5.5",
+      "aliases": [
+        "anthropic/claude-sonnet-5.5-20260928"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "2",
+            "cached_input": "0.2",
+            "cache_write": "2.5",
+            "cache_write_1h": "4",
+            "output": "10",
+            "web_search": "0.01"
+          }
+        }
+      ]
+    },
+    {
+      "id": "anthropic/claude-sonnet-5.5:batch",
+      "display_name": "Anthropic: Claude Sonnet 5.5 (batch)",
+      "vendor": "anthropic",
+      "canonical_id": "anthropic/claude-sonnet-5.5",
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "1",
+            "cached_input": "0.1",
+            "cache_write": "1.25",
+            "cache_write_1h": "2",
+            "output": "5",
+            "web_search": "0.01"
+          }
+        }
+      ]
+    },
+    {
       "id": "anthropic/claude-sonnet-5:batch",
       "display_name": "Anthropic: Claude Sonnet 5 (batch)",
       "vendor": "anthropic",
@@ -1138,8 +1179,8 @@
       "prices": [
         {
           "rates": {
-            "input": "0.32",
-            "output": "0.89"
+            "input": "0.2574",
+            "output": "1.0287"
           }
         }
       ]
@@ -1153,8 +1194,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.25",
-            "output": "1"
+            "input": "0.29",
+            "cached_input": "0.11",
+            "output": "1.14"
           }
         }
       ]
@@ -1283,9 +1325,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.08246",
-            "cached_input": "0.016492",
-            "output": "0.16492"
+            "input": "0.0763",
+            "cached_input": "0.01526",
+            "output": "0.1526"
           }
         }
       ]
@@ -1321,9 +1363,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.22",
-            "cached_input": "0.007",
-            "output": "0.66"
+            "input": "0.2156",
+            "cached_input": "0.00686",
+            "output": "0.6468"
           }
         }
       ]
@@ -1340,9 +1382,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.953172",
-            "cached_input": "0.079431",
-            "output": "1.906344"
+            "input": "0.936294",
+            "cached_input": "0.0780245",
+            "output": "1.872588"
           }
         }
       ]
@@ -1378,9 +1420,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.1",
-            "cached_input": "0.01",
-            "output": "0.5"
+            "input": "0.3",
+            "cached_input": "0.006",
+            "output": "1.2"
           }
         }
       ]
@@ -1412,6 +1454,25 @@
           "rates": {
             "input": "0",
             "output": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "fireworks/ember-1",
+      "display_name": "Fireworks: Ember-1",
+      "vendor": "fireworks",
+      "canonical_id": "fireworks/ember-1",
+      "aliases": [
+        "fireworks/ember-1-20260923"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "3",
+            "cached_input": "0.3",
+            "output": "15"
           }
         }
       ]
@@ -2466,9 +2527,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.06",
-            "cached_input": "0.012",
-            "output": "0.18"
+            "input": "0.021",
+            "cached_input": "0.0042",
+            "output": "0.0616"
           }
         }
       ]
@@ -3040,6 +3101,22 @@
       ]
     },
     {
+      "id": "mistralai/devstral-2512",
+      "display_name": "Mistral: Devstral 2 2512",
+      "vendor": "mistralai",
+      "canonical_id": "mistralai/devstral-2512",
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.4",
+            "cached_input": "0.04",
+            "output": "2"
+          }
+        }
+      ]
+    },
+    {
       "id": "mistralai/ministral-14b-2512",
       "display_name": "Mistral: Ministral 3 14B 2512",
       "vendor": "mistralai",
@@ -3131,6 +3208,22 @@
             "input": "2",
             "cached_input": "0.2",
             "output": "6"
+          }
+        }
+      ]
+    },
+    {
+      "id": "mistralai/mistral-large-2512",
+      "display_name": "Mistral: Mistral Large 3 2512",
+      "vendor": "mistralai",
+      "canonical_id": "mistralai/mistral-large-2512",
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.5",
+            "cached_input": "0.05",
+            "output": "1.5"
           }
         }
       ]
@@ -3481,7 +3574,7 @@
       "prices": [
         {
           "rates": {
-            "input": "0.7062",
+            "input": "0.6562",
             "cached_input": "0.18",
             "output": "3.3"
           }
@@ -5677,6 +5770,21 @@
       ]
     },
     {
+      "id": "openai/gpt-oss-120b:batch",
+      "display_name": "OpenAI: gpt-oss-120b (batch)",
+      "vendor": "openai",
+      "canonical_id": "openai/gpt-oss-120b",
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.0296",
+            "output": "0.136"
+          }
+        }
+      ]
+    },
+    {
       "id": "openai/gpt-oss-20b",
       "display_name": "OpenAI: gpt-oss-20b",
       "vendor": "openai",
@@ -5686,6 +5794,7 @@
         {
           "rates": {
             "input": "0.018",
+            "cached_input": "0.009",
             "output": "0.09"
           }
         }
@@ -5962,6 +6071,24 @@
       ]
     },
     {
+      "id": "perceptron/perceptron-mk1.5",
+      "display_name": "Perceptron: Perceptron Mk1.5",
+      "vendor": "perceptron",
+      "canonical_id": "perceptron/perceptron-mk1.5",
+      "aliases": [
+        "perceptron/perceptron-mk1.5-20260925"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.15",
+            "output": "1.5"
+          }
+        }
+      ]
+    },
+    {
       "id": "perplexity/sonar",
       "display_name": "Perplexity: Sonar",
       "vendor": "perplexity",
@@ -6123,6 +6250,7 @@
         {
           "rates": {
             "input": "0.075",
+            "cached_input": "0.0375",
             "output": "0.5"
           }
         }
@@ -6596,7 +6724,8 @@
       "prices": [
         {
           "rates": {
-            "input": "0.09",
+            "input": "0.1",
+            "cached_input": "0.07",
             "output": "1.1"
           }
         }
@@ -6660,8 +6789,8 @@
       "prices": [
         {
           "rates": {
-            "input": "0.13",
-            "output": "0.52"
+            "input": "0.15",
+            "output": "0.6"
           }
         }
       ]
@@ -7182,6 +7311,25 @@
       ]
     },
     {
+      "id": "qwen/qwen3.8-max-prime",
+      "display_name": "Qwen: Qwen3.8 Max Prime",
+      "vendor": "qwen",
+      "canonical_id": "qwen/qwen3.8-max-prime",
+      "aliases": [
+        "qwen/qwen3.8-max-prime-20260923"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "4",
+            "cached_input": "0.5",
+            "output": "12"
+          }
+        }
+      ]
+    },
+    {
       "id": "qwen/qwen3.8-omni-flash",
       "display_name": "Qwen: Qwen3.8 Omni Flash",
       "vendor": "qwen",
@@ -7408,6 +7556,21 @@
           "rates": {
             "input": "0.65",
             "output": "0.75"
+          }
+        }
+      ]
+    },
+    {
+      "id": "stealth/space-bunny-alpha",
+      "display_name": "Space Bunny Alpha",
+      "vendor": "stealth",
+      "canonical_id": "stealth/space-bunny-alpha",
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0",
+            "output": "0"
           }
         }
       ]
@@ -8212,9 +8375,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.4",
-            "cached_input": "0.08",
-            "output": "1.75"
+            "input": "0.6",
+            "cached_input": "0.11",
+            "output": "2.2"
           }
         }
       ]
@@ -8287,9 +8450,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.966",
-            "cached_input": "0.1794",
-            "output": "3.036"
+            "input": "0.9646",
+            "cached_input": "0.17914",
+            "output": "3.0316"
           }
         }
       ]
@@ -8340,9 +8503,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.84",
-            "cached_input": "0.156",
-            "output": "2.64"
+            "input": "1.4",
+            "cached_input": "0.26",
+            "output": "4.4"
           }
         }
       ]
@@ -8360,7 +8523,7 @@
         {
           "rates": {
             "input": "0.15",
-            "cached_input": "0.05",
+            "cached_input": "0.03",
             "output": "0.5"
           }
         }
@@ -8395,8 +8558,27 @@
         {
           "rates": {
             "input": "0.37",
-            "cached_input": "0.075",
+            "cached_input": "0.09",
             "output": "1.25"
+          }
+        }
+      ]
+    },
+    {
+      "id": "z-ai/glm-5.3-prime",
+      "display_name": "Z.ai: GLM 5.3 Prime",
+      "vendor": "z-ai",
+      "canonical_id": "z-ai/glm-5.3-prime",
+      "aliases": [
+        "z-ai/glm-5.3-prime-20260921"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "2.8",
+            "cached_input": "0.56",
+            "output": "8.8"
           }
         }
       ]
@@ -8809,9 +8991,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.5614",
-            "cached_input": "0.10426",
-            "output": "1.7644"
+            "input": "0.19",
+            "cached_input": "0.102",
+            "output": "2.04"
           }
         }
       ]

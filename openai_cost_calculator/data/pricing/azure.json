@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "azure",
   "currency": "USD",
-  "verified_at": "2026-09-23",
+  "verified_at": "2026-09-29",
   "sources": [
     {
       "id": "azure-retail-prices-api",
@@ -2023,6 +2023,164 @@
             "cached_input": "2",
             "cache_write": "25",
             "output": "75"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-6-luna",
+      "vendor": "openai",
+      "canonical_id": "openai/gpt-6-luna",
+      "source": "azure-retail-prices-api",
+      "prices": [
+        {
+          "conditions": {
+            "region": "data-zone"
+          },
+          "rates": {
+            "input": "0.11",
+            "cached_input": "0.011",
+            "cache_write": "0.1375",
+            "output": "0.55"
+          }
+        },
+        {
+          "conditions": {
+            "region": "data-zone"
+          },
+          "min_input_tokens": 272000,
+          "rates": {
+            "input": "0.22",
+            "cached_input": "0.022",
+            "cache_write": "0.275",
+            "output": "0.825"
+          }
+        },
+        {
+          "conditions": {
+            "region": "global"
+          },
+          "rates": {
+            "input": "0.1",
+            "cached_input": "0.01",
+            "cache_write": "0.125",
+            "output": "0.5"
+          }
+        },
+        {
+          "conditions": {
+            "region": "global"
+          },
+          "min_input_tokens": 272000,
+          "rates": {
+            "input": "0.2",
+            "cached_input": "0.02",
+            "cache_write": "0.25",
+            "output": "0.75"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-6-sol",
+      "vendor": "openai",
+      "canonical_id": "openai/gpt-6-sol",
+      "source": "azure-retail-prices-api",
+      "prices": [
+        {
+          "conditions": {
+            "region": "data-zone"
+          },
+          "rates": {
+            "input": "2.2",
+            "cached_input": "0.22",
+            "cache_write": "2.75",
+            "output": "11"
+          }
+        },
+        {
+          "conditions": {
+            "region": "data-zone"
+          },
+          "min_input_tokens": 272000,
+          "rates": {
+            "input": "4.4",
+            "cached_input": "0.44",
+            "cache_write": "5.5",
+            "output": "16.5"
+          }
+        },
+        {
+          "conditions": {
+            "region": "data-zone",
+            "service_tier": "priority"
+          },
+          "rates": {
+            "input": "4.4",
+            "cached_input": "0.44",
+            "cache_write": "5.5",
+            "output": "22"
+          }
+        },
+        {
+          "conditions": {
+            "region": "data-zone",
+            "service_tier": "priority"
+          },
+          "min_input_tokens": 272000,
+          "rates": {
+            "input": "8.8",
+            "cached_input": "0.88",
+            "cache_write": "11",
+            "output": "33"
+          }
+        },
+        {
+          "conditions": {
+            "region": "global"
+          },
+          "rates": {
+            "input": "2",
+            "cached_input": "0.2",
+            "cache_write": "2.5",
+            "output": "10"
+          }
+        },
+        {
+          "conditions": {
+            "region": "global"
+          },
+          "min_input_tokens": 272000,
+          "rates": {
+            "input": "4",
+            "cached_input": "0.4",
+            "cache_write": "5",
+            "output": "15"
+          }
+        },
+        {
+          "conditions": {
+            "region": "global",
+            "service_tier": "priority"
+          },
+          "rates": {
+            "input": "4",
+            "cached_input": "0.4",
+            "cache_write": "5",
+            "output": "20"
+          }
+        },
+        {
+          "conditions": {
+            "region": "global",
+            "service_tier": "priority"
+          },
+          "min_input_tokens": 272000,
+          "rates": {
+            "input": "8",
+            "cached_input": "0.8",
+            "cache_write": "10",
+            "output": "30"
           }
         }
       ]
