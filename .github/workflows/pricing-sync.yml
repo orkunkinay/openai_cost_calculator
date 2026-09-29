@@ -38,7 +38,7 @@ jobs:
             pyproject.toml
 
       - name: Install Dependencies
-        run: python -m pip install -r requirements-dev.txt -e .
+        run: python -m pip install -r requirements-dev.txt -e ".[proxy]"
 
       - name: Sync Pricing From Official Sources
         id: sync
