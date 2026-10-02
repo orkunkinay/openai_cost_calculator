@@ -96,7 +96,7 @@ def _record_source(response: Any) -> Any:
 
     last_usage_chunk = None
     for chunk in response:
-        if hasattr(chunk, "usage"):
+        if hasattr(chunk, "usage") and chunk.usage is not None:
             last_usage_chunk = chunk
 
     if last_usage_chunk is None:
