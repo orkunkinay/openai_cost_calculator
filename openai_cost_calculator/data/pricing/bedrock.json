@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "bedrock",
   "currency": "USD",
-  "verified_at": "2026-09-29",
+  "verified_at": "2026-10-26",
   "sources": [
     {
       "id": "aws-price-list-api",
@@ -951,6 +951,60 @@
       ]
     },
     {
+      "id": "amazon.novasonic2.5",
+      "display_name": "Nova 2.5 Sonic",
+      "vendor": "amazon",
+      "canonical_id": "amazon/novasonic2.5",
+      "source": "aws-price-list-api",
+      "prices": [
+        {
+          "conditions": {
+            "region": "us-east-1"
+          },
+          "rates": {
+            "input": "0.33",
+            "output": "2.75"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us-west-2"
+          },
+          "rates": {
+            "input": "0.319",
+            "output": "2.651"
+          }
+        }
+      ]
+    },
+    {
+      "id": "amazon.novasonic2.5-speech",
+      "display_name": "Nova 2.5 Sonic",
+      "vendor": "amazon",
+      "canonical_id": "amazon/novasonic2.5-speech",
+      "source": "aws-price-list-api",
+      "prices": [
+        {
+          "conditions": {
+            "region": "us-east-1"
+          },
+          "rates": {
+            "input": "3",
+            "output": "12"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us-west-2"
+          },
+          "rates": {
+            "input": "3.1832",
+            "output": "12.7329"
+          }
+        }
+      ]
+    },
+    {
       "id": "amazon.titantext-premier",
       "display_name": "TitanText-Premier",
       "vendor": "amazon",
@@ -1672,6 +1726,63 @@
           "rates": {
             "input": "0.55",
             "output": "2.75"
+          }
+        }
+      ]
+    },
+    {
+      "id": "anthropic.claude-haiku-5-5",
+      "display_name": "Claude Haiku 5.5",
+      "vendor": "anthropic",
+      "canonical_id": "anthropic/claude-haiku-5-5",
+      "source": "aws-price-list-api",
+      "prices": [
+        {
+          "conditions": {
+            "region": "eu-central-1"
+          },
+          "rates": {
+            "input": "0.55",
+            "cached_input": "0.011",
+            "cache_write": "0.6875",
+            "cache_write_1h": "0.22",
+            "output": "2.75"
+          }
+        },
+        {
+          "conditions": {
+            "region": "global"
+          },
+          "rates": {
+            "input": "0.5",
+            "cached_input": "0.05",
+            "cache_write": "0.125",
+            "cache_write_1h": "0.2",
+            "output": "2.5"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us-east-1"
+          },
+          "rates": {
+            "input": "0.11",
+            "cached_input": "0.011",
+            "cache_write": "0.1375",
+            "cache_write_1h": "1.1",
+            "output": "2.75"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us-west-2"
+          },
+          "rates": {
+            "input": "0.11",
+            "cached_input": "0.011",
+            "cache_write": "0.6875",
+            "cache_write_1h": "0.22",
+            "output": "0.55"
           }
         }
       ]
@@ -2717,7 +2828,7 @@
           },
           "rates": {
             "input": "2.2",
-            "cached_input": "0.22",
+            "cached_input": "0.11",
             "cache_write": "2.75",
             "cache_write_1h": "4.4",
             "output": "11"
@@ -2729,7 +2840,7 @@
           },
           "rates": {
             "input": "2",
-            "cached_input": "0.2",
+            "cached_input": "0.1",
             "cache_write": "2.5",
             "cache_write_1h": "4",
             "output": "10"
@@ -2741,7 +2852,7 @@
           },
           "rates": {
             "input": "2.2",
-            "cached_input": "0.22",
+            "cached_input": "0.11",
             "cache_write": "2.75",
             "cache_write_1h": "4.4",
             "output": "11"
@@ -2753,7 +2864,7 @@
           },
           "rates": {
             "input": "2.2",
-            "cached_input": "0.22",
+            "cached_input": "0.11",
             "cache_write": "2.75",
             "cache_write_1h": "4.4",
             "output": "11"

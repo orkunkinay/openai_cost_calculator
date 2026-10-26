@@ -27,6 +27,7 @@ google/gemini-3.7-flash,,0.75,0.075,3.75,0
 google/gemini-3.8-flash,,0.75,0.075,3.75,0
 google/gemini-3.8-live,,0.75,,4.5,0
 google/gemini-3.8-live-extended-thinking,,0.75,,4.5,0
+google/gemini-nano-banana-2.1,,1.5,,7.5,0
 google/gemini-omni-1.1-flash,,1.5,,9,0
 google/gemini-omni-flash-preview,,1.5,,9,0
 google/gemini-robotics-er-2-preview,,1,0.1,5,0
@@ -116,6 +117,7 @@ gpt-realtime-2,,4,0.4,24,0
 gpt-realtime-2.1,,4,0.4,24,0
 gpt-realtime-2.1-mini,,0.6,0.06,2.4,0
 gpt-realtime-mini,,0.6,0.06,2.4,0
+gpt-rosalind-discovery,,5,0.5,25,0
 gpt-rosalind-research,,5,0.5,25,0
 o1,,15,7.5,60,0
 o1,2024-12-17,15,7.5,60,0

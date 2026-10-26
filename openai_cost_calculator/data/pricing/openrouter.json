@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "openrouter",
   "currency": "USD",
-  "verified_at": "2026-09-29",
+  "verified_at": "2026-10-26",
   "sources": [
     {
       "id": "openrouter-models-api",
@@ -351,6 +351,69 @@
             "cache_write": "0.625",
             "cache_write_1h": "1",
             "output": "2.5",
+            "web_search": "0.01"
+          }
+        }
+      ]
+    },
+    {
+      "id": "anthropic/claude-haiku-5.5",
+      "display_name": "Anthropic: Claude Haiku 5.5",
+      "vendor": "anthropic",
+      "canonical_id": "anthropic/claude-haiku-5.5",
+      "aliases": [
+        "anthropic/claude-haiku-5.5-20261007"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.1",
+            "cached_input": "0.01",
+            "cache_write": "0.125",
+            "cache_write_1h": "0.2",
+            "output": "0.5",
+            "web_search": "0.01"
+          }
+        },
+        {
+          "min_input_tokens": 100000,
+          "rates": {
+            "input": "0.5",
+            "cached_input": "0.05",
+            "cache_write": "0.625",
+            "cache_write_1h": "1",
+            "output": "2.5",
+            "web_search": "0.01"
+          }
+        }
+      ]
+    },
+    {
+      "id": "anthropic/claude-haiku-5.5:batch",
+      "display_name": "Anthropic: Claude Haiku 5.5 (batch)",
+      "vendor": "anthropic",
+      "canonical_id": "anthropic/claude-haiku-5.5",
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.05",
+            "cached_input": "0.005",
+            "cache_write": "0.0625",
+            "cache_write_1h": "0.1",
+            "output": "0.25",
+            "web_search": "0.01"
+          }
+        },
+        {
+          "min_input_tokens": 100000,
+          "rates": {
+            "input": "0.25",
+            "cached_input": "0.025",
+            "cache_write": "0.3125",
+            "cache_write_1h": "0.5",
+            "output": "1.25",
             "web_search": "0.01"
           }
         }
@@ -815,7 +878,7 @@
         {
           "rates": {
             "input": "2",
-            "cached_input": "0.2",
+            "cached_input": "0.1",
             "cache_write": "2.5",
             "cache_write_1h": "4",
             "output": "10",
@@ -834,7 +897,7 @@
         {
           "rates": {
             "input": "1",
-            "cached_input": "0.1",
+            "cached_input": "0.05",
             "cache_write": "1.25",
             "cache_write_1h": "2",
             "output": "5",
@@ -1325,9 +1388,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.0763",
-            "cached_input": "0.01526",
-            "output": "0.1526"
+            "input": "0.091",
+            "cached_input": "0.0182",
+            "output": "0.182"
           }
         }
       ]
@@ -1382,9 +1445,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.936294",
-            "cached_input": "0.0780245",
-            "output": "1.872588"
+            "input": "0.775692",
+            "cached_input": "0.064641",
+            "output": "1.551384"
           }
         }
       ]
@@ -1436,9 +1499,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.112",
-            "cached_input": "0.00336",
-            "output": "0.336"
+            "input": "0.05",
+            "cached_input": "0.004",
+            "output": "0.15"
           }
         }
       ]
@@ -1454,6 +1517,25 @@
           "rates": {
             "input": "0",
             "output": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "elorian/glimpse",
+      "display_name": "Elorian: Glimpse",
+      "vendor": "elorian",
+      "canonical_id": "elorian/glimpse",
+      "aliases": [
+        "elorian/glimpse-20261016"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.6",
+            "cached_input": "0.06",
+            "output": "3"
           }
         }
       ]
@@ -2164,12 +2246,12 @@
       "prices": [
         {
           "rates": {
-            "input": "0.75",
-            "cached_input": "0.075",
+            "input": "0.825",
+            "cached_input": "0.0825",
             "cache_write": "0.0416666666666667",
-            "input_audio": "0.75",
-            "cached_input_audio": "0.075",
-            "output": "3.75",
+            "input_audio": "0.825",
+            "cached_input_audio": "0.0825",
+            "output": "4.125",
             "web_search": "0.014"
           }
         }
@@ -2190,6 +2272,68 @@
             "input_audio": "0.375",
             "cached_input_audio": "0.0375",
             "output": "1.875",
+            "web_search": "0.014"
+          }
+        }
+      ]
+    },
+    {
+      "id": "google/gemini-4-argon",
+      "display_name": "Google: Gemini 4 Argon",
+      "vendor": "google",
+      "canonical_id": "google/gemini-4-argon",
+      "aliases": [
+        "google/gemini-4-argon-20261013"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "2",
+            "cached_input": "0.1",
+            "cache_write": "0.1875",
+            "input_audio": "2",
+            "cached_input_audio": "0.1",
+            "output": "10",
+            "web_search": "0.014"
+          }
+        }
+      ]
+    },
+    {
+      "id": "google/gemini-4-argon:batch",
+      "display_name": "Google: Gemini 4 Argon (batch)",
+      "vendor": "google",
+      "canonical_id": "google/gemini-4-argon",
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "1",
+            "cached_input": "0.05",
+            "cache_write": "0.1875",
+            "input_audio": "1",
+            "cached_input_audio": "0.05",
+            "output": "5",
+            "web_search": "0.014"
+          }
+        }
+      ]
+    },
+    {
+      "id": "google/gemini-nano-banana-2.1",
+      "display_name": "Google: Nano Banana 2.1",
+      "vendor": "google",
+      "canonical_id": "google/gemini-nano-banana-2.1",
+      "aliases": [
+        "google/gemini-nano-banana-2.1-20261006"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "1.5",
+            "output": "7.5",
             "web_search": "0.014"
           }
         }
@@ -2236,7 +2380,7 @@
           "rates": {
             "input": "0.08",
             "cached_input": "0.04",
-            "output": "0.45"
+            "output": "0.35"
           }
         }
       ]
@@ -2250,8 +2394,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.05",
-            "output": "0.1"
+            "input": "0.04",
+            "cached_input": "0.02",
+            "output": "0.05"
           }
         }
       ]
@@ -2448,6 +2593,25 @@
       ]
     },
     {
+      "id": "inception/mercury-3",
+      "display_name": "Inception: Mercury 3",
+      "vendor": "inception",
+      "canonical_id": "inception/mercury-3",
+      "aliases": [
+        "inception/mercury-3-20261019"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.1",
+            "cached_input": "0.01",
+            "output": "0.35"
+          }
+        }
+      ]
+    },
+    {
       "id": "inclusionai/ling-3.0-flash",
       "display_name": "inclusionAI: Ling 3.0 Flash",
       "vendor": "inclusionai",
@@ -2527,9 +2691,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.021",
-            "cached_input": "0.0042",
-            "output": "0.0616"
+            "input": "0.06",
+            "cached_input": "0.012",
+            "output": "0.18"
           }
         }
       ]
@@ -2545,6 +2709,25 @@
           "rates": {
             "input": "0",
             "output": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "inclusionai/ling-3.1-flash",
+      "display_name": "inclusionAI: Ling 3.1 Flash",
+      "vendor": "inclusionai",
+      "canonical_id": "inclusionai/ling-3.1-flash",
+      "aliases": [
+        "inclusionai/ling-3.1-flash-20261002"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.075",
+            "cached_input": "0.015",
+            "output": "0.225"
           }
         }
       ]
@@ -2607,6 +2790,25 @@
       ]
     },
     {
+      "id": "liquid/lfm-2.5-2.6b",
+      "display_name": "LiquidAI: LFM2.5-2.6B",
+      "vendor": "liquid",
+      "canonical_id": "liquid/lfm-2.5-2.6b",
+      "aliases": [
+        "liquid/lfm-2.5-2.6b-20260811"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.35",
+            "cached_input": "0.04",
+            "output": "0.5"
+          }
+        }
+      ]
+    },
+    {
       "id": "liquid/lfm-2.5-2.6b:free",
       "display_name": "LiquidAI: LFM2.5-2.6B (free)",
       "vendor": "liquid",
@@ -2617,6 +2819,25 @@
           "rates": {
             "input": "0",
             "output": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "liquid/lfm-2.5-24b-a2b",
+      "display_name": "LiquidAI: LFM2.5-24B-A2B",
+      "vendor": "liquid",
+      "canonical_id": "liquid/lfm-2.5-24b-a2b",
+      "aliases": [
+        "liquid/lfm-2.5-24b-a2b-20261012"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.05",
+            "cached_input": "0.025",
+            "output": "0.7"
           }
         }
       ]
@@ -2744,6 +2965,7 @@
         {
           "rates": {
             "input": "0.1875",
+            "cached_input": "0.05",
             "output": "0.6525"
           }
         }
@@ -2902,6 +3124,45 @@
       ]
     },
     {
+      "id": "meta/muse-spark-open",
+      "display_name": "Meta: Muse Spark Open",
+      "vendor": "meta",
+      "canonical_id": "meta/muse-spark-open",
+      "aliases": [
+        "meta/muse-spark-open-20261015"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "1.25",
+            "cached_input": "0.15",
+            "output": "4.25"
+          }
+        }
+      ]
+    },
+    {
+      "id": "meta/muse-wonder",
+      "display_name": "Meta: Muse Wonder",
+      "vendor": "meta",
+      "canonical_id": "meta/muse-wonder",
+      "aliases": [
+        "meta/muse-wonder-20261012"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "4",
+            "cached_input": "0.2",
+            "output": "20",
+            "web_search": "0.0025"
+          }
+        }
+      ]
+    },
+    {
       "id": "microsoft/phi-4",
       "display_name": "Microsoft: Phi 4",
       "vendor": "microsoft",
@@ -2955,7 +3216,7 @@
       "prices": [
         {
           "rates": {
-            "input": "0.4",
+            "input": "0.55",
             "output": "2.2"
           }
         }
@@ -3023,9 +3284,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.27",
-            "cached_input": "0.027",
-            "output": "1.08"
+            "input": "0.3",
+            "cached_input": "0.03",
+            "output": "1.2"
           }
         }
       ]
@@ -3064,6 +3325,25 @@
             "input": "0.3",
             "cached_input": "0.06",
             "output": "1.2"
+          }
+        }
+      ]
+    },
+    {
+      "id": "minimax/minimax-m3.1-flash",
+      "display_name": "MiniMax: MiniMax M3.1 Flash",
+      "vendor": "minimax",
+      "canonical_id": "minimax/minimax-m3.1-flash",
+      "aliases": [
+        "minimax/minimax-m3.1-flash-20261019"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.15",
+            "cached_input": "0.015",
+            "output": "0.6"
           }
         }
       ]
@@ -3245,6 +3525,25 @@
       ]
     },
     {
+      "id": "mistralai/mistral-large-4-0",
+      "display_name": "Mistral: Mistral Large 4",
+      "vendor": "mistralai",
+      "canonical_id": "mistralai/mistral-large-4-0",
+      "aliases": [
+        "mistralai/mistral-large-4-0-20261006"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "1.36",
+            "cached_input": "0.14",
+            "output": "4.18"
+          }
+        }
+      ]
+    },
+    {
       "id": "mistralai/mistral-medium-3",
       "display_name": "Mistral: Mistral Medium 3",
       "vendor": "mistralai",
@@ -3334,7 +3633,7 @@
       "prices": [
         {
           "rates": {
-            "input": "0.019",
+            "input": "0.029",
             "output": "0.03"
           }
         }
@@ -3436,8 +3735,8 @@
       "prices": [
         {
           "rates": {
-            "input": "0.09375",
-            "output": "0.25"
+            "input": "0.075",
+            "output": "0.2"
           }
         }
       ]
@@ -3471,6 +3770,42 @@
             "cached_input": "0.01",
             "input_audio": "100",
             "output": "0.3"
+          }
+        }
+      ]
+    },
+    {
+      "id": "moondream/moondream3-preview",
+      "display_name": "Moondream: Moondream 3 Preview",
+      "vendor": "moondream",
+      "canonical_id": "moondream/moondream3-preview",
+      "aliases": [
+        "moondream/moondream3-preview-20261013"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.3",
+            "output": "2.5"
+          }
+        }
+      ]
+    },
+    {
+      "id": "moondream/moondream3.1-9b-a2b",
+      "display_name": "Moondream: Moondream 3.1",
+      "vendor": "moondream",
+      "canonical_id": "moondream/moondream3.1-9b-a2b",
+      "aliases": [
+        "moondream/moondream3.1-9b-a2b-20261013"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.3",
+            "output": "2.5"
           }
         }
       ]
@@ -3536,9 +3871,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.45",
-            "cached_input": "0.07",
-            "output": "2.25"
+            "input": "0.5",
+            "cached_input": "0.15",
+            "output": "2.5"
           }
         }
       ]
@@ -3555,9 +3890,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.95",
-            "cached_input": "0.16",
-            "output": "4"
+            "input": "0.65",
+            "cached_input": "0.15",
+            "output": "3.41"
           }
         }
       ]
@@ -3574,9 +3909,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.6562",
-            "cached_input": "0.18",
-            "output": "3.3"
+            "input": "0.6712",
+            "cached_input": "0.15",
+            "output": "3.35"
           }
         }
       ]
@@ -3596,6 +3931,25 @@
             "input": "3",
             "cached_input": "0.3",
             "output": "15"
+          }
+        }
+      ]
+    },
+    {
+      "id": "moonshotai/kimi-k3.1-pro",
+      "display_name": "MoonshotAI: Kimi K3.1 Pro",
+      "vendor": "moonshotai",
+      "canonical_id": "moonshotai/kimi-k3.1-pro",
+      "aliases": [
+        "moonshotai/kimi-k3.1-pro-20261023"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "2",
+            "cached_input": "0.2",
+            "output": "10"
           }
         }
       ]
@@ -3902,7 +4256,7 @@
       "prices": [
         {
           "rates": {
-            "input": "0.08",
+            "input": "0.07",
             "cached_input": "0.04",
             "output": "0.2"
           }
@@ -3914,6 +4268,40 @@
       "display_name": "NVIDIA: Nemotron 3.5 Lightning (free)",
       "vendor": "nvidia",
       "canonical_id": "nvidia/nemotron-3.5-lightning",
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0",
+            "output": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "nvidia/nemotron-3.5-super-vl",
+      "display_name": "NVIDIA: Nemotron 3.5 Super VL",
+      "vendor": "nvidia",
+      "canonical_id": "nvidia/nemotron-3.5-super-vl",
+      "aliases": [
+        "nvidia/nemotron-3.5-super-vl-20261015"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.15",
+            "cached_input": "0.02",
+            "output": "0.5"
+          }
+        }
+      ]
+    },
+    {
+      "id": "nvidia/nemotron-3.5-super-vl:free",
+      "display_name": "NVIDIA: Nemotron 3.5 Super VL (free)",
+      "vendor": "nvidia",
+      "canonical_id": "nvidia/nemotron-3.5-super-vl",
       "source": "openrouter-models-api",
       "prices": [
         {
@@ -4116,7 +4504,7 @@
         {
           "rates": {
             "input": "0.1",
-            "cached_input": "0.025",
+            "cached_input": "0.03",
             "output": "0.4",
             "web_search": "0.01"
           }
@@ -5110,20 +5498,20 @@
       "prices": [
         {
           "rates": {
-            "input": "2",
-            "cached_input": "0.2",
-            "cache_write": "2.5",
-            "output": "10",
+            "input": "4",
+            "cached_input": "0.4",
+            "cache_write": "5",
+            "output": "20",
             "web_search": "0.01"
           }
         },
         {
           "min_input_tokens": 272000,
           "rates": {
-            "input": "4",
-            "cached_input": "0.4",
-            "cache_write": "5",
-            "output": "15",
+            "input": "8",
+            "cached_input": "0.8",
+            "cache_write": "10",
+            "output": "30",
             "web_search": "0.01"
           }
         }
@@ -5141,6 +5529,34 @@
       "prices": [
         {
           "rates": {
+            "input": "4",
+            "cached_input": "0.4",
+            "cache_write": "5",
+            "output": "20",
+            "web_search": "0.01"
+          }
+        },
+        {
+          "min_input_tokens": 272000,
+          "rates": {
+            "input": "8",
+            "cached_input": "0.8",
+            "cache_write": "10",
+            "output": "30",
+            "web_search": "0.01"
+          }
+        }
+      ]
+    },
+    {
+      "id": "openai/gpt-5.6-sol-pro:batch",
+      "display_name": "OpenAI: GPT-5.6 Sol Pro (batch)",
+      "vendor": "openai",
+      "canonical_id": "openai/gpt-5.6-sol-pro",
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
             "input": "2",
             "cached_input": "0.2",
             "cache_write": "2.5",
@@ -5161,34 +5577,6 @@
       ]
     },
     {
-      "id": "openai/gpt-5.6-sol-pro:batch",
-      "display_name": "OpenAI: GPT-5.6 Sol Pro (batch)",
-      "vendor": "openai",
-      "canonical_id": "openai/gpt-5.6-sol-pro",
-      "source": "openrouter-models-api",
-      "prices": [
-        {
-          "rates": {
-            "input": "1",
-            "cached_input": "0.1",
-            "cache_write": "1.25",
-            "output": "5",
-            "web_search": "0.01"
-          }
-        },
-        {
-          "min_input_tokens": 272000,
-          "rates": {
-            "input": "2",
-            "cached_input": "0.2",
-            "cache_write": "2.5",
-            "output": "7.5",
-            "web_search": "0.01"
-          }
-        }
-      ]
-    },
-    {
       "id": "openai/gpt-5.6-sol:batch",
       "display_name": "OpenAI: GPT-5.6 Sol (batch)",
       "vendor": "openai",
@@ -5197,20 +5585,20 @@
       "prices": [
         {
           "rates": {
-            "input": "1",
-            "cached_input": "0.1",
-            "cache_write": "1.25",
-            "output": "5",
+            "input": "2",
+            "cached_input": "0.2",
+            "cache_write": "2.5",
+            "output": "10",
             "web_search": "0.01"
           }
         },
         {
           "min_input_tokens": 272000,
           "rates": {
-            "input": "2",
-            "cached_input": "0.2",
-            "cache_write": "2.5",
-            "output": "7.5",
+            "input": "4",
+            "cached_input": "0.4",
+            "cache_write": "5",
+            "output": "15",
             "web_search": "0.01"
           }
         }
@@ -5694,6 +6082,124 @@
           "rates": {
             "input": "2",
             "cached_input": "0.2",
+            "cache_write": "2.5",
+            "output": "7.5",
+            "web_search": "0.01"
+          }
+        }
+      ]
+    },
+    {
+      "id": "openai/gpt-6.1-sol",
+      "display_name": "OpenAI: GPT-6.1 Sol",
+      "vendor": "openai",
+      "canonical_id": "openai/gpt-6.1-sol",
+      "aliases": [
+        "openai/gpt-6.1-sol-20260929"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "2",
+            "cached_input": "0.1",
+            "cache_write": "2.5",
+            "output": "10",
+            "web_search": "0.01"
+          }
+        },
+        {
+          "min_input_tokens": 272000,
+          "rates": {
+            "input": "4",
+            "cached_input": "0.2",
+            "cache_write": "5",
+            "output": "15",
+            "web_search": "0.01"
+          }
+        }
+      ]
+    },
+    {
+      "id": "openai/gpt-6.1-sol-pro",
+      "display_name": "OpenAI: GPT-6.1 Sol Pro",
+      "vendor": "openai",
+      "canonical_id": "openai/gpt-6.1-sol-pro",
+      "aliases": [
+        "openai/gpt-6.1-sol-pro-20260929"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "2",
+            "cached_input": "0.1",
+            "cache_write": "2.5",
+            "output": "10",
+            "web_search": "0.01"
+          }
+        },
+        {
+          "min_input_tokens": 272000,
+          "rates": {
+            "input": "4",
+            "cached_input": "0.2",
+            "cache_write": "5",
+            "output": "15",
+            "web_search": "0.01"
+          }
+        }
+      ]
+    },
+    {
+      "id": "openai/gpt-6.1-sol-pro:batch",
+      "display_name": "OpenAI: GPT-6.1 Sol Pro (batch)",
+      "vendor": "openai",
+      "canonical_id": "openai/gpt-6.1-sol-pro",
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "1",
+            "cached_input": "0.05",
+            "cache_write": "1.25",
+            "output": "5",
+            "web_search": "0.01"
+          }
+        },
+        {
+          "min_input_tokens": 272000,
+          "rates": {
+            "input": "2",
+            "cached_input": "0.1",
+            "cache_write": "2.5",
+            "output": "7.5",
+            "web_search": "0.01"
+          }
+        }
+      ]
+    },
+    {
+      "id": "openai/gpt-6.1-sol:batch",
+      "display_name": "OpenAI: GPT-6.1 Sol (batch)",
+      "vendor": "openai",
+      "canonical_id": "openai/gpt-6.1-sol",
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "1",
+            "cached_input": "0.05",
+            "cache_write": "1.25",
+            "output": "5",
+            "web_search": "0.01"
+          }
+        },
+        {
+          "min_input_tokens": 272000,
+          "rates": {
+            "input": "2",
+            "cached_input": "0.1",
             "cache_write": "2.5",
             "output": "7.5",
             "web_search": "0.01"
@@ -6432,8 +6938,8 @@
       "prices": [
         {
           "rates": {
-            "input": "0.23",
-            "output": "2.3"
+            "input": "0.45",
+            "output": "3.5"
           }
         }
       ]
@@ -6465,8 +6971,8 @@
       "prices": [
         {
           "rates": {
-            "input": "0.04815",
-            "output": "0.19305"
+            "input": "0.1",
+            "output": "0.3"
           }
         }
       ]
@@ -6804,8 +7310,8 @@
       "prices": [
         {
           "rates": {
-            "input": "0.2",
-            "output": "2.4"
+            "input": "0.29",
+            "output": "1"
           }
         }
       ]
@@ -6834,8 +7340,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.117",
-            "output": "0.455"
+            "input": "0.25",
+            "cached_input": "0.12",
+            "output": "0.75"
           }
         }
       ]
@@ -6885,8 +7392,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.195",
-            "output": "1.56"
+            "input": "0.27",
+            "cached_input": "0.27",
+            "output": "2.16"
           }
         }
       ]
@@ -6922,9 +7430,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.55",
-            "cached_input": "0.225",
-            "output": "3.5"
+            "input": "0.5",
+            "cached_input": "0.3",
+            "output": "3.6"
           }
         }
       ]
@@ -6941,8 +7449,8 @@
       "prices": [
         {
           "rates": {
-            "input": "0.1",
-            "output": "0.15"
+            "input": "0.17",
+            "output": "0.25"
           }
         }
       ]
@@ -7045,9 +7553,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.15",
+            "input": "0.1",
             "cached_input": "0.05",
-            "output": "1"
+            "output": "0.95"
           }
         }
       ]
@@ -7218,6 +7726,21 @@
       ]
     },
     {
+      "id": "qwen/qwen3.7-plus:batch",
+      "display_name": "Qwen: Qwen3.7 Plus (batch)",
+      "vendor": "qwen",
+      "canonical_id": "qwen/qwen3.7-plus",
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.23",
+            "output": "0.92"
+          }
+        }
+      ]
+    },
+    {
       "id": "qwen/qwen3.8-2.4t-a95b",
       "display_name": "Qwen: Qwen3.8 2.4T A95B",
       "vendor": "qwen",
@@ -7248,9 +7771,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.42",
-            "cached_input": "0.085",
-            "output": "3"
+            "input": "0.2",
+            "cached_input": "0.09",
+            "output": "2.5"
           }
         }
       ]
@@ -7344,6 +7867,40 @@
             "input": "0.15",
             "cached_input": "0.016",
             "output": "0.47"
+          }
+        }
+      ]
+    },
+    {
+      "id": "recursive/flint-v1.0:free",
+      "display_name": "Recursive: Flint (free)",
+      "vendor": "recursive",
+      "canonical_id": "recursive/flint-v1.0",
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0",
+            "output": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "reflection/beam-1.0-501b-a23b",
+      "display_name": "Reflection: Beam 1.0 501B A23B",
+      "vendor": "reflection",
+      "canonical_id": "reflection/beam-1.0-501b-a23b",
+      "aliases": [
+        "reflection/beam-1.0-501b-a23b-20261016"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.25",
+            "cached_input": "0.05",
+            "output": "1"
           }
         }
       ]
@@ -7561,6 +8118,42 @@
       ]
     },
     {
+      "id": "scaledown/extract",
+      "display_name": "ScaleDown: Extract",
+      "vendor": "scaledown",
+      "canonical_id": "scaledown/extract",
+      "aliases": [
+        "scaledown/extract-20260928"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.04",
+            "output": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "scaledown/summarize",
+      "display_name": "ScaleDown: Summarize",
+      "vendor": "scaledown",
+      "canonical_id": "scaledown/summarize",
+      "aliases": [
+        "scaledown/summarize-20260928"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.04",
+            "output": "0"
+          }
+        }
+      ]
+    },
+    {
       "id": "stealth/space-bunny-alpha",
       "display_name": "Space Bunny Alpha",
       "vendor": "stealth",
@@ -7605,6 +8198,25 @@
             "input": "0.2",
             "cached_input": "0.04",
             "output": "1.15"
+          }
+        }
+      ]
+    },
+    {
+      "id": "stepfun/step-5-preview",
+      "display_name": "StepFun: Step 5 Preview",
+      "vendor": "stepfun",
+      "canonical_id": "stepfun/step-5-preview",
+      "aliases": [
+        "stepfun/step-5-preview-20261008"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "1",
+            "cached_input": "0.1",
+            "output": "2.7"
           }
         }
       ]
@@ -7870,6 +8482,44 @@
       ]
     },
     {
+      "id": "unbiased/pareto-26.10",
+      "display_name": "Pareto 26.10",
+      "vendor": "unbiased",
+      "canonical_id": "unbiased/pareto-26.10",
+      "aliases": [
+        "unbiased/pareto-26.10-20261015"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.8",
+            "cached_input": "0.03",
+            "output": "3.2"
+          }
+        }
+      ]
+    },
+    {
+      "id": "unbiased/pareto-26.9",
+      "display_name": "Pareto 26.9",
+      "vendor": "unbiased",
+      "canonical_id": "unbiased/pareto-26.9",
+      "aliases": [
+        "unbiased/pareto-26.9-20260917"
+      ],
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "2.5",
+            "cached_input": "0.25",
+            "output": "7.5"
+          }
+        }
+      ]
+    },
+    {
       "id": "undi95/remm-slerp-l2-13b",
       "display_name": "ReMM SLERP 13B",
       "vendor": "undi95",
@@ -7931,9 +8581,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.09",
-            "cached_input": "0.018",
-            "output": "0.36"
+            "input": "0.15",
+            "cached_input": "0.03",
+            "output": "0.6"
           }
         }
       ]
@@ -8139,18 +8789,18 @@
       "prices": [
         {
           "rates": {
-            "input": "1.6",
-            "cached_input": "0.4",
-            "output": "4.8",
+            "input": "2",
+            "cached_input": "0.5",
+            "output": "6",
             "web_search": "0.005"
           }
         },
         {
           "min_input_tokens": 200000,
           "rates": {
-            "input": "3.2",
-            "cached_input": "0.8",
-            "output": "9.6",
+            "input": "4",
+            "cached_input": "1",
+            "output": "12",
             "web_search": "0.005"
           }
         }
@@ -8197,9 +8847,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.14",
-            "cached_input": "0.0028",
-            "output": "0.28"
+            "input": "0.119",
+            "cached_input": "0.00255",
+            "output": "0.238"
           }
         }
       ]
@@ -8216,9 +8866,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.435",
-            "cached_input": "0.0036",
-            "output": "0.87"
+            "input": "0.3045",
+            "cached_input": "0.0028",
+            "output": "0.609"
           }
         }
       ]
@@ -8281,6 +8931,21 @@
       ]
     },
     {
+      "id": "xingchen-agi/xing4.0-29b-a4b:free",
+      "display_name": "XingChen: Xing4.0 29B A4B (free)",
+      "vendor": "xingchen-agi",
+      "canonical_id": "xingchen-agi/xing4.0-29b-a4b",
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0",
+            "output": "0"
+          }
+        }
+      ]
+    },
+    {
       "id": "z-ai/glm-4.5",
       "display_name": "Z.ai: GLM 4.5",
       "vendor": "z-ai",
@@ -8337,9 +9002,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.43",
-            "cached_input": "0.08",
-            "output": "1.75"
+            "input": "0.55",
+            "cached_input": "0.11",
+            "output": "2.2"
           }
         }
       ]
@@ -8357,7 +9022,7 @@
         {
           "rates": {
             "input": "0.3",
-            "cached_input": "0.055",
+            "cached_input": "0.05",
             "output": "0.9"
           }
         }
@@ -8375,9 +9040,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.6",
-            "cached_input": "0.11",
-            "output": "2.2"
+            "input": "0.54",
+            "cached_input": "0.099",
+            "output": "1.98"
           }
         }
       ]
@@ -8412,9 +9077,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.6",
-            "cached_input": "0.12",
-            "output": "1.92"
+            "input": "1",
+            "cached_input": "0.2",
+            "output": "3.2"
           }
         }
       ]
@@ -8450,9 +9115,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.9646",
-            "cached_input": "0.17914",
-            "output": "3.0316"
+            "input": "1.4",
+            "cached_input": "0.26",
+            "output": "4.4"
           }
         }
       ]
@@ -8538,9 +9203,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.06",
-            "cached_input": "0.012",
-            "output": "0.2"
+            "input": "0.05",
+            "cached_input": "0.01",
+            "output": "0.18"
           }
         }
       ]
@@ -8685,7 +9350,7 @@
         {
           "rates": {
             "input": "2",
-            "cached_input": "0.2",
+            "cached_input": "0.1",
             "cache_write": "2.5",
             "cache_write_1h": "4",
             "output": "10",
@@ -8894,7 +9559,7 @@
         {
           "rates": {
             "input": "2",
-            "cached_input": "0.2",
+            "cached_input": "0.1",
             "cache_write": "2.5",
             "output": "10",
             "web_search": "0.01"
@@ -8904,7 +9569,7 @@
           "min_input_tokens": 272000,
           "rates": {
             "input": "4",
-            "cached_input": "0.4",
+            "cached_input": "0.2",
             "cache_write": "5",
             "output": "15",
             "web_search": "0.01"
@@ -8941,6 +9606,22 @@
       ]
     },
     {
+      "id": "~unbiased/pareto-latest",
+      "display_name": "Pareto Latest",
+      "vendor": "~unbiased",
+      "canonical_id": "~unbiased/pareto-latest",
+      "source": "openrouter-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.8",
+            "cached_input": "0.03",
+            "output": "3.2"
+          }
+        }
+      ]
+    },
+    {
       "id": "~x-ai/grok-latest",
       "display_name": "xAI: Grok Latest",
       "vendor": "~x-ai",
@@ -8949,18 +9630,18 @@
       "prices": [
         {
           "rates": {
-            "input": "1.6",
-            "cached_input": "0.4",
-            "output": "4.8",
+            "input": "2",
+            "cached_input": "0.5",
+            "output": "6",
             "web_search": "0.005"
           }
         },
         {
           "min_input_tokens": 200000,
           "rates": {
-            "input": "3.2",
-            "cached_input": "0.8",
-            "output": "9.6",
+            "input": "4",
+            "cached_input": "1",
+            "output": "12",
             "web_search": "0.005"
           }
         }
@@ -8991,9 +9672,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.19",
-            "cached_input": "0.102",
-            "output": "2.04"
+            "input": "0.0699",
+            "cached_input": "0.0689",
+            "output": "1.4"
           }
         }
       ]

@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "fireworks",
   "currency": "USD",
-  "verified_at": "2026-09-29",
+  "verified_at": "2026-10-26",
   "sources": [
     {
       "id": "fireworks-pricing-docs",
@@ -119,6 +119,71 @@
       "id": "accounts/fireworks/models/deepseek-v4p1-flash",
       "display_name": "DeepSeek V4.1 Flash",
       "canonical_id": "fireworks/deepseek-v4p1-flash",
+      "source": "fireworks-pricing-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.3",
+            "cached_input": "0.006",
+            "output": "1.2"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us"
+          },
+          "rates": {
+            "input": "0.45",
+            "cached_input": "0.009",
+            "output": "1.8"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us",
+            "service_tier": "batch"
+          },
+          "rates": {
+            "input": "0.225",
+            "output": "0.9"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us",
+            "service_tier": "priority"
+          },
+          "rates": {
+            "input": "0.5625",
+            "cached_input": "0.01125",
+            "output": "2.25"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "batch"
+          },
+          "rates": {
+            "input": "0.15",
+            "output": "0.6"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "priority"
+          },
+          "rates": {
+            "input": "0.375",
+            "cached_input": "0.0075",
+            "output": "1.5"
+          }
+        }
+      ]
+    },
+    {
+      "id": "accounts/fireworks/models/deepseek-v4p1-flash-1017",
+      "display_name": "DeepSeek V4.1 Flash 1017",
+      "canonical_id": "fireworks/deepseek-v4p1-flash-1017",
       "source": "fireworks-pricing-docs",
       "prices": [
         {
@@ -650,6 +715,40 @@
             "input": "0.525",
             "cached_input": "0.06",
             "output": "2.25"
+          }
+        }
+      ]
+    },
+    {
+      "id": "accounts/fireworks/models/muse-spark-open",
+      "display_name": "Muse Spark Open",
+      "canonical_id": "fireworks/muse-spark-open",
+      "source": "fireworks-pricing-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "1.25",
+            "cached_input": "0.15",
+            "output": "4.25"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "batch"
+          },
+          "rates": {
+            "input": "0.625",
+            "output": "2.125"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "priority"
+          },
+          "rates": {
+            "input": "1.875",
+            "cached_input": "0.225",
+            "output": "6.375"
           }
         }
       ]

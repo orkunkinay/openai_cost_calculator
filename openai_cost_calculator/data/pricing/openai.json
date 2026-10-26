@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "openai",
   "currency": "USD",
-  "verified_at": "2026-09-23",
+  "verified_at": "2026-10-26",
   "sources": [
     {
       "id": "legacy-csv",
@@ -2182,6 +2182,17 @@
             "input_image": "8",
             "output_image": "30"
           }
+        },
+        {
+          "conditions": {
+            "service_tier": "batch"
+          },
+          "rates": {
+            "input": "2.5",
+            "cached_input": "0.625",
+            "input_image": "4",
+            "output_image": "15"
+          }
         }
       ]
     },
@@ -2197,6 +2208,17 @@
             "cached_input": "1.25",
             "input_image": "8",
             "output_image": "30"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "batch"
+          },
+          "rates": {
+            "input": "2.5",
+            "cached_input": "0.625",
+            "input_image": "4",
+            "output_image": "15"
           }
         }
       ]
@@ -2311,6 +2333,21 @@
             "input_image": "0.8",
             "output": "2.4",
             "output_audio": "20"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-rosalind-discovery",
+      "vendor": "openai",
+      "canonical_id": "openai/gpt-rosalind-discovery",
+      "source": "openai-pricing-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "5",
+            "cached_input": "0.5",
+            "output": "25"
           }
         }
       ]
