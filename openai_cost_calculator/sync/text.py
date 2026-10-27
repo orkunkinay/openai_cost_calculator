@@ -35,7 +35,8 @@ def parse_money(text: str) -> Optional[Decimal]:
     Raises ``ValueError`` for anything else so callers can flag the cell for
     review instead of guessing.
     """
-    value = clean_cell(text).replace("/ MTok", "").replace("/MTok", "").strip()
+    value = clean_cell(text).replace("/ MTok", "").replace("/MTok", "")
+    value = re.sub(r"\bUSD\b", "", value).strip()
     if value.lower() in _NOT_AVAILABLE:
         return None
     if value.lower() == "free":

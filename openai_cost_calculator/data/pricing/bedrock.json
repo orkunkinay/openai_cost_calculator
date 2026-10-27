@@ -1753,7 +1753,7 @@
           "conditions": {
             "region": "eu-central-1"
           },
-          "min_input_tokens": 100000,
+          "min_input_tokens": 100001,
           "rates": {
             "input": "0.55",
             "cached_input": "0.055",
@@ -1778,7 +1778,7 @@
           "conditions": {
             "region": "global"
           },
-          "min_input_tokens": 100000,
+          "min_input_tokens": 100001,
           "rates": {
             "input": "0.5",
             "cached_input": "0.05",
@@ -1803,7 +1803,7 @@
           "conditions": {
             "region": "us-east-1"
           },
-          "min_input_tokens": 100000,
+          "min_input_tokens": 100001,
           "rates": {
             "input": "0.55",
             "cached_input": "0.055",
@@ -1828,7 +1828,7 @@
           "conditions": {
             "region": "us-west-2"
           },
-          "min_input_tokens": 100000,
+          "min_input_tokens": 100001,
           "rates": {
             "input": "0.55",
             "cached_input": "0.055",

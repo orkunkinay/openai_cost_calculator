@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "anthropic",
   "currency": "USD",
-  "verified_at": "2026-09-29",
+  "verified_at": "2026-10-27",
   "sources": [
     {
       "id": "anthropic-pricing-docs",
@@ -190,6 +190,119 @@
             "cache_write": "0.625",
             "cache_write_1h": "1",
             "output": "2.5",
+            "web_search": "0.01"
+          }
+        }
+      ]
+    },
+    {
+      "id": "claude-haiku-5-5",
+      "display_name": "Claude Haiku 5.5",
+      "vendor": "anthropic",
+      "canonical_id": "anthropic/claude-haiku-5-5",
+      "source": "anthropic-pricing-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.1",
+            "cached_input": "0.01",
+            "cache_write": "0.125",
+            "cache_write_1h": "0.2",
+            "output": "0.5",
+            "web_search": "0.01"
+          }
+        },
+        {
+          "min_input_tokens": 100001,
+          "rates": {
+            "input": "0.5",
+            "cached_input": "0.05",
+            "cache_write": "0.625",
+            "cache_write_1h": "1",
+            "output": "2.5",
+            "web_search": "0.01"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us"
+          },
+          "rates": {
+            "input": "0.11",
+            "cached_input": "0.011",
+            "cache_write": "0.1375",
+            "cache_write_1h": "0.22",
+            "output": "0.55",
+            "web_search": "0.01"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us"
+          },
+          "min_input_tokens": 100001,
+          "rates": {
+            "input": "0.55",
+            "cached_input": "0.055",
+            "cache_write": "0.6875",
+            "cache_write_1h": "1.1",
+            "output": "2.75",
+            "web_search": "0.01"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us",
+            "service_tier": "batch"
+          },
+          "rates": {
+            "input": "0.055",
+            "cached_input": "0.0055",
+            "cache_write": "0.06875",
+            "cache_write_1h": "0.11",
+            "output": "0.275",
+            "web_search": "0.01"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us",
+            "service_tier": "batch"
+          },
+          "min_input_tokens": 100001,
+          "rates": {
+            "input": "0.275",
+            "cached_input": "0.0275",
+            "cache_write": "0.34375",
+            "cache_write_1h": "0.55",
+            "output": "1.375",
+            "web_search": "0.01"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "batch"
+          },
+          "rates": {
+            "input": "0.05",
+            "cached_input": "0.005",
+            "cache_write": "0.0625",
+            "cache_write_1h": "0.1",
+            "output": "0.25",
+            "web_search": "0.01"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "batch"
+          },
+          "min_input_tokens": 100001,
+          "rates": {
+            "input": "0.25",
+            "cached_input": "0.025",
+            "cache_write": "0.3125",
+            "cache_write_1h": "0.5",
+            "output": "1.25",
             "web_search": "0.01"
           }
         }
@@ -977,7 +1090,7 @@
         {
           "rates": {
             "input": "2",
-            "cached_input": "0.2",
+            "cached_input": "0.1",
             "cache_write": "2.5",
             "cache_write_1h": "4",
             "output": "10",
@@ -990,7 +1103,7 @@
           },
           "rates": {
             "input": "2.2",
-            "cached_input": "0.22",
+            "cached_input": "0.11",
             "cache_write": "2.75",
             "cache_write_1h": "4.4",
             "output": "11",
@@ -1004,7 +1117,7 @@
           },
           "rates": {
             "input": "1.1",
-            "cached_input": "0.11",
+            "cached_input": "0.055",
             "cache_write": "1.375",
             "cache_write_1h": "2.2",
             "output": "5.5",
@@ -1017,7 +1130,7 @@
           },
           "rates": {
             "input": "1",
-            "cached_input": "0.1",
+            "cached_input": "0.05",
             "cache_write": "1.25",
             "cache_write_1h": "2",
             "output": "5",

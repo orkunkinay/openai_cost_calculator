@@ -209,7 +209,7 @@ def test_bedrock_long_context_meters_become_a_separate_tier(bedrock_models):
         "cache_write": D("0.125"),
         "cache_write_1h": D("0.2"),
     }
-    assert _rates(haiku, 100_000, region="global") == {
+    assert _rates(haiku, 100_001, region="global") == {
         "input": D("0.5"),
         "output": D("2.5"),
         "cached_input": D("0.05"),
@@ -217,7 +217,7 @@ def test_bedrock_long_context_meters_become_a_separate_tier(bedrock_models):
         "cache_write_1h": D("1"),
     }
     assert _rates(haiku, region="us-east-1")["output"] == D("0.55")
-    assert _rates(haiku, 100_000, region="us-east-1")["input"] == D("0.55")
+    assert _rates(haiku, 100_001, region="us-east-1")["input"] == D("0.55")
 
 
 def test_bedrock_long_context_without_known_threshold_is_flagged(monkeypatch):

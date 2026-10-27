@@ -65,7 +65,7 @@ _VENDORS = {
 _CODE_VENDORS = (("nova", "amazon"), ("titan", "amazon"))
 #: Prompt length at which a model's ``long_ctx`` meters apply, from the vendor's pricing docs.
 LONG_CONTEXT_THRESHOLDS: Dict[str, int] = {
-    "anthropic.claude-haiku-5-5": 100_000,
+    "anthropic.claude-haiku-5-5": 100_001,  # "prompts over 100,000 tokens"
 }
 _QUALIFIED_CODE = re.compile(r"^[a-z][a-z0-9-]*\.[a-z]")
 _SKIP_WORDS = {

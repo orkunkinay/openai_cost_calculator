@@ -8,6 +8,9 @@ Parsed from ``platform.claude.com/docs/en/about-claude/pricing.md``:
 * the batch and fast-mode tables give input/output; the documentation states
   that cache multipliers stack on top of both, so cache prices are scaled by
   the same factor as base input;
+* a model priced by prompt length has one row per tier ("Claude Haiku 5.5
+  (for prompts over 100,000 tokens)"); the higher tier becomes a
+  ``min_input_tokens`` price set, in both the model and batch tables;
 * the data-residency sentence ("For Claude 4.6 and later models ... 1.1x")
   yields ``region="us"`` prices.  If that sentence stops matching, regional
   prices are not emitted and the run is flagged for review.
@@ -47,14 +50,26 @@ _RESIDENCY = re.compile(
     r"(?P<multiplier>\d+(?:\.\d+)?)x multiplier on all token pricing categories",
     re.S,
 )
-_WEB_SEARCH = re.compile(r"\$(?P<price>\d+(?:\.\d+)?) per (?P<count>[\d,]+) searches")
+_WEB_SEARCH = re.compile(r"\$(?P<price>\d+(?:\.\d+)?)(?: USD)? per (?P<count>[\d,]+) searches")
+_PROMPT_TIER = re.compile(r"\(for prompts (?P<bound>up to|over) (?P<tokens>[\d,]+) tokens\)", re.I)
 _VERSION = re.compile(r"(\d+)(?:\.(\d+))?$")
 
 
 def _names(cell: str) -> List[str]:
     """Model display names in a cell ("Claude Opus 5 / Claude Opus 4.8" -> two names)."""
-    text = re.sub(r"\([^)]*\)", "", clean_cell(cell))
+    text = clean_cell(cell)
+    removed = 1
+    while removed:  # innermost first: notes can nest "(retired, except on ... (Google managed))"
+        text, removed = re.subn(r"\([^()]*\)", "", text)
     return [name.strip() for name in text.split("/") if name.strip()]
+
+
+def _min_input_tokens(cell: str) -> int:
+    """``(for prompts over 100,000 tokens)`` -> 100001; no tier note -> 0."""
+    match = _PROMPT_TIER.search(clean_cell(cell))
+    if match is None or match.group("bound").lower() == "up to":
+        return 0
+    return int(match.group("tokens").replace(",", "")) + 1
 
 
 def model_id(display_name: str) -> str:
@@ -78,8 +93,10 @@ def _find(tables: List[Table], *columns: str, heading: str = "") -> Optional[Tab
     return None
 
 
-def _two_column_rates(table: Optional[Table], result: SourceResult, what: str) -> Dict[str, Tuple[Decimal, Decimal]]:
-    rates: Dict[str, Tuple[Decimal, Decimal]] = {}
+def _two_column_rates(
+    table: Optional[Table], result: SourceResult, what: str
+) -> Dict[Tuple[str, int], Tuple[Decimal, Decimal]]:
+    rates: Dict[Tuple[str, int], Tuple[Decimal, Decimal]] = {}
     if table is None:
         result.issue(f"{what} table not found")
         return rates
@@ -92,7 +109,7 @@ def _two_column_rates(table: Optional[Table], result: SourceResult, what: str) -
         if values[0] is None or values[1] is None:
             continue
         for name in _names(row[0]):
-            rates[model_id(name)] = (values[0], values[1])
+            rates[(model_id(name), _min_input_tokens(row[0]))] = (values[0], values[1])
     return rates
 
 
@@ -123,6 +140,8 @@ def parse(text: str) -> SourceResult:
     )
 
     columns = {dim: model_table.column(header) for dim, header in _MODEL_COLUMNS.items()}
+    sets_by_model: Dict[str, List[Optional[PriceSet]]] = {}
+    names_by_model: Dict[str, str] = {}
     for row in model_table.rows:
         names = _names(row[0])
         if len(names) != 1:
@@ -130,6 +149,7 @@ def parse(text: str) -> SourceResult:
             continue
         name = names[0]
         mid = model_id(name)
+        minimum = _min_input_tokens(row[0])
         try:
             base = {dim: parse_money(row[col]) for dim, col in columns.items() if col is not None}
         except ValueError as exc:
@@ -141,26 +161,43 @@ def parse(text: str) -> SourceResult:
         standard = {k: v for k, v in base.items() if v is not None}
         extras = {"web_search": web_search_price} if web_search_price is not None else {}
 
-        sets: List[Optional[PriceSet]] = [price_set({**standard, **extras})]
-        if mid in batch:
-            sets.append(price_set({**_derived(standard, *batch[mid]), **extras}, service_tier="batch"))
-        if mid in fast:
-            sets.append(price_set({**_derived(standard, *fast[mid]), **extras}, service_tier="fast"))
+        sets: List[Optional[PriceSet]] = [price_set({**standard, **extras}, min_input_tokens=minimum)]
+        if (mid, minimum) in batch:
+            batch_rates = _derived(standard, *batch[(mid, minimum)])
+            sets.append(price_set({**batch_rates, **extras}, service_tier="batch", min_input_tokens=minimum))
+        if (mid, minimum) in fast:
+            fast_rates = _derived(standard, *fast[(mid, minimum)])
+            sets.append(price_set({**fast_rates, **extras}, service_tier="fast", min_input_tokens=minimum))
         if residency and _version(name) >= _version(residency.group("version")):
             multiplier = Decimal(residency.group("multiplier"))
             for price in [s for s in sets if s is not None]:
                 tier = price.conditions.get("service_tier", "standard")
                 token_rates = {k: v for k, v in price.rates.items() if k != "web_search"}
-                sets.append(price_set({**scale(token_rates, multiplier), **extras}, service_tier=tier, region="us"))
+                sets.append(
+                    price_set(
+                        {**scale(token_rates, multiplier), **extras},
+                        service_tier=tier,
+                        region="us",
+                        min_input_tokens=minimum,
+                    )
+                )
 
+        sets_by_model.setdefault(mid, []).extend(sets)
+        names_by_model.setdefault(mid, name)
+
+    for mid, sets in sets_by_model.items():
+        prices = present(sets)
+        if not any(p.min_input_tokens == 0 for p in prices):
+            result.issue("prompt-length tier without a base tier", mid)
+            continue
         result.add(
             ModelPricing(
                 id=mid,
-                prices=present(sets),
+                prices=prices,
                 source=SOURCE.id,
                 vendor="anthropic",
                 canonical_id=f"anthropic/{mid}",
-                display_name=name,
+                display_name=names_by_model[mid],
             )
         )
     return result

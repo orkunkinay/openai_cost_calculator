@@ -207,6 +207,7 @@ def test_fixture_fetcher_reports_missing_fixture():
         ("$1.25", D("1.25")),
         ("\\$0.075", D("0.075")),
         ("$3 / MTok", D("3")),
+        ("$8 USD / MTok", D("8")),
         ("Free", D(0)),
         ("-", None),
         ("—", None),
