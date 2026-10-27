@@ -35,7 +35,7 @@ jobs:
           fi
 
       - name: Install Dependencies
-        run: python -m pip install -r requirements-dev.txt -e . build twine
+        run: python -m pip install -r requirements-dev.txt -e ".[proxy]" build twine
 
       - name: Validate Pricing Catalog
         run: |
