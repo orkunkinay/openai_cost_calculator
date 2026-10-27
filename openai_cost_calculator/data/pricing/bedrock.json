@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "bedrock",
   "currency": "USD",
-  "verified_at": "2026-10-26",
+  "verified_at": "2026-10-27",
   "sources": [
     {
       "id": "aws-price-list-api",
@@ -1742,10 +1742,23 @@
             "region": "eu-central-1"
           },
           "rates": {
-            "input": "0.55",
+            "input": "0.11",
             "cached_input": "0.011",
-            "cache_write": "0.6875",
+            "cache_write": "0.1375",
             "cache_write_1h": "0.22",
+            "output": "0.55"
+          }
+        },
+        {
+          "conditions": {
+            "region": "eu-central-1"
+          },
+          "min_input_tokens": 100000,
+          "rates": {
+            "input": "0.55",
+            "cached_input": "0.055",
+            "cache_write": "0.6875",
+            "cache_write_1h": "1.1",
             "output": "2.75"
           }
         },
@@ -1754,10 +1767,23 @@
             "region": "global"
           },
           "rates": {
-            "input": "0.5",
-            "cached_input": "0.05",
+            "input": "0.1",
+            "cached_input": "0.01",
             "cache_write": "0.125",
             "cache_write_1h": "0.2",
+            "output": "0.5"
+          }
+        },
+        {
+          "conditions": {
+            "region": "global"
+          },
+          "min_input_tokens": 100000,
+          "rates": {
+            "input": "0.5",
+            "cached_input": "0.05",
+            "cache_write": "0.625",
+            "cache_write_1h": "1",
             "output": "2.5"
           }
         },
@@ -1769,6 +1795,19 @@
             "input": "0.11",
             "cached_input": "0.011",
             "cache_write": "0.1375",
+            "cache_write_1h": "0.22",
+            "output": "0.55"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us-east-1"
+          },
+          "min_input_tokens": 100000,
+          "rates": {
+            "input": "0.55",
+            "cached_input": "0.055",
+            "cache_write": "0.6875",
             "cache_write_1h": "1.1",
             "output": "2.75"
           }
@@ -1780,9 +1819,22 @@
           "rates": {
             "input": "0.11",
             "cached_input": "0.011",
-            "cache_write": "0.6875",
+            "cache_write": "0.1375",
             "cache_write_1h": "0.22",
             "output": "0.55"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us-west-2"
+          },
+          "min_input_tokens": 100000,
+          "rates": {
+            "input": "0.55",
+            "cached_input": "0.055",
+            "cache_write": "0.6875",
+            "cache_write_1h": "1.1",
+            "output": "2.75"
           }
         }
       ]
