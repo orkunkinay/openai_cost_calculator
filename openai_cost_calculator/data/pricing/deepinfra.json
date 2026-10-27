@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "deepinfra",
   "currency": "USD",
-  "verified_at": "2026-09-29",
+  "verified_at": "2026-10-26",
   "sources": [
     {
       "id": "deepinfra-models-api",
@@ -220,6 +220,34 @@
         {
           "rates": {
             "input": "4.7"
+          }
+        }
+      ]
+    },
+    {
+      "id": "Cloudflare/clef",
+      "vendor": "cloudflare",
+      "canonical_id": "cloudflare/clef",
+      "source": "deepinfra-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.192",
+            "output": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "Cloudflare/clef-flash",
+      "vendor": "cloudflare",
+      "canonical_id": "cloudflare/clef-flash",
+      "source": "deepinfra-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.019",
+            "output": "0"
           }
         }
       ]
@@ -1543,6 +1571,7 @@
         {
           "rates": {
             "input": "0.1",
+            "cached_input": "0.1",
             "output": "0.95"
           }
         },
@@ -1552,6 +1581,7 @@
           },
           "rates": {
             "input": "0.08",
+            "cached_input": "0.08",
             "output": "0.76"
           }
         },
@@ -1561,6 +1591,7 @@
           },
           "rates": {
             "input": "0.15",
+            "cached_input": "0.15",
             "output": "1.425"
           }
         }
@@ -1848,9 +1879,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.119",
-            "cached_input": "0.00238",
-            "output": "0.238"
+            "input": "0.091",
+            "cached_input": "0.00182",
+            "output": "0.182"
           }
         }
       ]
@@ -1863,9 +1894,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.43",
-            "cached_input": "0.0036",
-            "output": "0.87"
+            "input": "0.387",
+            "cached_input": "0.00324",
+            "output": "0.783"
           }
         }
       ]
@@ -2115,6 +2146,20 @@
           "rates": {
             "input": "3",
             "output": "15"
+          }
+        }
+      ]
+    },
+    {
+      "id": "anthropic/claude-sonnet-5-5",
+      "vendor": "anthropic",
+      "canonical_id": "anthropic/claude-sonnet-5-5",
+      "source": "deepinfra-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "2",
+            "output": "10"
           }
         }
       ]
@@ -2718,6 +2763,41 @@
       ]
     },
     {
+      "id": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "vendor": "deepseek-ai",
+      "canonical_id": "deepseek-ai/deepseek-v4.1-flash-1017",
+      "source": "deepinfra-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.098",
+            "cached_input": "0.00294",
+            "output": "0.294"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "flex"
+          },
+          "rates": {
+            "input": "0.0784",
+            "cached_input": "0.002352",
+            "output": "0.2352"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "priority"
+          },
+          "rates": {
+            "input": "0.147",
+            "cached_input": "0.00441",
+            "output": "0.441"
+          }
+        }
+      ]
+    },
+    {
       "id": "google/codegemma-7b-it",
       "vendor": "google",
       "canonical_id": "google/codegemma-7b-it",
@@ -2728,6 +2808,19 @@
           "rates": {
             "input": "0.07",
             "output": "0.07"
+          }
+        }
+      ]
+    },
+    {
+      "id": "google/embeddinggemma-2",
+      "vendor": "google",
+      "canonical_id": "google/embeddinggemma-2",
+      "source": "deepinfra-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.02"
           }
         }
       ]
@@ -3268,6 +3361,21 @@
             "input": "0.06",
             "cached_input": "0.012",
             "output": "0.18"
+          }
+        }
+      ]
+    },
+    {
+      "id": "inclusionAI/Ling-3.1-flash",
+      "vendor": "inclusionai",
+      "canonical_id": "inclusionai/ling-3.1-flash",
+      "source": "deepinfra-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.075",
+            "cached_input": "0.015",
+            "output": "0.225"
           }
         }
       ]
@@ -4243,6 +4351,49 @@
       ]
     },
     {
+      "id": "nace-ai/drex-max",
+      "vendor": "nace-ai",
+      "canonical_id": "nace-ai/drex-max",
+      "source": "deepinfra-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.12",
+            "cached_input": "0.12",
+            "output": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "nace-ai/drex-v1.5",
+      "vendor": "nace-ai",
+      "canonical_id": "nace-ai/drex-v1.5",
+      "source": "deepinfra-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.04",
+            "output": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "nace-ai/drex-v2.0",
+      "vendor": "nace-ai",
+      "canonical_id": "nace-ai/drex-v2.0",
+      "source": "deepinfra-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.06",
+            "output": "0"
+          }
+        }
+      ]
+    },
+    {
       "id": "nvidia/Llama-3.1-Nemotron-70B-Instruct",
       "vendor": "nvidia",
       "canonical_id": "nvidia/llama-3.1-nemotron-70b-instruct",
@@ -4387,6 +4538,21 @@
       ]
     },
     {
+      "id": "nvidia/NVIDIA-Nemotron-3.5-Super-VL",
+      "vendor": "nvidia",
+      "canonical_id": "nvidia/nvidia-nemotron-3.5-super-vl",
+      "source": "deepinfra-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.15",
+            "cached_input": "0.02",
+            "output": "0.5"
+          }
+        }
+      ]
+    },
+    {
       "id": "nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL",
       "vendor": "nvidia",
       "canonical_id": "nvidia/nvidia-nemotron-nano-12b-v2-vl",
@@ -4510,6 +4676,45 @@
           "rates": {
             "input": "0.3",
             "output": "1.2"
+          }
+        }
+      ]
+    },
+    {
+      "id": "nvidia/Nemotron-3.5-Embed-1B-BF16",
+      "vendor": "nvidia",
+      "canonical_id": "nvidia/nemotron-3.5-embed-1b-bf16",
+      "source": "deepinfra-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.015"
+          }
+        }
+      ]
+    },
+    {
+      "id": "nvidia/Nemotron-3.5-Embed-8B-BF16",
+      "vendor": "nvidia",
+      "canonical_id": "nvidia/nemotron-3.5-embed-8b-bf16",
+      "source": "deepinfra-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.035"
+          }
+        }
+      ]
+    },
+    {
+      "id": "nvidia/Nemotron-3.5-Rerank-8B-BF16",
+      "vendor": "nvidia",
+      "canonical_id": "nvidia/nemotron-3.5-rerank-8b-bf16",
+      "source": "deepinfra-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.05"
           }
         }
       ]
@@ -4871,6 +5076,21 @@
       ]
     },
     {
+      "id": "stepfun-ai/Step-5-Preview",
+      "vendor": "stepfun-ai",
+      "canonical_id": "stepfun-ai/step-5-preview",
+      "source": "deepinfra-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "1",
+            "cached_input": "0.1",
+            "output": "2.7"
+          }
+        }
+      ]
+    },
+    {
       "id": "tencent/Hy3",
       "vendor": "tencent",
       "canonical_id": "tencent/hy3",
@@ -5212,9 +5432,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.075",
-            "cached_input": "0.015",
-            "output": "0.25"
+            "input": "0.15",
+            "cached_input": "0.03",
+            "output": "0.5"
           }
         }
       ]

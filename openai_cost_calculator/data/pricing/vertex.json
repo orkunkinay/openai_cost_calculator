@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "vertex",
   "currency": "USD",
-  "verified_at": "2026-09-29",
+  "verified_at": "2026-10-26",
   "sources": [
     {
       "id": "vertex-pricing-page",
@@ -1122,7 +1122,7 @@
           },
           "rates": {
             "input": "2.2",
-            "cached_input": "0.22",
+            "cached_input": "0.11",
             "cache_write": "2.75",
             "cache_write_1h": "4.4",
             "output": "11"
@@ -1135,7 +1135,7 @@
           },
           "rates": {
             "input": "1.1",
-            "cached_input": "0.11",
+            "cached_input": "0.055",
             "cache_write": "1.375",
             "cache_write_1h": "2.2",
             "output": "5.5"
@@ -1147,7 +1147,7 @@
           },
           "rates": {
             "input": "2",
-            "cached_input": "0.2",
+            "cached_input": "0.1",
             "cache_write": "2.5",
             "cache_write_1h": "4",
             "output": "10"
@@ -1160,7 +1160,7 @@
           },
           "rates": {
             "input": "1",
-            "cached_input": "0.1",
+            "cached_input": "0.05",
             "cache_write": "1.25",
             "cache_write_1h": "2",
             "output": "5"
@@ -1172,7 +1172,7 @@
           },
           "rates": {
             "input": "2.2",
-            "cached_input": "0.22",
+            "cached_input": "0.11",
             "cache_write": "2.75",
             "cache_write_1h": "4.4",
             "output": "11"
@@ -1185,7 +1185,7 @@
           },
           "rates": {
             "input": "1.1",
-            "cached_input": "0.11",
+            "cached_input": "0.055",
             "cache_write": "1.375",
             "cache_write_1h": "2.2",
             "output": "5.5"
@@ -1259,6 +1259,20 @@
           "rates": {
             "input": "0.56",
             "output": "1.68"
+          }
+        }
+      ]
+    },
+    {
+      "id": "deepseek-v4.1-flash-*",
+      "vendor": "deepseek",
+      "canonical_id": "deepseek/deepseek-v4.1-flash-*",
+      "source": "vertex-pricing-page",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.3",
+            "output": "1.2"
           }
         }
       ]
@@ -3266,6 +3280,40 @@
       ]
     },
     {
+      "id": "gemini-4-argon-cyber-permissive",
+      "vendor": "google",
+      "canonical_id": "google/gemini-4-argon-cyber-permissive",
+      "source": "vertex-pricing-page",
+      "prices": [
+        {
+          "conditions": {
+            "region": "global"
+          },
+          "rates": {
+            "input": "4",
+            "cached_input": "0.2",
+            "input_audio": "4",
+            "cached_input_audio": "0.2",
+            "input_image": "4",
+            "output": "20"
+          }
+        },
+        {
+          "conditions": {
+            "region": "regional"
+          },
+          "rates": {
+            "input": "4.4",
+            "cached_input": "0.22",
+            "input_audio": "4.4",
+            "cached_input_audio": "0.22",
+            "input_image": "4.4",
+            "output": "22"
+          }
+        }
+      ]
+    },
+    {
       "id": "gemini-omni-1.1-flash",
       "vendor": "google",
       "canonical_id": "google/gemini-omni-1.1-flash",
@@ -3462,6 +3510,27 @@
       "id": "grok-4.6",
       "vendor": "xai",
       "canonical_id": "xai/grok-4.6",
+      "source": "vertex-pricing-page",
+      "prices": [
+        {
+          "rates": {
+            "input": "2",
+            "output": "6"
+          }
+        },
+        {
+          "min_input_tokens": 200001,
+          "rates": {
+            "input": "4",
+            "output": "12"
+          }
+        }
+      ]
+    },
+    {
+      "id": "grok-4.7",
+      "vendor": "xai",
+      "canonical_id": "xai/grok-4.7",
       "source": "vertex-pricing-page",
       "prices": [
         {

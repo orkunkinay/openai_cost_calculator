@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "together",
   "currency": "USD",
-  "verified_at": "2026-09-29",
+  "verified_at": "2026-10-26",
   "sources": [
     {
       "id": "together-models-docs",
@@ -25,6 +25,22 @@
             "input": "0.3",
             "cached_input": "0.06",
             "output": "1.2"
+          }
+        }
+      ]
+    },
+    {
+      "id": "MiniMaxAI/MiniMax-M3.1-Flash",
+      "display_name": "Minimax M3.1 Flash",
+      "vendor": "minimax",
+      "canonical_id": "minimaxai/minimax-m3.1-flash",
+      "source": "together-models-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.15",
+            "cached_input": "0.015",
+            "output": "0.6"
           }
         }
       ]
@@ -130,8 +146,8 @@
       "prices": [
         {
           "rates": {
-            "input": "0.09",
-            "output": "0.282"
+            "input": "0.15",
+            "output": "0.47"
           }
         }
       ]
@@ -185,6 +201,22 @@
       ]
     },
     {
+      "id": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "display_name": "DeepSeek V4.1 Flash 1017",
+      "vendor": "deepseek",
+      "canonical_id": "deepseek-ai/deepseek-v4.1-flash-1017",
+      "source": "together-models-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.3",
+            "cached_input": "0.006",
+            "output": "1.2"
+          }
+        }
+      ]
+    },
+    {
       "id": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
       "display_name": "Llama 3.3 70B Instruct Turbo",
       "vendor": "meta",
@@ -216,6 +248,22 @@
       ]
     },
     {
+      "id": "meta-models/Muse-Spark-Open-816B-A42B",
+      "display_name": "Muse Spark Open 816B A42B",
+      "vendor": "meta",
+      "canonical_id": "meta-models/muse-spark-open-816b-a42b",
+      "source": "together-models-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "1.25",
+            "cached_input": "0.15",
+            "output": "4.25"
+          }
+        }
+      ]
+    },
+    {
       "id": "moonshotai/Kimi-K3",
       "display_name": "Kimi K3",
       "vendor": "moonshot",
@@ -232,6 +280,22 @@
       ]
     },
     {
+      "id": "nvidia/NVIDIA-Nemotron-3.5-Super-VL",
+      "display_name": "NVIDIA Nemotron 3.5 Super VL",
+      "vendor": "nvidia",
+      "canonical_id": "nvidia/nvidia-nemotron-3.5-super-vl",
+      "source": "together-models-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.15",
+            "cached_input": "0.02",
+            "output": "0.5"
+          }
+        }
+      ]
+    },
+    {
       "id": "openai/gpt-oss-120b",
       "display_name": "GPT-OSS 120B",
       "vendor": "openai",
@@ -242,6 +306,22 @@
           "rates": {
             "input": "0.15",
             "output": "0.6"
+          }
+        }
+      ]
+    },
+    {
+      "id": "reflection/Beam-1.0-501B-A23B",
+      "display_name": "Beam 1.0 501B A23B",
+      "vendor": "reflection",
+      "canonical_id": "reflection/beam-1.0-501b-a23b",
+      "source": "together-models-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.4",
+            "cached_input": "0.04",
+            "output": "1.2"
           }
         }
       ]

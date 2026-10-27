@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from openai_cost_calculator.catalog.validation import validate_model
-from openai_cost_calculator.sync.base import FixtureFetcher, SourceError
+from openai_cost_calculator.sync.base import FixtureFetcher, SourceError, SourceResult
 from openai_cost_calculator.sync.sources import azure, bedrock, deepinfra, openrouter
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sources"
@@ -198,6 +198,35 @@ def test_bedrock_anthropic_global_regional_and_batch(bedrock_models):
     assert _rates(sonnet, service_tier="batch", region="us-east-1")["output"] == D("8.25")
     assert sonnet.canonical_id == "anthropic/claude-sonnet-4-5"
     assert "global" not in {p.conditions.get("region") for p in bedrock_models["anthropic.claude-3-haiku"].prices}
+
+
+def test_bedrock_long_context_meters_become_a_separate_tier(bedrock_models):
+    haiku = bedrock_models["anthropic.claude-haiku-5-5"]
+    assert _rates(haiku, region="global") == {
+        "input": D("0.1"),
+        "output": D("0.5"),
+        "cached_input": D("0.01"),
+        "cache_write": D("0.125"),
+        "cache_write_1h": D("0.2"),
+    }
+    assert _rates(haiku, 100_001, region="global") == {
+        "input": D("0.5"),
+        "output": D("2.5"),
+        "cached_input": D("0.05"),
+        "cache_write": D("0.625"),
+        "cache_write_1h": D("1"),
+    }
+    assert _rates(haiku, region="us-east-1")["output"] == D("0.55")
+    assert _rates(haiku, 100_001, region="us-east-1")["input"] == D("0.55")
+
+
+def test_bedrock_long_context_without_known_threshold_is_flagged(monkeypatch):
+    monkeypatch.setattr(bedrock, "LONG_CONTEXT_THRESHOLDS", {})
+    offer = _json("bedrock_fm_use1.json")
+    result = SourceResult()
+    prices = bedrock.parse_foundation_models(offer, "us-east-1", result)
+    assert any(issue.model_id == "anthropic.claude-haiku-5-5" for issue in result.issues)
+    assert all(key[3] == 0 for key in prices)
 
 
 def test_bedrock_general_offer_models_and_tiers(bedrock_models):

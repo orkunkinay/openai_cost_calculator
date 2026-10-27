@@ -14,7 +14,10 @@ Two offers are needed:
   once punctuation is ignored).
 
 Prices are per region; each configured region contributes regional prices and
-global-endpoint prices are recorded as ``region="global"``.  Customization,
+global-endpoint prices are recorded as ``region="global"``.  Long-context
+meters (``input_tokens_long_ctx_standard``) become a ``min_input_tokens`` tier;
+the price list does not state the threshold, so it comes from
+``LONG_CONTEXT_THRESHOLDS``.  Customization,
 provisioned throughput, reserved capacity, latency-optimized and non-token
 (image/video/second) meters are outside the catalog and skipped.
 """
@@ -60,6 +63,10 @@ _VENDORS = {
 }
 #: Usage-type codes without a vendor or ``provider`` attribute.
 _CODE_VENDORS = (("nova", "amazon"), ("titan", "amazon"))
+#: Prompt length at which a model's ``long_ctx`` meters apply, from the vendor's pricing docs.
+LONG_CONTEXT_THRESHOLDS: Dict[str, int] = {
+    "anthropic.claude-haiku-5-5": 100_001,  # "prompts over 100,000 tokens"
+}
 _QUALIFIED_CODE = re.compile(r"^[a-z][a-z0-9-]*\.[a-z]")
 _SKIP_WORDS = {
     "custom",
@@ -133,12 +140,18 @@ def parse_foundation_models(offer: Dict[str, Any], region: str, result: SourceRe
         if dimension is None:
             continue
         tier, is_global = _tier_and_scope(words)
+        model = "anthropic." + slugify(match.group("name"))
+        minimum = 0
+        if "long" in words and "ctx" in words:
+            if model not in LONG_CONTEXT_THRESHOLDS:
+                result.issue("long-context meters without a known threshold; add it to LONG_CONTEXT_THRESHOLDS", model)
+                continue
+            minimum = LONG_CONTEXT_THRESHOLDS[model]
         for term in terms.get(sku, {}).values():
             for dimension_price in term.get("priceDimensions", {}).values():
                 if dimension_price.get("unit") != "1M tokens":
                     continue
-                model = "anthropic." + slugify(match.group("name"))
-                key = (model, "global" if is_global else region, tier, dimension, match.group("name"))
+                key = (model, "global" if is_global else region, tier, minimum, dimension, match.group("name"))
                 prices[key] = Decimal(dimension_price["pricePerUnit"]["USD"])
     return prices
 
@@ -198,20 +211,20 @@ def parse_general(offer: Dict[str, Any], region: str, result: SourceResult) -> D
                     per_million = usd * 1000
                 else:
                     continue
-                prices[(model, "global" if is_global else region, tier, dimension, display)] = per_million
+                prices[(model, "global" if is_global else region, tier, 0, dimension, display)] = per_million
     return prices
 
 
 def build(prices: Dict[Tuple, Decimal], result: SourceResult) -> None:
-    grouped: Dict[str, Dict[Tuple[str, str], Dict[str, Decimal]]] = {}
+    grouped: Dict[str, Dict[Tuple[str, str, int], Dict[str, Decimal]]] = {}
     displays: Dict[str, str] = {}
-    for (model, region, tier, dimension, display), amount in prices.items():
-        grouped.setdefault(model, {}).setdefault((region, tier), {})[dimension] = amount
+    for (model, region, tier, minimum, dimension, display), amount in prices.items():
+        grouped.setdefault(model, {}).setdefault((region, tier, minimum), {})[dimension] = amount
         displays.setdefault(model, display)
     for model, groups in sorted(grouped.items()):
         sets = present(
-            price_set(rates, service_tier=tier, region=region)
-            for (region, tier), rates in sorted(groups.items())
+            price_set(rates, service_tier=tier, region=region, min_input_tokens=minimum)
+            for (region, tier, minimum), rates in sorted(groups.items())
             if "input" in rates and "output" in rates
         )
         if not sets:

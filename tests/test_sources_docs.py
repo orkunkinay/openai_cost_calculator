@@ -151,6 +151,30 @@ def test_anthropic_current_prices(anthropic_models):
     assert _rates(anthropic_models["claude-sonnet-5"])["output"] == D("10")
     assert _rates(anthropic_models["claude-3-5-haiku"])["input"] == D("0.8")
     assert set(anthropic_models) >= {"claude-haiku-4-5", "claude-opus-4-1", "claude-mythos-5-1", "claude-sonnet-4"}
+    # "Claude Opus 4.1 ([retired, except on ... (Google managed)](...))": nested note dropped.
+    assert anthropic_models["claude-opus-4-1"].display_name == "Claude Opus 4.1"
+
+
+def test_anthropic_prompt_length_tiers(anthropic_models):
+    haiku = anthropic_models["claude-haiku-5-5"]
+    assert _rates(haiku) == {
+        "input": D("0.1"),
+        "cache_write": D("0.125"),
+        "cache_write_1h": D("0.2"),
+        "cached_input": D("0.01"),
+        "output": D("0.5"),
+        "web_search": D("0.01"),
+    }
+    assert _rates(haiku, min_input_tokens=100_001)["output"] == D("2.5")
+    assert _rates(haiku, service_tier="batch")["input"] == D("0.05")
+    assert _rates(haiku, service_tier="batch", min_input_tokens=100_001)["output"] == D("1.25")
+    assert _rates(haiku, region="us", min_input_tokens=100_001)["input"] == D("0.55")
+
+
+def test_anthropic_prices_written_with_usd(anthropic_models):
+    # "$8 USD / MTok" fast mode and "$10 USD per 1,000 searches" web search.
+    assert _rates(anthropic_models["claude-opus-5-5"], service_tier="fast")["input"] == D("8")
+    assert _rates(anthropic_models["claude-sonnet-5-5"])["web_search"] == D("0.01")
 
 
 def test_anthropic_missing_residency_sentence_is_flagged_not_guessed():
