@@ -36,17 +36,26 @@ SOURCE = Source(
     description="Gemini Developer API pricing documentation (Markdown rendition)",
 )
 
+#: Deprecated ids whose endpoints keep serving requests by routing them to a
+#: successor (ai.google.dev/gemini-api/docs/deprecations); billed as the successor.
+ROUTED_ALIASES: Dict[str, Tuple[str, ...]] = {
+    "gemini-3.6-flash": ("gemini-3.5-flash",),
+    "gemini-3.8-flash": ("gemini-3.7-flash",),
+}
+
 _TIERS = {"standard": "standard", "batch": "batch", "flex": "flex", "priority": "priority"}
 _CLAUSE = re.compile(r"\$(?P<amount>\d+(?:\.\d+)?)(?P<rest>[^$]*)")
 _NON_TOKEN_UNIT = re.compile(
     r"^\s*(/\s*min|/\s*[\d,]+\s*tokens per hour"
-    r"|per (image|song|second|frame|hour|[\d.]+k)|/\s*[\d,]+ (grounded|search))",
+    r"|per (image|song|second|frame|hour|[\d.]+k|[\d.]+s\b)|/\s*[\d,]+ (grounded|search))",
     re.I,
 )
 _MODALITY = re.compile(r"^\s*\(([a-z ,/]+)\)", re.I)
 _CONTEXT = re.compile(r"^\s*,?\s*prompts\s*(?P<op><=|>)\s*(?P<k>\d+)k(?:\s*tokens?)?", re.I)
 _THROUGH = re.compile(r"^\s*through (?P<date>[A-Z][a-z]+ \d{1,2}, \d{4})\.?", re.I)
 _STARTING = re.compile(r"^\s*starting (?P<date>[A-Z][a-z]+ \d{1,2}, \d{4})\.?", re.I)
+#: Informational sentences that carry no price.
+_REMARKS = re.compile(r"implicit caching only \(explicit caching is not supported\)\.?", re.I)
 _EQUIVALENT = re.compile(r"(,\s*)?equivalent to .*$", re.I | re.S)
 _IDS = re.compile(r"`([a-z0-9][a-z0-9.\-]*)`")
 
@@ -105,7 +114,8 @@ def parse_cell(cell: str, kind: str, default_modalities: FrozenSet[str]) -> Tupl
     dropped and noted rather than guessed.
     """
     text = clean_cell(cell)
-    text = re.sub(r"\^[^^]*\^", _FOOTNOTE, text).replace("Same as Standard", "").strip()
+    text = re.sub(r"\^[^^]*\^", _FOOTNOTE, text).replace("Same as Standard", "")
+    text = _REMARKS.sub("", text).strip()
     if not text or text.lower() in {"not available", "free of charge"}:
         return [], [], []
     raw = list(_CLAUSE.finditer(text))
@@ -233,6 +243,7 @@ def parse(text: str) -> SourceResult:
                         vendor="google",
                         canonical_id=f"google/{model_id}",
                         display_name=display,
+                        aliases=ROUTED_ALIASES.get(model_id, ()),
                     )
                 )
 

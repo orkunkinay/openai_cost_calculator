@@ -94,6 +94,48 @@ def test_openai_all_entries_are_valid(openai_models):
         validate_model(model, provider="openai")
 
 
+OPENAI_TIER_HEADINGS = """
+Standard
+### Standard pricing data
+| Model | Short context input | Short context output | Short context cached input | Short context 30m write | Short context 12h write | Long context input | Long context output | Long context cached input | Long context 30m write | Long context 12h write |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| gpt-x | $4.00 | $20.00 | $0.40 | $5.00 | $10.00 | $8.00 | $30.00 | $0.80 | $10.00 | $20.00 |
+Batch
+### Batch pricing data
+#### Batch
+| Model | Input | Output | Cached input |
+| --- | --- | --- | --- |
+| o3 | $1.00 | $4.00 | - |
+#### Flex
+| Model | Input | Output | Cached input |
+| --- | --- | --- | --- |
+| o3 | $1.00 | $4.00 | $0.25 |
+Fast
+### Fast pricing data
+| Model | Input | Output | Cached input |
+| --- | --- | --- | --- |
+| o3 | $3.50 | $14.00 | $0.875 |
+Ultrafast
+### Ultrafast pricing data
+| Model | Input | Output | Cached input |
+| --- | --- | --- | --- |
+| o3 | $10.00 | $40.00 | $2.50 |
+"""
+
+
+def test_openai_tier_headings_and_cache_write_ttl_columns():
+    models, issues = _models(openai.parse(OPENAI_TIER_HEADINGS))
+    assert issues == []
+    o3 = models["o3"]
+    assert _rates(o3, service_tier="batch") == {"input": D("1"), "output": D("4")}
+    assert _rates(o3, service_tier="flex")["cached_input"] == D("0.25")
+    assert _rates(o3, service_tier="priority")["input"] == D("3.5")  # "Fast" is the renamed priority tier
+    assert _rates(o3, service_tier="ultrafast")["input"] == D("10")
+    gpt = models["gpt-x"]
+    assert _rates(gpt)["cache_write"] == D("5")  # 30m write; the 12h write has no catalog dimension
+    assert _rates(gpt, min_input_tokens=272_000)["cache_write"] == D("10")
+
+
 def test_openai_reports_unparseable_rows():
     page = "Standard\n### Standard pricing data\n| Model | Input | Output |\n| --- | --- | --- |\n| gpt-x | $1.00 | about $2 |\n| Weird Model! | $1 | $2 |\n"
     result = openai.parse(page)
@@ -227,6 +269,11 @@ def test_gemini_non_token_and_footnoted_prices_are_not_misread(gemini_models):
     assert embedding["input_image"] == D("0.45")  # "($0.00012 per image)" is an equivalence note
 
 
+def test_gemini_routed_deprecated_ids_are_aliases(gemini_models):
+    assert gemini_models["gemini-3.6-flash"].aliases == ("gemini-3.5-flash",)
+    assert gemini_models["gemini-3.8-flash"].aliases == ("gemini-3.7-flash",)
+
+
 @pytest.mark.parametrize(
     "cell,expected",
     [
@@ -239,6 +286,17 @@ def test_gemini_non_token_and_footnoted_prices_are_not_misread(gemini_models):
             [("input", "0.30", None), ("input_image", "0.30", None), ("input_audio", "1.00", None)],
         ),
         ("$3.50 or $0.005/min^\\*^ (audio)", [("input_audio", "3.50", None)]),
+        (
+            "$9.00 (audio) through December 31, 2026. $18.00 (audio) starting January 1, 2027. "
+            "Equivalent to $0.00225 per 10s audio^\\*^ through December 31, 2026. "
+            "Equivalent to $0.0045 per 10s audio^\\*^ starting January 1, 2027.",
+            [("input_audio", "9.00", None), ("input_audio", "18.00", None)],
+        ),
+        (
+            "$0.10 through November 30, 2026. $0.20 starting December 1, 2026. "
+            "Implicit caching only (explicit caching is not supported).",
+            [("input", "0.10", None), ("input", "0.20", None)],
+        ),
     ],
 )
 def test_gemini_cell_grammar(cell, expected):

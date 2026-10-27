@@ -55,6 +55,10 @@ def test_deepseek_peak_and_off_peak_with_legacy_aliases():
     assert _rates(models["deepseek-v4-pro"], period="peak")["output"] == D("3.96")
 
 
+def test_deepseek_url_keeps_the_trailing_slash():
+    assert deepseek.URL.endswith("/pricing/")  # the slashless URL serves a stale page to gzip clients
+
+
 def test_deepseek_changed_peak_hours_are_flagged():
     page = _text("deepseek_pricing.html").replace("06:00 - 10:00", "07:00 - 11:00")
     result = deepseek.parse(page)
@@ -171,6 +175,19 @@ def test_vertex_gemini_global_regional_and_scheduled_prices(vertex_result):
     pro = models["gemini-2.5-pro"]  # its table has no Region column: region-agnostic prices
     assert _rates(pro, min_input_tokens=200_001)["output"] == D("15")
     assert _rates(pro, service_tier="priority")["input"] == D("2.25")
+
+
+@pytest.mark.parametrize(
+    "cell,expected",
+    [
+        ("Gemini 4 Argon* through November 30, 2026", ("gemini-4-argon", None, date(2026, 12, 1))),
+        ("Gemini 4 Argon (Starting December 1, 2026)", ("gemini-4-argon", date(2026, 12, 1), None)),
+        ("Gemini ER 2.0 (through December 31, 2026)", ("gemini-er-2.0", None, date(2027, 1, 1))),
+        ("Gemini 4 Argon Cyber Permissive", ("gemini-4-argon-cyber-permissive", None, None)),
+    ],
+)
+def test_vertex_model_cell_date_qualifiers(cell, expected):
+    assert vertex._gemini_model(cell) == expected
 
 
 def test_vertex_partner_models(vertex_result):

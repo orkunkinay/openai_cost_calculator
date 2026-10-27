@@ -5,7 +5,8 @@ version of the pricing page (append ``.md``), whose tables are structured
 enough to parse reliably:
 
 * token-price tables with short/long-context and cache-write columns, grouped
-  by a plain-text tier label ("Standard", "Batch", "Flex", "Fast mode");
+  by a tier label ("Standard", "Batch", "Flex", "Fast", "Ultrafast") given as
+  plain text or as a heading ("### Fast pricing data", "#### Flex");
 * modality tables (Audio/Text/Image rows) for realtime, audio and image models.
 
 Units other than per-1M-tokens (per minute, per character, per second) are
@@ -62,9 +63,12 @@ _TIER_LABELS = {
     "standard": "standard",
     "batch": "batch",
     "flex": "flex",
+    "fast": "priority",  # "Priority processing was renamed Fast mode"
     "fast mode": "priority",
     "priority": "priority",
+    "ultrafast": "ultrafast",
 }
+_TIER_HEADING = re.compile(r"^#{3,4}\s+(?P<label>[a-z ]+?)(?:\s+pricing data)?$", re.I)
 _SKIPPED_SECTIONS = ("finetuning", "fine-tuning", "video generation", "transcription", "tools", "gpt-live")
 _MODEL_CELL = re.compile(r"^(?P<id>[a-z0-9][a-z0-9.\-:]*)\s*(?:\((?P<note>[^)]*)\))?$")
 _THRESHOLD_NOTE = re.compile(r"<\s*(\d+)\s*K", re.I)
@@ -72,13 +76,13 @@ _THRESHOLD_NOTE = re.compile(r"<\s*(\d+)\s*K", re.I)
 _FLAGSHIP_COLUMNS = {
     "input": ("short context input", "input"),
     "cached_input": ("short context cached input", "cached input"),
-    "cache_write": ("short context cache writes", "cache writes"),
+    "cache_write": ("short context cache writes", "short context 30m write", "cache writes"),
     "output": ("short context output", "output"),
 }
 _LONG_COLUMNS = {
     "input": ("long context input",),
     "cached_input": ("long context cached input",),
-    "cache_write": ("long context cache writes",),
+    "cache_write": ("long context cache writes", "long context 30m write"),
     "output": ("long context output",),
 }
 _MODALITY_DIMENSIONS = {
@@ -106,10 +110,11 @@ def _split_tables(text: str) -> Iterator[Tuple[str, str, List[str], List[List[st
             continue
         plain = clean_cell(raw)
         lowered = plain.lower()
+        heading = _TIER_HEADING.match(raw)
         if lowered in _TIER_LABELS:
             tier = _TIER_LABELS[lowered]
-        elif re.match(r"^###\s+(standard|batch|flex|fast)\s+pricing data$", raw, re.I):
-            tier = _TIER_LABELS[raw.split()[1].lower().replace("fast", "fast mode")]
+        elif heading and heading.group("label").lower() in _TIER_LABELS:
+            tier = _TIER_LABELS[heading.group("label").lower()]
         elif (
             plain
             and not raw.startswith("#")

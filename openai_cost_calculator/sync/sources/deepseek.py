@@ -22,7 +22,8 @@ from ..base import Fetcher, SourceResult
 from ..text import html_tables, html_text, parse_money
 from .common import present, price_set
 
-URL = "https://api-docs.deepseek.com/quick_start/pricing"
+#: The trailing slash matters: without it the CDN serves a stale page to clients that accept gzip.
+URL = "https://api-docs.deepseek.com/quick_start/pricing/"
 SOURCE = Source(
     id="deepseek-pricing-docs", kind="official_docs", url=URL, description="DeepSeek API pricing documentation"
 )

@@ -20,13 +20,14 @@ google/gemini-3.1-pro-preview,,2,0.2,12,0
 google/gemini-3.1-pro-preview,,4,0.4,18,200001
 google/gemini-3.1-pro-preview-customtools,,2,0.2,12,0
 google/gemini-3.1-pro-preview-customtools,,4,0.4,18,200001
-google/gemini-3.5-flash,,1.5,0.15,9,0
+google/gemini-3.5-flash,,0.75,0.075,3.75,0
 google/gemini-3.5-flash-lite,,0.3,0.03,2.5,0
 google/gemini-3.6-flash,,0.75,0.075,3.75,0
 google/gemini-3.7-flash,,0.75,0.075,3.75,0
 google/gemini-3.8-flash,,0.75,0.075,3.75,0
 google/gemini-3.8-live,,0.75,,4.5,0
 google/gemini-3.8-live-extended-thinking,,0.75,,4.5,0
+google/gemini-4-argon,,2,0.1,10,0
 google/gemini-nano-banana-2.1,,1.5,,7.5,0
 google/gemini-omni-1.1-flash,,1.5,,9,0
 google/gemini-omni-flash-preview,,1.5,,9,0
@@ -107,6 +108,10 @@ gpt-6-luna,,0.1,0.01,0.5,0
 gpt-6-luna,,0.2,0.02,0.75,272000
 gpt-6-sol,,2,0.2,10,0
 gpt-6-sol,,4,0.4,15,272000
+gpt-6.1-sol,,2,0.1,10,0
+gpt-6.1-sol,,4,0.2,15,272000
+gpt-6.1-terra,,1,0.05,5,0
+gpt-6.1-terra,,2,0.1,7.5,272000
 gpt-audio,,2.5,,10,0
 gpt-audio-1.5,,2.5,,10,0
 gpt-audio-mini,,0.6,,2.4,0

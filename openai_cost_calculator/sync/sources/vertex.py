@@ -51,7 +51,10 @@ _CLAUDE_TYPES = {
     "1h batch cache hit": ("batch", "cached_input"),
 }
 _TAB_LABEL = re.compile(r"Global|US Multi-Region \(US\)|EU Multi-Region \(EU\)|[a-z]+-[a-z]+ ?\d+")
-_DATE_QUALIFIER = re.compile(r"\*?\s*(?P<kind>through|starting)\s+(?P<date>[A-Z][a-z]+ \d{1,2}, \d{4})\s*$", re.I)
+#: "Gemini 4 Argon* through November 30, 2026" or "Gemini 4 Argon (Starting December 1, 2026)".
+_DATE_QUALIFIER = re.compile(
+    r"\*?\s*\(?\s*(?P<kind>through|starting)\s+(?P<date>[A-Z][a-z]+ \d{1,2}, \d{4})\s*\)?\s*$", re.I
+)
 _LONG_CONTEXT = 200_001
 
 

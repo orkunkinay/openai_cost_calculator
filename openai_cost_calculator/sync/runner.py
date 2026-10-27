@@ -60,6 +60,8 @@ def _merge(
     for decision in decisions:
         if decision.apply and decision.diff.new is not None:
             by_id[decision.diff.model_id] = decision.diff.new
+        elif decision.apply:
+            by_id.pop(decision.diff.model_id, None)  # folded into another model as an alias
     # A source-backed entry supersedes a hand-maintained one for the same model.
     claimed = {i.lower() for m in by_id.values() for i in m.identifiers}
     others = [
