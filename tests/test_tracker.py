@@ -64,6 +64,21 @@ def _responses_response(input_t, output_t, cached_t=0, model="gpt-test-2025-01-0
     return _Struct(model=model, usage=usage)
 
 
+@pytest.mark.parametrize("as_iterator", [False, True])
+def test_record_preserves_usage_before_empty_stream_tail(as_iterator):
+    chunks = [
+        _chat_response(1_000, 2_000, 100),
+        _Struct(model="gpt-test-2025-01-01", usage=None),
+    ]
+    tracker = CostTracker()
+    record = tracker.record(iter(chunks) if as_iterator else chunks)
+
+    assert record.prompt_tokens == 1_000
+    assert record.completion_tokens == 2_000
+    assert record.cached_tokens == 100
+    assert record.cost.total_cost == Decimal("0.00495")
+
+
 def test_turn_aggregates_multiple_record_calls():
     tracker = CostTracker()
 
