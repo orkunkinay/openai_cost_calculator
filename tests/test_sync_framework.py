@@ -90,6 +90,26 @@ def test_removed_models_are_kept_and_reported():
     assert "gone" in outcome.data.models_by_id()
 
 
+def test_removed_model_that_became_an_alias_is_folded_into_its_successor():
+    outcome = _sync(
+        SourceResult([_m("a"), _m("new", aliases=("old",)), _m("c")]), _current(_m("a"), _m("new"), _m("c"), _m("old"))
+    )
+    models = outcome.data.models_by_id()
+    assert "old" not in models and models["new"].aliases == ("old",)
+    assert outcome.needs_review == []
+    assert any("now an alias of new" in n for d in outcome.applied for n in d.notes)
+
+
+def test_aliased_removal_is_held_when_the_alias_change_is_held():
+    outcome = _sync(
+        SourceResult([_m("a"), _m("new", "10", aliases=("old",)), _m("c")]),
+        _current(_m("a"), _m("new"), _m("c"), _m("old")),
+    )
+    models = outcome.data.models_by_id()
+    assert "old" in models and models["new"].aliases == ()
+    assert sorted(d.diff.model_id for d in outcome.needs_review) == ["new", "old"]
+
+
 def test_collapsed_extraction_fails_closed():
     current = _current(*[_m(f"m{i}") for i in range(10)])
     outcome = _sync(SourceResult([_m("m0", "9", "9")]), current)

@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "openai",
   "currency": "USD",
-  "verified_at": "2026-10-26",
+  "verified_at": "2026-10-27",
   "sources": [
     {
       "id": "legacy-csv",
@@ -1820,6 +1820,29 @@
             "cache_write": "50",
             "output": "150"
           }
+        },
+        {
+          "conditions": {
+            "service_tier": "ultrafast"
+          },
+          "rates": {
+            "input": "60",
+            "cached_input": "6",
+            "cache_write": "75",
+            "output": "300"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "ultrafast"
+          },
+          "min_input_tokens": 272000,
+          "rates": {
+            "input": "120",
+            "cached_input": "12",
+            "cache_write": "150",
+            "output": "450"
+          }
         }
       ]
     },
@@ -2007,6 +2030,217 @@
             "cached_input": "0.8",
             "cache_write": "10",
             "output": "30"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-6.1-sol",
+      "vendor": "openai",
+      "canonical_id": "openai/gpt-6.1-sol",
+      "source": "openai-pricing-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "2",
+            "cached_input": "0.1",
+            "cache_write": "2.5",
+            "output": "10"
+          }
+        },
+        {
+          "min_input_tokens": 272000,
+          "rates": {
+            "input": "4",
+            "cached_input": "0.2",
+            "cache_write": "5",
+            "output": "15"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "batch"
+          },
+          "rates": {
+            "input": "1",
+            "cached_input": "0.05",
+            "cache_write": "1.25",
+            "output": "5"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "batch"
+          },
+          "min_input_tokens": 272000,
+          "rates": {
+            "input": "2",
+            "cached_input": "0.1",
+            "cache_write": "2.5",
+            "output": "7.5"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "flex"
+          },
+          "rates": {
+            "input": "1",
+            "cached_input": "0.05",
+            "cache_write": "1.25",
+            "output": "5"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "flex"
+          },
+          "min_input_tokens": 272000,
+          "rates": {
+            "input": "2",
+            "cached_input": "0.1",
+            "cache_write": "2.5",
+            "output": "7.5"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "priority"
+          },
+          "rates": {
+            "input": "4",
+            "cached_input": "0.2",
+            "cache_write": "5",
+            "output": "20"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "priority"
+          },
+          "min_input_tokens": 272000,
+          "rates": {
+            "input": "8",
+            "cached_input": "0.4",
+            "cache_write": "10",
+            "output": "30"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "ultrafast"
+          },
+          "rates": {
+            "input": "12",
+            "cached_input": "0.6",
+            "cache_write": "15",
+            "output": "60"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "ultrafast"
+          },
+          "min_input_tokens": 272000,
+          "rates": {
+            "input": "24",
+            "cached_input": "1.2",
+            "cache_write": "30",
+            "output": "90"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-6.1-terra",
+      "vendor": "openai",
+      "canonical_id": "openai/gpt-6.1-terra",
+      "source": "openai-pricing-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "1",
+            "cached_input": "0.05",
+            "cache_write": "1.25",
+            "output": "5"
+          }
+        },
+        {
+          "min_input_tokens": 272000,
+          "rates": {
+            "input": "2",
+            "cached_input": "0.1",
+            "cache_write": "2.5",
+            "output": "7.5"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "batch"
+          },
+          "rates": {
+            "input": "0.5",
+            "cached_input": "0.025",
+            "cache_write": "0.625",
+            "output": "2.5"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "batch"
+          },
+          "min_input_tokens": 272000,
+          "rates": {
+            "input": "1",
+            "cached_input": "0.05",
+            "cache_write": "1.25",
+            "output": "3.75"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "flex"
+          },
+          "rates": {
+            "input": "0.5",
+            "cached_input": "0.025",
+            "cache_write": "0.625",
+            "output": "2.5"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "flex"
+          },
+          "min_input_tokens": 272000,
+          "rates": {
+            "input": "1",
+            "cached_input": "0.05",
+            "cache_write": "1.25",
+            "output": "3.75"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "priority"
+          },
+          "rates": {
+            "input": "2",
+            "cached_input": "0.1",
+            "cache_write": "2.5",
+            "output": "10"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "priority"
+          },
+          "min_input_tokens": 272000,
+          "rates": {
+            "input": "4",
+            "cached_input": "0.2",
+            "cache_write": "5",
+            "output": "15"
           }
         }
       ]

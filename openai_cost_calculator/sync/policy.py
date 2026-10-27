@@ -98,7 +98,9 @@ def decide(
 ) -> List[Decision]:
     """Decide each diff.  ``accept_review`` is the maintainer override used after
     reading a report: held changes are applied, but invalid data is still
-    rejected and removals are still never automatic."""
+    rejected and removals are still never automatic.  The one exception is a
+    model that is now listed as an alias of another: it is folded into that
+    model, provided the change adding the alias is applied."""
     flagged = {issue.model_id: issue.message for issue in issues if issue.model_id and issue.blocking}
     decisions: List[Decision] = []
     for diff in diffs:
@@ -134,4 +136,16 @@ def decide(
             decision.notes += [f"accepted by maintainer despite: {r}" for r in decision.reasons]
             decision.reasons = []
         decisions.append(decision)
+    _fold_aliased_removals(decisions)
     return decisions
+
+
+def _fold_aliased_removals(decisions: Sequence[Decision]) -> None:
+    owners = {alias.lower(): d for d in decisions if d.diff.new is not None for alias in d.diff.new.aliases}
+    for decision in decisions:
+        owner = owners.get(decision.diff.model_id.lower())
+        if decision.diff.kind != "removed" or owner is None or not owner.apply:
+            continue
+        decision.apply = True
+        decision.reasons = []
+        decision.notes.append(f"now an alias of {owner.diff.model_id}")
