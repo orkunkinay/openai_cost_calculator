@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "gemini",
   "currency": "USD",
-  "verified_at": "2026-10-27",
+  "verified_at": "2026-11-02",
   "sources": [
     {
       "id": "gemini-pricing-docs",
@@ -1352,6 +1352,28 @@
             "input": "7.2",
             "cached_input": "0.36",
             "output": "36"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gemini-embedding-001",
+      "display_name": "Gemini Embedding",
+      "vendor": "google",
+      "canonical_id": "google/gemini-embedding-001",
+      "source": "gemini-pricing-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.15"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "batch"
+          },
+          "rates": {
+            "input": "0.075"
           }
         }
       ]

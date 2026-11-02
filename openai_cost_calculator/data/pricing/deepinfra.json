@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "deepinfra",
   "currency": "USD",
-  "verified_at": "2026-10-26",
+  "verified_at": "2026-11-02",
   "sources": [
     {
       "id": "deepinfra-models-api",
@@ -1879,9 +1879,9 @@
       "prices": [
         {
           "rates": {
-            "input": "0.091",
-            "cached_input": "0.00182",
-            "output": "0.182"
+            "input": "0.14",
+            "cached_input": "0.0028",
+            "output": "0.28"
           }
         }
       ]
@@ -4358,8 +4358,8 @@
       "prices": [
         {
           "rates": {
-            "input": "0.12",
-            "cached_input": "0.12",
+            "input": "0.06",
+            "cached_input": "0.06",
             "output": "0"
           }
         }

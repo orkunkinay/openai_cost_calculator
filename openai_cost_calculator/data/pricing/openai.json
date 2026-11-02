@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "openai",
   "currency": "USD",
-  "verified_at": "2026-10-27",
+  "verified_at": "2026-11-02",
   "sources": [
     {
       "id": "legacy-csv",
@@ -1936,6 +1936,31 @@
             "cached_input": "0.04",
             "cache_write": "0.5",
             "output": "1.5"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-6-rosalind",
+      "vendor": "openai",
+      "canonical_id": "openai/gpt-6-rosalind",
+      "source": "openai-pricing-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "15",
+            "cached_input": "1.5",
+            "cache_write": "18.75",
+            "output": "75"
+          }
+        },
+        {
+          "min_input_tokens": 272000,
+          "rates": {
+            "input": "30",
+            "cached_input": "3",
+            "cache_write": "37.5",
+            "output": "112.5"
           }
         }
       ]

@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "together",
   "currency": "USD",
-  "verified_at": "2026-10-26",
+  "verified_at": "2026-11-02",
   "sources": [
     {
       "id": "together-models-docs",
@@ -31,7 +31,7 @@
     },
     {
       "id": "MiniMaxAI/MiniMax-M3.1-Flash",
-      "display_name": "Minimax M3.1 Flash",
+      "display_name": "MiniMax M3.1 Flash",
       "vendor": "minimax",
       "canonical_id": "minimaxai/minimax-m3.1-flash",
       "source": "together-models-docs",

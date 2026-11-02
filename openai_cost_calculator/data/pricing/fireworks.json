@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "fireworks",
   "currency": "USD",
-  "verified_at": "2026-10-26",
+  "verified_at": "2026-11-02",
   "sources": [
     {
       "id": "fireworks-pricing-docs",
@@ -851,6 +851,69 @@
             "input": "3",
             "cached_input": "0.375",
             "output": "9"
+          }
+        }
+      ]
+    },
+    {
+      "id": "accounts/fireworks/models/rune",
+      "display_name": "Rune 26B-A4B",
+      "canonical_id": "fireworks/rune",
+      "source": "fireworks-pricing-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.042",
+            "cached_input": "0.0084",
+            "output": "0"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "batch"
+          },
+          "rates": {
+            "input": "0.021",
+            "output": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "accounts/fireworks/models/ultramarine-1-flash-us",
+      "display_name": "Ultramarine 1 Flash",
+      "canonical_id": "fireworks/ultramarine-1-flash-us",
+      "source": "fireworks-pricing-docs",
+      "prices": [
+        {
+          "conditions": {
+            "region": "us"
+          },
+          "rates": {
+            "input": "0.225",
+            "cached_input": "0.045",
+            "output": "0.75"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us",
+            "service_tier": "batch"
+          },
+          "rates": {
+            "input": "0.1125",
+            "output": "0.375"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us",
+            "service_tier": "priority"
+          },
+          "rates": {
+            "input": "0.28125",
+            "cached_input": "0.05625",
+            "output": "0.9375"
           }
         }
       ]
