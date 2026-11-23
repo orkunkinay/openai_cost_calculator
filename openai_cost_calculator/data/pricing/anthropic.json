@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "anthropic",
   "currency": "USD",
-  "verified_at": "2026-10-27",
+  "verified_at": "2026-11-23",
   "sources": [
     {
       "id": "anthropic-pricing-docs",
@@ -158,6 +158,92 @@
             "cache_write": "6.25",
             "cache_write_1h": "10",
             "output": "25",
+            "web_search": "0.01"
+          }
+        }
+      ]
+    },
+    {
+      "id": "claude-fable-5-2",
+      "display_name": "Claude Fable 5.2",
+      "vendor": "anthropic",
+      "canonical_id": "anthropic/claude-fable-5-2",
+      "source": "anthropic-pricing-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "8",
+            "cached_input": "0.2",
+            "cache_write": "10",
+            "cache_write_1h": "16",
+            "output": "40",
+            "web_search": "0.01"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us"
+          },
+          "rates": {
+            "input": "8.8",
+            "cached_input": "0.22",
+            "cache_write": "11",
+            "cache_write_1h": "17.6",
+            "output": "44",
+            "web_search": "0.01"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us",
+            "service_tier": "batch"
+          },
+          "rates": {
+            "input": "4.4",
+            "cached_input": "0.11",
+            "cache_write": "5.5",
+            "cache_write_1h": "8.8",
+            "output": "22",
+            "web_search": "0.01"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us",
+            "service_tier": "fast"
+          },
+          "rates": {
+            "input": "17.6",
+            "cached_input": "0.44",
+            "cache_write": "22",
+            "cache_write_1h": "35.2",
+            "output": "88",
+            "web_search": "0.01"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "batch"
+          },
+          "rates": {
+            "input": "4",
+            "cached_input": "0.1",
+            "cache_write": "5",
+            "cache_write_1h": "8",
+            "output": "20",
+            "web_search": "0.01"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "fast"
+          },
+          "rates": {
+            "input": "16",
+            "cached_input": "0.4",
+            "cache_write": "20",
+            "cache_write_1h": "32",
+            "output": "80",
             "web_search": "0.01"
           }
         }
@@ -421,6 +507,92 @@
             "cache_write": "6.25",
             "cache_write_1h": "10",
             "output": "25",
+            "web_search": "0.01"
+          }
+        }
+      ]
+    },
+    {
+      "id": "claude-mythos-5-2",
+      "display_name": "Claude Mythos 5.2",
+      "vendor": "anthropic",
+      "canonical_id": "anthropic/claude-mythos-5-2",
+      "source": "anthropic-pricing-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "8",
+            "cached_input": "0.2",
+            "cache_write": "10",
+            "cache_write_1h": "16",
+            "output": "40",
+            "web_search": "0.01"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us"
+          },
+          "rates": {
+            "input": "8.8",
+            "cached_input": "0.22",
+            "cache_write": "11",
+            "cache_write_1h": "17.6",
+            "output": "44",
+            "web_search": "0.01"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us",
+            "service_tier": "batch"
+          },
+          "rates": {
+            "input": "4.4",
+            "cached_input": "0.11",
+            "cache_write": "5.5",
+            "cache_write_1h": "8.8",
+            "output": "22",
+            "web_search": "0.01"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us",
+            "service_tier": "fast"
+          },
+          "rates": {
+            "input": "17.6",
+            "cached_input": "0.44",
+            "cache_write": "22",
+            "cache_write_1h": "35.2",
+            "output": "88",
+            "web_search": "0.01"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "batch"
+          },
+          "rates": {
+            "input": "4",
+            "cached_input": "0.1",
+            "cache_write": "5",
+            "cache_write_1h": "8",
+            "output": "20",
+            "web_search": "0.01"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "fast"
+          },
+          "rates": {
+            "input": "16",
+            "cached_input": "0.4",
+            "cache_write": "20",
+            "cache_write_1h": "32",
+            "output": "80",
             "web_search": "0.01"
           }
         }

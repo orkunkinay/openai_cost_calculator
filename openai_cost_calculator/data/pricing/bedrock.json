@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "bedrock",
   "currency": "USD",
-  "verified_at": "2026-10-27",
+  "verified_at": "2026-11-23",
   "sources": [
     {
       "id": "aws-price-list-api",
@@ -1634,6 +1634,63 @@
       ]
     },
     {
+      "id": "anthropic.claude-fable-5-2",
+      "display_name": "Claude Fable 5.2",
+      "vendor": "anthropic",
+      "canonical_id": "anthropic/claude-fable-5-2",
+      "source": "aws-price-list-api",
+      "prices": [
+        {
+          "conditions": {
+            "region": "eu-central-1"
+          },
+          "rates": {
+            "input": "8.8",
+            "cached_input": "0.22",
+            "cache_write": "11",
+            "cache_write_1h": "17.6",
+            "output": "44"
+          }
+        },
+        {
+          "conditions": {
+            "region": "global"
+          },
+          "rates": {
+            "input": "8",
+            "cached_input": "0.2",
+            "cache_write": "10",
+            "cache_write_1h": "16",
+            "output": "40"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us-east-1"
+          },
+          "rates": {
+            "input": "8.8",
+            "cached_input": "0.22",
+            "cache_write": "11",
+            "cache_write_1h": "17.6",
+            "output": "44"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us-west-2"
+          },
+          "rates": {
+            "input": "8.8",
+            "cached_input": "0.22",
+            "cache_write": "11",
+            "cache_write_1h": "17.6",
+            "output": "44"
+          }
+        }
+      ]
+    },
+    {
       "id": "anthropic.claude-haiku-4-5",
       "display_name": "Claude Haiku 4.5",
       "vendor": "anthropic",
@@ -1964,6 +2021,63 @@
             "cache_write": "13.75",
             "cache_write_1h": "22",
             "output": "55"
+          }
+        }
+      ]
+    },
+    {
+      "id": "anthropic.claude-mythos-5-2",
+      "display_name": "Claude Mythos 5.2",
+      "vendor": "anthropic",
+      "canonical_id": "anthropic/claude-mythos-5-2",
+      "source": "aws-price-list-api",
+      "prices": [
+        {
+          "conditions": {
+            "region": "eu-central-1"
+          },
+          "rates": {
+            "input": "8.8",
+            "cached_input": "0.22",
+            "cache_write": "11",
+            "cache_write_1h": "17.6",
+            "output": "44"
+          }
+        },
+        {
+          "conditions": {
+            "region": "global"
+          },
+          "rates": {
+            "input": "8",
+            "cached_input": "0.2",
+            "cache_write": "10",
+            "cache_write_1h": "16",
+            "output": "40"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us-east-1"
+          },
+          "rates": {
+            "input": "8.8",
+            "cached_input": "0.22",
+            "cache_write": "11",
+            "cache_write_1h": "17.6",
+            "output": "44"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us-west-2"
+          },
+          "rates": {
+            "input": "8.8",
+            "cached_input": "0.22",
+            "cache_write": "11",
+            "cache_write_1h": "17.6",
+            "output": "44"
           }
         }
       ]
