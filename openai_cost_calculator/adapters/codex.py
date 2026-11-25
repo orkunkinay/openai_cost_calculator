@@ -116,9 +116,12 @@ def statusline_text(
         session_data = _session_data(data, session_id)
         if not session_data:
             return f"{MONEY} no observed usage"
-        if session_data.get("errors"):
-            return f"{MONEY} API-equivalent estimate incomplete"
         total = decimal_from(session_data.get("session_total"))
+        if session_data.get("errors"):
+            incomplete = f"{MONEY} API-equivalent estimate incomplete"
+            if total > 0:
+                incomplete += f" {SEP} {format_money(total)} priced subtotal"
+            return incomplete
         turns = session_data.get("turns")
         last_cost = Decimal("0")
         if isinstance(turns, list) and turns:

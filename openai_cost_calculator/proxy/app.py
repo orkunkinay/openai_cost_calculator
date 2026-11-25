@@ -130,13 +130,18 @@ def create_app(
         unauthorized = _admin_auth_error(app, request)
         if unauthorized is not None:
             return unauthorized
-        summary = app.state.occ_registry.summary(session)
-        if app.state.occ_protocol != ANTHROPIC_PROTOCOL:
-            summary["cost_basis"] = "standard_api_equivalent_token_estimate"
-            summary["has_accounting_diagnostics"] = any(
+        return JSONResponse(report_metadata(app.state.occ_registry.summary(session)))
+
+    def report_metadata(summary: dict) -> dict:
+        if app.state.occ_protocol == ANTHROPIC_PROTOCOL:
+            return summary
+        return {
+            **summary,
+            "cost_basis": "standard_api_equivalent_token_estimate",
+            "has_accounting_diagnostics": any(
                 value.get("errors") for value in summary["sessions"].values()
-            )
-        return JSONResponse(summary)
+            ),
+        }
 
     @app.post("/_occ/checkpoint")
     async def checkpoint(request: Request, session: Optional[str] = None) -> JSONResponse:
@@ -150,6 +155,8 @@ def create_app(
                 {"error": {"code": "ledger_write_failed", "message": str(exc)}},
                 status_code=503,
             )
+        if app.state.occ_protocol != ANTHROPIC_PROTOCOL:
+            payload["cost_basis"] = "standard_api_equivalent_token_estimate"
         return JSONResponse(payload)
 
     @app.post("/_occ/reset")
@@ -214,10 +221,10 @@ def create_app(
 
         async def events() -> AsyncIterator[bytes]:
             try:
-                yield _sse_data(app.state.occ_registry.summary())
+                yield _sse_data(report_metadata(app.state.occ_registry.summary()))
                 while True:
                     summary = await queue.get()
-                    yield _sse_data(summary)
+                    yield _sse_data(report_metadata(summary))
             finally:
                 app.state.occ_registry.unsubscribe(queue)
 
