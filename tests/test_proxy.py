@@ -570,3 +570,15 @@ def test_websocket_relay_preserves_frames_headers_query_and_subprotocol():
     assert websocket.closed == (1000, "")
     session = registry.summary("websocket-relay")["sessions"]["websocket-relay"]
     assert session["session_total"] == "0.00200000"
+
+
+@pytest.mark.parametrize("usage", [
+    {}, {"input_tokens": 10}, {"input_tokens": True, "output_tokens": 1},
+    {"input_tokens": "10", "output_tokens": 1},
+    {"input_tokens": 10, "output_tokens": 1.5},
+    {"input_tokens": 10, "output_tokens": 1, "input_tokens_details": []},
+    {"input_tokens": 10, "output_tokens": 1, "input_tokens_details": {"cached_tokens": 11}},
+    {"input_tokens": 10, "output_tokens": 1, "output_tokens_details": {"reasoning_tokens": 2}},
+])
+def test_invalid_response_usage_is_not_priced(usage):
+    assert extract_usage_from_payload({"usage": usage}) is None

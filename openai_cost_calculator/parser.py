@@ -81,41 +81,39 @@ def extract_usage(obj: Any) -> Dict[str, int]:
     }
 
 
-def _get_nested_int(data: Dict[str, Any], *keys: str) -> int:
-    current: Any = data
-    for key in keys:
-        if not isinstance(current, dict):
-            return 0
-        current = current.get(key)
-    return int(current or 0)
-
-
 def extract_usage_from_payload(payload: Dict[str, Any]) -> Optional[Dict[str, int]]:
-    """
-    Extract usage from a raw OpenAI-compatible JSON response payload.
-
-    Supports both Chat Completions and Responses API usage schemas. Returns
-    None when the payload has no top-level ``usage`` object.
-    """
+    """Return validated OpenAI wire token totals, or None for unusable usage."""
     usage = payload.get("usage")
     if not isinstance(usage, dict):
         return None
 
     if "input_tokens" in usage or "output_tokens" in usage:
-        prompt_tokens = _get_nested_int(usage, "input_tokens")
-        completion_tokens = _get_nested_int(usage, "output_tokens")
-        cached_tokens = _get_nested_int(
-            usage, "input_tokens_details", "cached_tokens"
-        )
+        input_key, output_key = "input_tokens", "output_tokens"
     else:
-        prompt_tokens = _get_nested_int(usage, "prompt_tokens")
-        completion_tokens = _get_nested_int(usage, "completion_tokens")
-        cached_tokens = _get_nested_int(
-            usage, "prompt_tokens_details", "cached_tokens"
-        )
+        input_key, output_key = "prompt_tokens", "completion_tokens"
+    input_tokens, output_tokens = usage.get(input_key), usage.get(output_key)
+    input_details = usage.get(f"{input_key}_details")
+    output_details = usage.get(f"{output_key}_details")
+    if input_details is None:
+        input_details = {}
+    if output_details is None:
+        output_details = {}
+    if not isinstance(input_details, dict) or not isinstance(output_details, dict):
+        return None
+
+    cached = input_details.get("cached_tokens", 0)
+    reasoning = output_details.get("reasoning_tokens", 0)
+    total = usage.get("total_tokens", 0)
+    counts = (input_tokens, output_tokens, cached, reasoning, total)
+    if any(type(count) is not int or count < 0 for count in counts):
+        return None
+    if cached > input_tokens or reasoning > output_tokens:
+        return None
+    if "total_tokens" in usage and total != input_tokens + output_tokens:
+        return None
 
     return {
-        "prompt_tokens": prompt_tokens,
-        "completion_tokens": completion_tokens,
-        "cached_tokens": cached_tokens,
+        "prompt_tokens": input_tokens,
+        "completion_tokens": output_tokens,
+        "cached_tokens": cached,
     }
