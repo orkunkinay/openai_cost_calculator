@@ -2975,6 +2975,83 @@
       ]
     },
     {
+      "id": "gpt-6.2-sol",
+      "vendor": "openai",
+      "canonical_id": "openai/gpt-6.2-sol",
+      "source": "openai-pricing-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "2",
+            "cached_input": "0.10",
+            "cache_write": "2.50",
+            "cache_write_1h": "5",
+            "output": "10"
+          }
+        },
+        {
+          "min_input_tokens": 272001,
+          "rates": {
+            "input": "4",
+            "cached_input": "0.20",
+            "cache_write": "5",
+            "cache_write_1h": "10",
+            "output": "15"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "batch"
+          },
+          "rates": {
+            "input": "1.0",
+            "cached_input": "0.050",
+            "cache_write": "1.250",
+            "cache_write_1h": "2.5",
+            "output": "5.0"
+          }
+        },
+        {
+          "min_input_tokens": 272001,
+          "conditions": {
+            "service_tier": "batch"
+          },
+          "rates": {
+            "input": "2.0",
+            "cached_input": "0.100",
+            "cache_write": "2.5",
+            "cache_write_1h": "5.0",
+            "output": "7.5"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "priority"
+          },
+          "rates": {
+            "input": "4",
+            "cached_input": "0.20",
+            "cache_write": "5.00",
+            "cache_write_1h": "10",
+            "output": "20"
+          }
+        },
+        {
+          "min_input_tokens": 272001,
+          "conditions": {
+            "service_tier": "priority"
+          },
+          "rates": {
+            "input": "8",
+            "cached_input": "0.40",
+            "cache_write": "10",
+            "cache_write_1h": "20",
+            "output": "30"
+          }
+        }
+      ]
+    },
+    {
       "id": "text-embedding-3-large",
       "vendor": "openai",
       "canonical_id": "openai/text-embedding-3-large",
