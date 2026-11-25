@@ -138,8 +138,8 @@ def test_codex_adapters_render_and_silently_handle_network_errors(monkeypatch):
         )
 
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
-    assert checkpoint_text({}, session="s1") == "💰 Turn $0.0032 · gpt-5.5 1.2k->500"
-    assert codex_statusline_text(session="s1") == "💰 $0.0100 session · last $0.0032"
+    assert checkpoint_text({}, session="s1") == "💰 API-equivalent estimate · Turn $0.0032 · gpt-5.5 1.2k->500"
+    assert codex_statusline_text(session="s1") == "💰 API-equivalent estimate $0.0100 session · last $0.0032"
 
     def failing_urlopen(request, timeout):
         raise OSError("offline")
@@ -234,7 +234,7 @@ def test_codex_notify_uses_installed_session_and_chains_previous_notifier(
     monkeypatch.setattr("sys.argv", ["occ-codex-notify", json.dumps(notification)])
 
     assert notify_main() == 0
-    assert "💰 Turn $0.0040 · gpt-test 2.0k->1.0k" in capsys.readouterr().out
+    assert "💰 API-equivalent estimate · Turn $0.0040 · gpt-test 2.0k->1.0k" in capsys.readouterr().out
     assert "session=installed-session" in requested_urls[0]
     assert json.loads(previous_log.read_text(encoding="utf-8")) == notification
 

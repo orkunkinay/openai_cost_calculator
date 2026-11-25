@@ -259,7 +259,7 @@ def test_upstream_error_records_nothing_and_missing_usage_reports_diagnostic():
 
 
 def test_costing_failure_is_swallowed_and_response_is_unchanged():
-    upstream_body = b'{"model":"unknown-2099-01-01","usage":{"prompt_tokens":1}}'
+    upstream_body = b'{"model":"unknown-2099-01-01","usage":{"prompt_tokens":1,"completion_tokens":0}}'
 
     async def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -582,3 +582,52 @@ def test_websocket_relay_preserves_frames_headers_query_and_subprotocol():
 ])
 def test_invalid_response_usage_is_not_priced(usage):
     assert extract_usage_from_payload({"usage": usage}) is None
+
+
+def test_openai_compressed_stream_is_accounted_without_rewriting_body():
+    import gzip
+
+    body = b'data: {"type":"response.completed","response":{"model":"gpt-test","usage":{"input_tokens":100,"output_tokens":50}}}\n\n'
+    compressed = gzip.compress(body)
+
+    async def handler(request):
+        return httpx.Response(200, headers={
+            "content-type": "text/event-stream", "content-encoding": "gzip",
+        }, stream=AsyncChunkStream([compressed[:7], compressed[7:]]))
+
+    client = _client(handler)
+    response = client.post("/v1/responses", json={"stream": True})
+    assert response.content == body
+    assert client.get("/_occ/costs").json()["grand_total"] == "0.00020000"
+
+
+def test_terminal_responses_usage_is_committed_before_next_upstream_chunk():
+    registry = TrackerRegistry()
+    terminal = (
+        b'data: {"type":"response.completed","response":{"id":"resp_test",'
+        b'"model":"gpt-test","usage":{"input_tokens":100,"output_tokens":50}}}\n\n'
+    )
+
+    class ObservedStream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield terminal
+            assert registry.summary()["grand_total"] == "0.00020000"
+            yield terminal
+
+    async def handler(request):
+        return httpx.Response(200, stream=ObservedStream())
+
+    app = create_app(upstream="https://upstream.example/v1",
+                     transport=httpx.MockTransport(handler), registry=registry)
+    response = ASGITestClient(app).post("/v1/responses", json={"stream": True})
+    assert response.content == terminal * 2
+    assert registry.summary()["grand_total"] == "0.00020000"
+
+
+def test_openai_model_discovery_does_not_create_usage_errors():
+    async def handler(request):
+        return httpx.Response(200, json={"data": []})
+
+    client = _client(handler)
+    assert client.get("/v1/models").status_code == 200
+    assert client.get("/_occ/costs").json()["sessions"] == {}

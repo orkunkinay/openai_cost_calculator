@@ -45,7 +45,7 @@ def checkpoint_text(
     prompt_tokens = int(data.get("prompt_tokens") or 0)
     completion_tokens = int(data.get("completion_tokens") or 0)
     return (
-        f"{MONEY} Turn {format_money(cost)} {SEP} "
+        f"{MONEY} API-equivalent estimate · Turn {format_money(cost)} {SEP} "
         f"{model} {compact_tokens(prompt_tokens)}->{compact_tokens(completion_tokens)}"
     )
 
@@ -115,7 +115,9 @@ def statusline_text(
             return f"{MONEY} cost offline"
         session_data = _session_data(data, session_id)
         if not session_data:
-            return f"{MONEY} $0.0000 session {SEP} last $0.0000"
+            return f"{MONEY} no observed usage"
+        if session_data.get("errors"):
+            return f"{MONEY} API-equivalent estimate incomplete"
         total = decimal_from(session_data.get("session_total"))
         turns = session_data.get("turns")
         last_cost = Decimal("0")
@@ -124,7 +126,7 @@ def statusline_text(
             if isinstance(last, dict):
                 last_cost = decimal_from(last.get("total_cost"))
         return (
-            f"{MONEY} {format_money(total)} session {SEP} "
+            f"{MONEY} API-equivalent estimate {format_money(total)} session {SEP} "
             f"last {format_money(last_cost)}"
         )
     except Exception:
