@@ -428,6 +428,8 @@ def _checkpoint(args: argparse.Namespace) -> int:
             f"{payload.get('num_calls', 0)} calls, "
             f"${payload.get('total_cost', '0.00000000')}"
         )
+        if payload.get("cost_basis") == "standard_api_equivalent_token_estimate":
+            print("Basis: standard API-equivalent token estimate")
     return 0
 
 
@@ -610,6 +612,10 @@ def _print_summary(payload: dict, *, include_diagnostics: bool) -> None:
     if not isinstance(sessions, dict) or not sessions:
         print("No accounting sessions recorded.")
         return
+    if payload.get("cost_basis") == "standard_api_equivalent_token_estimate":
+        print("Basis: standard API-equivalent token estimate")
+        if payload.get("has_accounting_diagnostics"):
+            print("Coverage: incomplete (see --diagnostics)")
     for session_id, session in sessions.items():
         if not isinstance(session, dict):
             continue

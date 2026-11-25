@@ -530,7 +530,7 @@ class TrackerRegistry:
             self._ledger.append_call(
                 session,
                 turn_label,
-                _record_payload(record),
+                _record_payload(record, exact=True),
                 max_sessions=_MAX_SESSIONS,
                 max_calls_per_session=None,
             )
@@ -605,7 +605,7 @@ class TrackerRegistry:
                     turns.append(
                         {
                             "label": turn.label,
-                            "records": [_record_payload(record) for record in turn.records],
+                            "records": [_record_payload(record, exact=True) for record in turn.records],
                         }
                     )
             sessions[key] = {
@@ -740,13 +740,18 @@ def _records_summary(session_id: str, records: Iterable[CallRecord]) -> dict:
     }
 
 
-def _record_payload(record: CallRecord) -> dict[str, Any]:
+def _record_payload(record: CallRecord, *, exact: bool = False) -> dict[str, Any]:
+    costs = record.cost.as_dict(stringify=True)
+    if exact:
+        for key, value in record.cost.as_dict(stringify=False).items():
+            if Decimal(costs[key]) != value:
+                costs[key] = format(value, "f")
     return {
         "model": record.model,
         "prompt_tokens": record.prompt_tokens,
         "completion_tokens": record.completion_tokens,
         "cached_tokens": record.cached_tokens,
-        "cost": record.cost.as_dict(stringify=True),
+        "cost": costs,
         "timestamp": record.timestamp,
     }
 

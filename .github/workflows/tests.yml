@@ -67,7 +67,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        # Ubuntu 26.04 has no Python 3.9 build in actions/setup-python.
+        os: [ubuntu-24.04]
         python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.9", "3.12"]' || '["3.9", "3.10", "3.11", "3.12"]') }}
 
     steps:

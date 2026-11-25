@@ -302,6 +302,17 @@ def load_pricing_tiered() -> Dict[Tuple[str, str], List[dict]]:
 
     return base
 
+def bundled_rates_for_missing_model(model_name: str) -> Dict[str, List[dict]]:
+    if _OFFLINE_ONLY:
+        return {}
+    from .legacy import legacy_tiered_pricing
+
+    return {
+        date: rows for (name, date), rows in legacy_tiered_pricing().items()
+        if name == model_name
+    }
+
+
 def load_pricing() -> Dict[Tuple[str, str], dict]:
     """
     Backward-compatible flat pricing view.

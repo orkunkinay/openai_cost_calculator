@@ -130,7 +130,18 @@ def create_app(
         unauthorized = _admin_auth_error(app, request)
         if unauthorized is not None:
             return unauthorized
-        return JSONResponse(app.state.occ_registry.summary(session))
+        return JSONResponse(report_metadata(app.state.occ_registry.summary(session)))
+
+    def report_metadata(summary: dict) -> dict:
+        if app.state.occ_protocol == ANTHROPIC_PROTOCOL:
+            return summary
+        return {
+            **summary,
+            "cost_basis": "standard_api_equivalent_token_estimate",
+            "has_accounting_diagnostics": any(
+                value.get("errors") for value in summary["sessions"].values()
+            ),
+        }
 
     @app.post("/_occ/checkpoint")
     async def checkpoint(request: Request, session: Optional[str] = None) -> JSONResponse:
@@ -144,6 +155,8 @@ def create_app(
                 {"error": {"code": "ledger_write_failed", "message": str(exc)}},
                 status_code=503,
             )
+        if app.state.occ_protocol != ANTHROPIC_PROTOCOL:
+            payload["cost_basis"] = "standard_api_equivalent_token_estimate"
         return JSONResponse(payload)
 
     @app.post("/_occ/reset")
@@ -208,10 +221,10 @@ def create_app(
 
         async def events() -> AsyncIterator[bytes]:
             try:
-                yield _sse_data(app.state.occ_registry.summary())
+                yield _sse_data(report_metadata(app.state.occ_registry.summary()))
                 while True:
                     summary = await queue.get()
-                    yield _sse_data(summary)
+                    yield _sse_data(report_metadata(summary))
             finally:
                 app.state.occ_registry.unsubscribe(queue)
 
@@ -282,14 +295,15 @@ async def _forward_buffered(
             content=body,
         )
 
-    _record_from_payload(
-        app.state.occ_registry,
-        session_id,
-        turn_label,
-        upstream_response.status_code,
-        upstream_response.headers.get("content-type"),
-        upstream_response.content,
-    )
+    if request.method == "POST":
+        _record_from_payload(
+            app.state.occ_registry,
+            session_id,
+            turn_label,
+            upstream_response.status_code,
+            upstream_response.headers.get("content-type"),
+            upstream_response.content,
+        )
 
     return Response(
         content=upstream_response.content,
@@ -317,12 +331,23 @@ async def _forward_streaming(
     )
     upstream_response = await client.send(upstream_request, stream=True)
     parser = _SSEUsageParser(default_model=request_payload.get("model"))
+    decoder = IncrementalDecoder(upstream_response.headers.get("content-encoding"))
 
     async def chunks() -> AsyncIterator[bytes]:
         completed = False
+        recorded = False
         try:
             async for chunk in upstream_response.aiter_raw():
-                parser.feed(chunk)
+                parser.feed(decoder.decompress(chunk))
+                if (
+                    not recorded and upstream_response.status_code < 400
+                    and parser.terminal_usage_payload is not None
+                ):
+                    _record_json_payload(
+                        app.state.occ_registry, session_id, turn_label,
+                        parser.terminal_usage_payload,
+                    )
+                    recorded = True
                 yield chunk
             completed = True
         except Exception as exc:
@@ -333,8 +358,15 @@ async def _forward_streaming(
             )
             raise
         finally:
+            parser.feed(decoder.flush())
             parser.close()
-            if completed and upstream_response.status_code < 400:
+            if completed and upstream_response.status_code < 400 and not decoder.supported:
+                app.state.occ_registry.record_error(
+                    session_id,
+                    "stream_malformed_event",
+                    f"cannot decode upstream content-encoding: {decoder.encoding}",
+                )
+            elif not recorded and completed and upstream_response.status_code < 400:
                 usage_payload = parser.usage_payload
                 if usage_payload is not None:
                     _record_json_payload(
@@ -848,6 +880,23 @@ def _record_json_payload(
             "successful JSON response with usage did not identify a model",
         )
         return
+    raw_usage = payload["usage"]
+    input_details = raw_usage.get("input_tokens_details") or raw_usage.get("prompt_tokens_details") or {}
+    output_details = raw_usage.get("output_tokens_details") or raw_usage.get("completion_tokens_details") or {}
+    tier = payload.get("service_tier")
+    if (
+        tier not in (None, "auto", "default", "standard")
+        or any(value for key, value in input_details.items()
+               if key.endswith("_tokens") and key != "cached_tokens")
+        or any(value for key, value in output_details.items()
+               if key.endswith("_tokens") and key != "reasoning_tokens")
+        or payload.get("tool_usage")
+    ):
+        registry.record_error(
+            session_id,
+            "unsupported_price_dimensions",
+            "the standard token estimate excludes additional pricing dimensions",
+        )
     registry.record_call(session_id, model, usage, turn_label=turn_label)
 
 
@@ -862,6 +911,7 @@ class _SSEUsageParser:
         self._pending_cr = False
         self._default_model = default_model
         self.usage_payload: Optional[dict] = None
+        self.terminal_usage_payload: Optional[dict] = None
 
     def feed(self, chunk: bytes) -> None:
         if not chunk:
@@ -919,6 +969,8 @@ class _SSEUsageParser:
         if "model" not in usage_payload and isinstance(self._default_model, str):
             usage_payload = {**usage_payload, "model": self._default_model}
         self.usage_payload = usage_payload
+        if payload.get("type") == "response.completed":
+            self.terminal_usage_payload = usage_payload
 
 
 class _WebSocketAccountingObserver:

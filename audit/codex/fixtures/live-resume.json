@@ -1,0 +1,52 @@
+{
+  "requested_model": "gpt-6.2-sol",
+  "auth_mode": "chatgpt",
+  "events": [
+    {
+      "type": "turn_context",
+      "model": "gpt-6.2-sol"
+    },
+    {
+      "type": "token_count",
+      "info": {
+        "total_token_usage": {
+          "input_tokens": 14304,
+          "cached_input_tokens": 0,
+          "output_tokens": 9,
+          "reasoning_output_tokens": 0,
+          "total_tokens": 14313
+        },
+        "last_token_usage": {
+          "input_tokens": 14304,
+          "cached_input_tokens": 0,
+          "output_tokens": 9,
+          "reasoning_output_tokens": 0,
+          "total_tokens": 14313
+        }
+      }
+    },
+    {
+      "type": "turn_context",
+      "model": "gpt-6.2-sol"
+    },
+    {
+      "type": "token_count",
+      "info": {
+        "total_token_usage": {
+          "input_tokens": 34313,
+          "cached_input_tokens": 0,
+          "output_tokens": 18,
+          "reasoning_output_tokens": 0,
+          "total_tokens": 34331
+        },
+        "last_token_usage": {
+          "input_tokens": 20009,
+          "cached_input_tokens": 0,
+          "output_tokens": 9,
+          "reasoning_output_tokens": 0,
+          "total_tokens": 20018
+        }
+      }
+    }
+  ]
+}

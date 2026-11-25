@@ -67,6 +67,12 @@ def _find_rates(model_name: str, model_date: str, prompt_tokens: int) -> Dict[st
         for (name, date), rates in pricing.items()
         if name == model_name and date <= model_date
     ]
+    if not candidates and not any(name == model_name for name, _ in pricing):
+        candidates = [
+            (date, rates)
+            for date, rates in pricing_store.bundled_rates_for_missing_model(model_name).items()
+            if date <= model_date
+        ]
     if not candidates:
         raise CostEstimateError(
             f"No pricing data for model '{model_name}' (date {model_date})"

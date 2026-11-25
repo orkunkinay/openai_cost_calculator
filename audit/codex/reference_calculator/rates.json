@@ -1,0 +1,24 @@
+{
+  "observed_on": "2026-11-25",
+  "basis": "USD per million tokens, standard token estimate, excluding cache writes and tools",
+  "effective_date": null,
+  "source": "https://developers.openai.com/api/docs/pricing",
+  "models": {
+    "gpt-5.3-codex": {
+      "input": "1.75",
+      "cached_input": "0.175",
+      "output": "14",
+      "maximum_input": 200000
+    },
+    "gpt-6.2-sol": {
+      "input": "2",
+      "cached_input": "0.10",
+      "output": "10",
+      "maximum_input": 922000,
+      "long_after": 272000,
+      "long_input": "4",
+      "long_cached_input": "0.20",
+      "long_output": "15"
+    }
+  }
+}
