@@ -288,6 +288,10 @@ Codex may issue more than one Responses request for one CLI turn when its WebSoc
 The provider uses Codex's existing OpenAI authentication, so sign in with ChatGPT or an API key before using the integration.
 The configured session is sent as an `X-OCC-Session` header so proxy accounting and notifications use the same isolated session.
 
+Use distinct configured session tags to separate concurrent workflows. The integration groups proxied calls by these tags. It has no native Codex thread, historical rollout, or OpenAI project accounting.
+
+Amounts are standard API-equivalent token estimates for observed traffic. Actual Platform charges and ChatGPT allowance or credit use are separate measurements. The estimate can be incomplete when pricing is unknown, when a final usage record is missing, or when traffic uses additional pricing dimensions such as cache writes or Fast processing. Check `has_accounting_diagnostics` and per-session errors in the proxy cost report. See the [Codex accounting audit](../audit/codex/README.md) for coverage and reproduction.
+
 Use an explicit mode when automatic detection is unavailable:
 
 ```bash
@@ -298,8 +302,8 @@ openai-cost-calculator proxy --port 8100 --auth-mode api-key
 Codex notifications use the proxy checkpoint endpoint, so one `agent-turn-complete` notification consumes all calls since the preceding successful checkpoint:
 
 ```text
-💰 $0.0188 session · last $0.0032
-💰 Turn $0.0032 · gpt-5.5 1.2k->500
+💰 API-equivalent estimate $0.0188 session · last $0.0032
+💰 API-equivalent estimate · Turn $0.0032 · gpt-5.5 1.2k->500
 ```
 
 Checkpoint consumption is incremental and exactly once from the package's perspective.

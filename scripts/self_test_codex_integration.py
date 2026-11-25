@@ -56,6 +56,8 @@ def parse_args() -> argparse.Namespace:
         help="Proxy upstream; defaults from the isolated Codex login mode.",
     )
     parser.add_argument("--keep-temp", action="store_true")
+    parser.add_argument("--accounting-fixture", type=Path)
+    parser.add_argument("--resume-once", action="store_true", help="Run a second fixed turn in the isolated session")
     return parser.parse_args()
 
 
@@ -145,7 +147,7 @@ def main() -> int:
         codex_command = [
             str(args.codex),
             "exec",
-            "--ephemeral",
+            "--json" if args.accounting_fixture or args.resume_once else "--ephemeral",
             "--skip-git-repo-check",
             "--ignore-rules",
             "--sandbox",
@@ -174,13 +176,17 @@ def main() -> int:
         if nested_output != FIXED_RESPONSE:
             raise SelfTestError(f"unexpected nested response: {nested_output!r}")
 
+        if args.accounting_fixture:
+            _save_accounting_fixture(args.accounting_fixture, codex_home, model, auth_mode)
+
         after = _get_json(f"{proxy_url}/_occ/costs?{_query(session)}")
         session_data = after.get("sessions", {}).get(session)
         if not isinstance(session_data, dict):
             raise SelfTestError(f"proxy recorded no data for session {session!r}: {after}")
         turns = session_data.get("turns")
         if not isinstance(turns, list) or len(turns) != 1:
-            raise SelfTestError(f"expected one aggregated turn, got: {turns!r}")
+            codes = [error.get("code") for error in session_data.get("errors", [])]
+            raise SelfTestError(f"expected one aggregated turn, got {len(turns)}; diagnostic codes: {codes}")
         turn = turns[0]
         if turn.get("num_calls") != 1:
             raise SelfTestError(f"expected exactly one upstream request, got: {turn!r}")
@@ -216,7 +222,7 @@ def main() -> int:
         )
         if statusline.returncode != 0 or "cost offline" in statusline.stdout:
             raise SelfTestError(f"Codex status line failed: {statusline.stderr.strip()}")
-        if "session" not in statusline.stdout or "$0.0000" in statusline.stdout:
+        if "$" not in statusline.stdout or "$0.0000" in statusline.stdout:
             raise SelfTestError(f"Codex status line did not expose captured cost: {statusline.stdout!r}")
 
         first_checkpoint = _post_json(f"{proxy_url}/_occ/checkpoint?{_query(session)}")
@@ -240,6 +246,8 @@ def main() -> int:
             "codex_exit_status": nested.returncode,
             "codex_response": nested_output,
             "codex_statusline": statusline.stdout.strip(),
+            "accounting_diagnostics": [error["code"] for error in session_data.get("errors", [])],
+            "cost_basis": after.get("cost_basis"),
             "auth_method": auth_method,
             "auth_mode": auth_mode,
             "isolated_codex_home": True,
@@ -265,6 +273,27 @@ def main() -> int:
             "installer_idempotent": True,
             "values_match": True,
         }
+        if args.resume_once:
+            resumed = _run(
+                [*codex_command[:-1], "resume", "--last", PROMPT],
+                env=env, cwd=workdir, timeout=180,
+            )
+            if resumed.returncode != 0:
+                raise SelfTestError(f"resume failed: {_last_nonempty_line(resumed.stderr)}")
+            if output_file.read_text(encoding="utf-8").strip() != FIXED_RESPONSE:
+                raise SelfTestError("resumed Codex turn did not return the fixed response")
+            resumed_summary = _get_json(f"{proxy_url}/_occ/costs?{_query(session)}")
+            resumed_checkpoint = _post_json(f"{proxy_url}/_occ/checkpoint?{_query(session)}")
+            if resumed_checkpoint.get("num_calls") != 1:
+                raise SelfTestError("resumed checkpoint did not contain exactly one new request")
+            if Decimal(resumed_summary["grand_total"]) != (
+                recorded + Decimal(resumed_checkpoint["total_cost"])
+            ):
+                raise SelfTestError("resumed summary does not reconcile with both checkpoints")
+            result["resumed_checkpoint"] = resumed_checkpoint
+            result["resumed_total"] = resumed_summary["grand_total"]
+            if args.accounting_fixture:
+                _save_accounting_fixture(args.accounting_fixture, codex_home, model, auth_mode)
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
     except (SelfTestError, subprocess.TimeoutExpired) as exc:
@@ -282,6 +311,31 @@ def main() -> int:
             temp_owner.cleanup()
         elif args.keep_temp:
             print(f"Temporary files retained at {temp_root}", file=sys.stderr)
+
+
+def _save_accounting_fixture(
+    destination: Path, codex_home: Path, model: str | None, auth_mode: str
+) -> None:
+    events = []
+    for path in sorted((codex_home / "sessions").rglob("*.jsonl")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            row = json.loads(line)
+            payload = row.get("payload", {})
+            if row.get("type") == "turn_context":
+                events.append({"type": "turn_context", "model": payload.get("model")})
+            if row.get("type") == "event_msg" and payload.get("type") == "token_count":
+                info = payload.get("info")
+                fields = ("input_tokens", "cached_input_tokens", "output_tokens",
+                          "reasoning_output_tokens", "total_tokens")
+                events.append({"type": "token_count", "info": {
+                    key: {field: value[field] for field in fields if field in value}
+                    for key, value in info.items()
+                    if key in {"last_token_usage", "total_token_usage"}
+                    and isinstance(value, dict)
+                } if isinstance(info, dict) else None})
+    destination.write_text(json.dumps({
+        "requested_model": model, "auth_mode": auth_mode, "events": events,
+    }, indent=2) + "\n", encoding="utf-8")
 
 
 def _prepare_auth(

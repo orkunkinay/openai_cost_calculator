@@ -1,0 +1,29 @@
+{
+  "requested_model": "gpt-6.2-sol",
+  "auth_mode": "chatgpt",
+  "events": [
+    {
+      "type": "turn_context",
+      "model": "gpt-6.2-sol"
+    },
+    {
+      "type": "token_count",
+      "info": {
+        "total_token_usage": {
+          "input_tokens": 14313,
+          "cached_input_tokens": 0,
+          "output_tokens": 9,
+          "reasoning_output_tokens": 0,
+          "total_tokens": 14322
+        },
+        "last_token_usage": {
+          "input_tokens": 14313,
+          "cached_input_tokens": 0,
+          "output_tokens": 9,
+          "reasoning_output_tokens": 0,
+          "total_tokens": 14322
+        }
+      }
+    }
+  ]
+}

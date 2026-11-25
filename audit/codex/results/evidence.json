@@ -1,0 +1,92 @@
+{
+  "codex_version": "0.172.0",
+  "calculator_baseline": "39f772e",
+  "verification_scope": "standard API-equivalent token estimates only",
+  "experiments": [
+    {
+      "name": "unsupported model on ChatGPT",
+      "model": "gpt-5.3-codex",
+      "status": "rejected",
+      "reason": "Codex backend rejected model for the login mode"
+    },
+    {
+      "name": "single turn before terminal capture and pricing fixes",
+      "model": "gpt-6.2-sol",
+      "input": 14310,
+      "cached": 0,
+      "output": 9,
+      "reasoning": 0,
+      "reference_usd": "0.028710",
+      "production_usd": "0.00000000",
+      "absolute_error_usd": "0.028710",
+      "relative_error": "1",
+      "status": "failed",
+      "reason": "terminal response discarded before EOF, pricing unavailable"
+    },
+    {
+      "name": "single turn after fixes",
+      "model": "gpt-6.2-sol",
+      "input": 14313,
+      "cached": 0,
+      "output": 9,
+      "reasoning": 0,
+      "reference_usd": "0.028716",
+      "production_usd": "0.02871600",
+      "absolute_error_usd": "0",
+      "relative_error": "0",
+      "status": "verified_estimate"
+    },
+    {
+      "name": "durable ledger rounding",
+      "model": "gpt-5.3-codex",
+      "input": 20,
+      "cached": 20,
+      "output": 0,
+      "reasoning": 0,
+      "reference_usd": "0.00000350",
+      "before_usd": "0.00000360",
+      "production_usd": "0.00000350",
+      "absolute_error_usd": "0",
+      "relative_error": "0",
+      "status": "verified_offline"
+    },
+    {
+      "name": "single turn with extra pricing diagnostic",
+      "model": "gpt-6.2-sol",
+      "input": 14307,
+      "cached": 0,
+      "output": 9,
+      "reasoning": 0,
+      "reference_usd": "0.02870400",
+      "production_usd": "0.02870400",
+      "absolute_error_usd": "0",
+      "relative_error": "0",
+      "status": "verified_standard_subtotal_incomplete_estimate",
+      "diagnostics": [
+        "unsupported_price_dimensions"
+      ]
+    },
+    {
+      "name": "two turns with Codex CLI resumption",
+      "model": "gpt-6.2-sol",
+      "input": 34313,
+      "cached": 0,
+      "output": 18,
+      "reasoning": 0,
+      "reference_usd": "0.06880600",
+      "production_usd": "0.06880600",
+      "absolute_error_usd": "0",
+      "relative_error": "0",
+      "status": "verified_standard_subtotal_incomplete_estimate",
+      "diagnostics": [
+        "unsupported_price_dimensions"
+      ],
+      "per_turn_expected_usd": [
+        "0.02869800",
+        "0.04010800"
+      ]
+    }
+  ],
+  "billing": "unverified_no_admin_key",
+  "differential_records": 5007
+}
