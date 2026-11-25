@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "openai",
   "currency": "USD",
-  "verified_at": "2026-11-02",
+  "verified_at": "2026-11-23",
   "sources": [
     {
       "id": "legacy-csv",
@@ -548,6 +548,23 @@
       ]
     },
     {
+      "id": "gpt-4o-mini-transcribe",
+      "vendor": "openai",
+      "canonical_id": "openai/gpt-4o-mini-transcribe",
+      "source": "openai-pricing-docs",
+      "prices": [
+        {
+          "conditions": {
+            "service_tier": "batch"
+          },
+          "rates": {
+            "input": "1.25",
+            "output": "5"
+          }
+        }
+      ]
+    },
+    {
       "id": "gpt-4o-mini-tts",
       "vendor": "openai",
       "canonical_id": "openai/gpt-4o-mini-tts",
@@ -598,6 +615,40 @@
       "source": "legacy-csv",
       "prices": [
         {
+          "rates": {
+            "input": "2.5",
+            "output": "10"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-4o-transcribe",
+      "vendor": "openai",
+      "canonical_id": "openai/gpt-4o-transcribe",
+      "source": "openai-pricing-docs",
+      "prices": [
+        {
+          "conditions": {
+            "service_tier": "batch"
+          },
+          "rates": {
+            "input": "2.5",
+            "output": "10"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-4o-transcribe-diarize",
+      "vendor": "openai",
+      "canonical_id": "openai/gpt-4o-transcribe-diarize",
+      "source": "openai-pricing-docs",
+      "prices": [
+        {
+          "conditions": {
+            "service_tier": "batch"
+          },
           "rates": {
             "input": "2.5",
             "output": "10"
@@ -2459,6 +2510,60 @@
       "id": "gpt-image-2.5-sunburst",
       "vendor": "openai",
       "canonical_id": "openai/gpt-image-2.5-sunburst",
+      "source": "openai-pricing-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "5",
+            "cached_input": "1.25",
+            "input_image": "8",
+            "output_image": "30"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "batch"
+          },
+          "rates": {
+            "input": "2.5",
+            "cached_input": "0.625",
+            "input_image": "4",
+            "output_image": "15"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-image-2.6-flare",
+      "vendor": "openai",
+      "canonical_id": "openai/gpt-image-2.6-flare",
+      "source": "openai-pricing-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "5",
+            "cached_input": "1.25",
+            "input_image": "8",
+            "output_image": "30"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "batch"
+          },
+          "rates": {
+            "input": "2.5",
+            "cached_input": "0.625",
+            "input_image": "4",
+            "output_image": "15"
+          }
+        }
+      ]
+    },
+    {
+      "id": "gpt-image-2.6-sunburst",
+      "vendor": "openai",
+      "canonical_id": "openai/gpt-image-2.6-sunburst",
       "source": "openai-pricing-docs",
       "prices": [
         {

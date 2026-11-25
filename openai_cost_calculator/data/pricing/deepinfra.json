@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "deepinfra",
   "currency": "USD",
-  "verified_at": "2026-11-02",
+  "verified_at": "2026-11-23",
   "sources": [
     {
       "id": "deepinfra-models-api",
@@ -1709,6 +1709,36 @@
       ]
     },
     {
+      "id": "Qwen/Qwen4-Max",
+      "vendor": "qwen",
+      "canonical_id": "qwen/qwen4-max",
+      "source": "deepinfra-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "1.413",
+            "cached_input": "0.071",
+            "output": "4.24"
+          }
+        }
+      ]
+    },
+    {
+      "id": "RadixArk/DaisyRose-27B",
+      "vendor": "radixark",
+      "canonical_id": "radixark/daisyrose-27b",
+      "source": "deepinfra-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.15",
+            "cached_input": "0.0375",
+            "output": "1.875"
+          }
+        }
+      ]
+    },
+    {
       "id": "Sao10K/L3-70B-Euryale-v2.1",
       "vendor": "sao10k",
       "canonical_id": "sao10k/l3-70b-euryale-v2.1",
@@ -3131,8 +3161,8 @@
       "prices": [
         {
           "rates": {
-            "input": "0.13",
-            "output": "0.38"
+            "input": "0.2",
+            "output": "0.4"
           }
         },
         {
@@ -3140,8 +3170,8 @@
             "service_tier": "flex"
           },
           "rates": {
-            "input": "0.104",
-            "output": "0.304"
+            "input": "0.16",
+            "output": "0.32"
           }
         },
         {
@@ -3149,8 +3179,8 @@
             "service_tier": "priority"
           },
           "rates": {
-            "input": "0.195",
-            "output": "0.57"
+            "input": "0.3",
+            "output": "0.6"
           }
         }
       ]
@@ -3369,13 +3399,14 @@
       "id": "inclusionAI/Ling-3.1-flash",
       "vendor": "inclusionai",
       "canonical_id": "inclusionai/ling-3.1-flash",
+      "status": "deprecated",
       "source": "deepinfra-models-api",
       "prices": [
         {
           "rates": {
-            "input": "0.075",
-            "cached_input": "0.015",
-            "output": "0.225"
+            "input": "0.045",
+            "cached_input": "0.009",
+            "output": "0.135"
           }
         }
       ]
@@ -4042,7 +4073,7 @@
       "prices": [
         {
           "rates": {
-            "input": "0.019",
+            "input": "0.029",
             "output": "0.03"
           }
         },
@@ -4051,7 +4082,7 @@
             "service_tier": "flex"
           },
           "rates": {
-            "input": "0.0152",
+            "input": "0.0232",
             "output": "0.024"
           }
         }
@@ -4351,9 +4382,59 @@
       ]
     },
     {
+      "id": "moonshotai/Kimi-K3.1-Pro",
+      "vendor": "moonshotai",
+      "canonical_id": "moonshotai/kimi-k3.1-pro",
+      "source": "deepinfra-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "1.9",
+            "cached_input": "0.19",
+            "output": "9.5"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "flex"
+          },
+          "rates": {
+            "input": "1.52",
+            "cached_input": "0.152",
+            "output": "7.6"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "priority"
+          },
+          "rates": {
+            "input": "2.85",
+            "cached_input": "0.285",
+            "output": "14.25"
+          }
+        }
+      ]
+    },
+    {
       "id": "nace-ai/drex-max",
       "vendor": "nace-ai",
       "canonical_id": "nace-ai/drex-max",
+      "source": "deepinfra-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.06",
+            "cached_input": "0.06",
+            "output": "0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "nace-ai/drex-max-finance",
+      "vendor": "nace-ai",
+      "canonical_id": "nace-ai/drex-max-finance",
       "source": "deepinfra-models-api",
       "prices": [
         {
@@ -4431,7 +4512,7 @@
       "prices": [
         {
           "rates": {
-            "input": "0.085",
+            "input": "0.075",
             "output": "0.4"
           }
         },
@@ -4440,7 +4521,7 @@
             "service_tier": "flex"
           },
           "rates": {
-            "input": "0.068",
+            "input": "0.06",
             "output": "0.32"
           }
         },
@@ -4449,7 +4530,7 @@
             "service_tier": "priority"
           },
           "rates": {
-            "input": "0.1275",
+            "input": "0.1125",
             "output": "0.6"
           }
         }
@@ -4801,6 +4882,7 @@
         {
           "rates": {
             "input": "0.037",
+            "cached_input": "0.0185",
             "output": "0.17"
           }
         }
@@ -4852,6 +4934,7 @@
         {
           "rates": {
             "input": "0.03",
+            "cached_input": "0.015",
             "output": "0.14"
           }
         },
@@ -4861,6 +4944,7 @@
           },
           "rates": {
             "input": "0.024",
+            "cached_input": "0.012",
             "output": "0.112"
           }
         },
@@ -4870,6 +4954,7 @@
           },
           "rates": {
             "input": "0.045",
+            "cached_input": "0.0225",
             "output": "0.21"
           }
         }
@@ -5116,6 +5201,21 @@
       ]
     },
     {
+      "id": "tencent/Hy4",
+      "vendor": "tencent",
+      "canonical_id": "tencent/hy4",
+      "source": "deepinfra-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.6255",
+            "cached_input": "0.0315",
+            "output": "1.87575"
+          }
+        }
+      ]
+    },
+    {
       "id": "tencent/Hy4-preview",
       "vendor": "tencent",
       "canonical_id": "tencent/hy4-preview",
@@ -5167,6 +5267,21 @@
             "input": "0.95",
             "cached_input": "0.16",
             "output": "4.05"
+          }
+        }
+      ]
+    },
+    {
+      "id": "thinkingmachines/Inkling-2-Small",
+      "vendor": "thinkingmachines",
+      "canonical_id": "thinkingmachines/inkling-2-small",
+      "source": "deepinfra-models-api",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.285",
+            "cached_input": "0.0285",
+            "output": "0.95"
           }
         }
       ]

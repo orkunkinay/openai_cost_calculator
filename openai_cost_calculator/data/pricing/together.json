@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "together",
   "currency": "USD",
-  "verified_at": "2026-11-02",
+  "verified_at": "2026-11-23",
   "sources": [
     {
       "id": "together-models-docs",
@@ -99,9 +99,9 @@
       "prices": [
         {
           "rates": {
-            "input": "1.5",
+            "input": "2.5",
             "cached_input": "0.5",
-            "output": "4.5"
+            "output": "7.5"
           }
         }
       ]
@@ -148,6 +148,22 @@
           "rates": {
             "input": "0.15",
             "output": "0.47"
+          }
+        }
+      ]
+    },
+    {
+      "id": "Qwen/Qwen4-Max",
+      "display_name": "Qwen4 Max",
+      "vendor": "qwen",
+      "canonical_id": "qwen/qwen4-max",
+      "source": "together-models-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "1.425",
+            "cached_input": "0.07125",
+            "output": "4.275"
           }
         }
       ]
@@ -217,6 +233,38 @@
       ]
     },
     {
+      "id": "deepseek-ai/DeepSeek-V4.1-Flash-1017-fast",
+      "display_name": "DeepSeek V4.1 Flash 1017 Fast",
+      "vendor": "deepseek",
+      "canonical_id": "deepseek-ai/deepseek-v4.1-flash-1017-fast",
+      "source": "together-models-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.6",
+            "cached_input": "0.012",
+            "output": "2.4"
+          }
+        }
+      ]
+    },
+    {
+      "id": "elorian-labs/glimpse-1.0",
+      "display_name": "Glimpse 1.0",
+      "vendor": "elorian labs",
+      "canonical_id": "elorian-labs/glimpse-1.0",
+      "source": "together-models-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.6",
+            "cached_input": "0.06",
+            "output": "3"
+          }
+        }
+      ]
+    },
+    {
       "id": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
       "display_name": "Llama 3.3 70B Instruct Turbo",
       "vendor": "meta",
@@ -280,6 +328,22 @@
       ]
     },
     {
+      "id": "moonshotai/Kimi-K3.1-Pro",
+      "display_name": "Kimi K3.1 Pro",
+      "vendor": "moonshot",
+      "canonical_id": "moonshotai/kimi-k3.1-pro",
+      "source": "together-models-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "2",
+            "cached_input": "0.2",
+            "output": "10"
+          }
+        }
+      ]
+    },
+    {
       "id": "nvidia/NVIDIA-Nemotron-3.5-Super-VL",
       "display_name": "NVIDIA Nemotron 3.5 Super VL",
       "vendor": "nvidia",
@@ -327,6 +391,38 @@
       ]
     },
     {
+      "id": "ricursive-ai/Ripple-65B-Preview",
+      "display_name": "Ripple 65B Preview",
+      "vendor": "ricursive",
+      "canonical_id": "ricursive-ai/ripple-65b-preview",
+      "source": "together-models-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.2",
+            "cached_input": "0.02",
+            "output": "0.6"
+          }
+        }
+      ]
+    },
+    {
+      "id": "tencent/Hy4",
+      "display_name": "Hy4",
+      "vendor": "tencent",
+      "canonical_id": "tencent/hy4",
+      "source": "together-models-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.834",
+            "cached_input": "0.042",
+            "output": "2.501"
+          }
+        }
+      ]
+    },
+    {
       "id": "thinkingmachines/Inkling",
       "display_name": "Inkling",
       "vendor": "thinking machines",
@@ -338,6 +434,22 @@
             "input": "1",
             "cached_input": "0.17",
             "output": "4.05"
+          }
+        }
+      ]
+    },
+    {
+      "id": "thinkingmachines/Inkling-2-Small",
+      "display_name": "Inkling 2 Small",
+      "vendor": "thinking machines",
+      "canonical_id": "thinkingmachines/inkling-2-small",
+      "source": "together-models-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "0.3",
+            "cached_input": "0.03",
+            "output": "1"
           }
         }
       ]

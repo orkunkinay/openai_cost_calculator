@@ -3,7 +3,7 @@
   "schema_version": 1,
   "provider": "fireworks",
   "currency": "USD",
-  "verified_at": "2026-11-02",
+  "verified_at": "2026-11-23",
   "sources": [
     {
       "id": "fireworks-pricing-docs",
@@ -647,6 +647,52 @@
             "input": "3.75",
             "cached_input": "0.375",
             "output": "18.75"
+          }
+        }
+      ]
+    },
+    {
+      "id": "accounts/fireworks/models/kimi-k3p1-pro",
+      "display_name": "Kimi K3.1 Pro",
+      "canonical_id": "fireworks/kimi-k3p1-pro",
+      "source": "fireworks-pricing-docs",
+      "prices": [
+        {
+          "rates": {
+            "input": "2",
+            "cached_input": "0.2",
+            "output": "10"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us"
+          },
+          "rates": {
+            "input": "2.5",
+            "cached_input": "0.25",
+            "output": "12.5"
+          }
+        },
+        {
+          "conditions": {
+            "region": "us",
+            "service_tier": "priority"
+          },
+          "rates": {
+            "input": "3.75",
+            "cached_input": "0.375",
+            "output": "18.75"
+          }
+        },
+        {
+          "conditions": {
+            "service_tier": "priority"
+          },
+          "rates": {
+            "input": "3",
+            "cached_input": "0.3",
+            "output": "15"
           }
         }
       ]
