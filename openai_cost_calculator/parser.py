@@ -104,6 +104,8 @@ def extract_usage_from_payload(payload: Dict[str, Any]) -> Optional[Dict[str, in
     cached = input_details.get("cached_tokens", 0)
     reasoning = output_details.get("reasoning_tokens", 0)
     total = usage.get("total_tokens", 0)
+    if type(input_tokens) is not int or type(output_tokens) is not int:
+        return None
     counts = (input_tokens, output_tokens, cached, reasoning, total)
     if any(type(count) is not int or count < 0 for count in counts):
         return None

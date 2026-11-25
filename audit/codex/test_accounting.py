@@ -4,12 +4,12 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from reference_calculator.cost import estimate, isolated_rollout
 
 from openai_cost_calculator import pricing
 from openai_cost_calculator.estimate import CostEstimateError
 from openai_cost_calculator.proxy.app import _record_json_payload
 from openai_cost_calculator.proxy.registry import TrackerRegistry
-from reference_calculator.cost import estimate, isolated_rollout
 
 ROOT = Path(__file__).parent
 
@@ -127,6 +127,7 @@ def test_live_rollout_replayed_through_proxy_http(pin_pricing):
     import asyncio
 
     import httpx
+
     from openai_cost_calculator.proxy.app import create_app
 
     fixture = json.loads((ROOT / "fixtures/live-single-turn-after.json").read_text())
